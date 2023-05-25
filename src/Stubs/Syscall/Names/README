@@ -1,0 +1,8 @@
+Automatically generated int -> syscall conversions for different platforms
+
+syscall_arm.tbl and syscall_x86_64.tbl are tables of syscall codes on arm and x86 respectively.
+Their sources are given at the top of each file.
+
+To generate the data used in AArch32/Linux.hs and X86_64/Linux.hs, run `./generate_table.py syscall_arm.tbl` and `./generate_table.py syscall_x86_64.tbl` respectively, and paste the output into the list literal.
+
+Note that for x86_64, syscalls with calling convention x32 are filtered out, and this is hardcoded into `generate_table.py`.

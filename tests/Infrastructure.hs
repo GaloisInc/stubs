@@ -1,0 +1,103 @@
+-- Module containing miscaellaneous testing infrastructure inherited from Ambient
+module Infrastructure 
+    (
+        buildRecordLLVMAnnotation,
+        ProgramInstance(..)
+    )
+where 
+
+import           Control.Monad.IO.Class (liftIO )
+import qualified Data.ByteString as BS
+import           Data.IORef ( IORef, newIORef, modifyIORef')
+import qualified Data.Map as Map
+
+
+import qualified Lang.Crucible.Backend as LCB
+import qualified Lang.Crucible.LLVM.Errors as LCLE
+import qualified Lang.Crucible.LLVM.MemModel as LCLM
+import qualified Lang.Crucible.LLVM.MemModel.CallStack as LCLMC
+import qualified Lang.Crucible.LLVM.MemModel.Partial as LCLMP
+
+import           Data.Word ( Word64 )
+
+import qualified Stubs.EntryPoint as AEp
+import qualified Stubs.EnvVar as AEnv
+
+import qualified Stubs.Memory as AM
+import qualified Stubs.Solver as AS
+
+-- | Build an LLVM annotation tracker to record instances of bad behavior
+-- checks.  Bad behavior encompasses both undefined behavior, and memory
+-- errors.  This function returns a function to set '?recordLLVMAnnotation' to,
+-- as well as a reference to the record of bad behaviors that will be built up.
+buildRecordLLVMAnnotation
+  :: LCB.IsSymInterface sym
+  => IO ( LCLMC.CallStack -> LCLMP.BoolAnn sym -> LCLE.BadBehavior sym -> IO ()
+        , IORef (LCLM.LLVMAnnMap sym) )
+buildRecordLLVMAnnotation = do
+  badBehavior <- liftIO $ newIORef Map.empty
+  let recordFn = \cs ann behavior ->
+        modifyIORef' badBehavior (Map.insert ann (cs, behavior))
+  return (recordFn , badBehavior)
+
+-- | A definition of the initial state of a program to be verified
+--
+-- Currently, this just defines the /concrete/ initial state of the
+-- program. This will be extended later to support explicitly symbolic initial
+-- states.
+data ProgramInstance =
+  ProgramInstance { piPath :: FilePath
+                  -- ^ The path to the binary on disk (or a synthetic name)
+                  , piBinary :: BS.ByteString
+                  -- ^ The contents of the binary to verify, which will be
+                  -- parsed and lifted into the verification IR
+                  , piFsRoot :: Maybe FilePath
+                  -- ^ Path to the symbolic file system.  If this is 'Nothing',
+                  -- the file system will be empty.
+                  , piCommandLineArguments :: [BS.ByteString]
+                  -- ^ The command line arguments to pass to the program
+                  --
+                  -- The caller should ensure that this includes argv[0] (the
+                  -- program name)
+                  --
+                  -- Note that the command line UI can take textual arguments;
+                  -- the real arguments here are 'BS.ByteString's because that
+                  -- is how they must be represented in the memory model.
+                  , piConcreteEnvVars :: [AEnv.ConcreteEnvVar BS.ByteString]
+                  -- ^ The environment variables to pass to the program, where
+                  -- the values are concrete.
+                  , piConcreteEnvVarsFromBytes :: [AEnv.ConcreteEnvVarFromBytes BS.ByteString]
+                  -- ^ The environment variables to pass to the program, where
+                  -- the values are concrete bytes contained in a file.
+                  , piSymbolicEnvVars :: [AEnv.SymbolicEnvVar BS.ByteString]
+                  -- ^ The environment variables to pass to the program, where
+                  -- the values are symbolic.
+                  , piSolver :: AS.Solver
+                  -- ^ The solver to use for path satisfiability checking and
+                  -- goals
+                  , piFloatMode :: AS.FloatMode
+                  -- ^ The interpretation of floating point operations in SMT
+                  , piEntryPoint :: AEp.EntryPoint
+                  -- ^ Where to begin simulation
+                  , piMemoryModel :: AM.MemoryModel ()
+                  -- ^ Which memory model configuration to use
+                  , piOverrideDir :: Maybe FilePath
+                  -- ^ Path to the crucible syntax overrides directory.  If
+                  -- this is 'Nothing', then no crucible syntax overrides will
+                  -- be registered.
+                  , piIterationBound :: Maybe Word64
+                  -- ^ If @'Just' n@, bound all loops to at most @n@ iterations.
+                  -- If 'Nothing', do not bound the number of loop iterations.
+                  , piRecursionBound :: Maybe Word64
+                  -- ^ If @'Just' n@, bound the number of recursive calls to at
+                  -- most @n@ calls. If 'Nothing', do not bound the number of
+                  -- recursive calls.
+                  , piSolverInteractionFile :: Maybe FilePath
+                  -- ^ Optional location to write solver interactions log to
+                  , piSharedObjectDir :: Maybe FilePath
+                  -- ^ Optional directory containing shared objects to verify
+                  , piLogSymbolicBranches :: Maybe FilePath
+                  -- ^ Log symbolic branches to a given file
+                  , piLogFunctionCalls :: Maybe FilePath
+                  -- ^ Optional location to log function calls to
+                  }

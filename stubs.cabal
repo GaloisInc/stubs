@@ -1,0 +1,274 @@
+cabal-version:      2.4
+name:               stubs
+version:            0.1.0.0
+synopsis:
+    Stub semantics for program verification
+
+-- A longer description of the package.
+-- description:
+homepage:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+license:            BSD-3-Clause
+license-file:       LICENSE
+author:             Daniel Matichuk
+maintainer:         dmatichuk@galois.com
+
+-- A copyright notice.
+-- copyright:
+category:           Verification
+extra-source-files: CHANGELOG.md
+
+common shared
+    build-depends:
+        async >= 2 && < 3,
+        base >= 4.10 && < 5,
+        bytestring,
+        bv-sized,
+        containers,
+        exceptions,
+        filepath,
+        Glob,
+        lens >= 4 && < 6,
+        lumberjack >= 1 && < 1.1,
+        megaparsec >= 7 && < 10,
+        mtl >= 2 && < 3,
+        panic >= 0.4 && < 0.5,
+        pe-parser,
+        parameterized-utils >= 2 && < 3,
+        parser-combinators >= 1.2 && < 1.4,
+        prettyprinter >= 1.7 && < 1.8,
+        prettyprinter-ansi-terminal,
+        yaml >= 0.11 && < 0.12,
+        text
+
+library stubs-common
+    import: shared
+    exposed-modules:  Stubs.ABI,
+                      Stubs.Diagnostic,
+                      Stubs.EnvVar,
+                      Stubs.Exception,
+                      Stubs.Extensions,
+                      Stubs.Extensions.Memory,
+                      Stubs.FunctionOverride,
+                      Stubs.FunctionOverride.ArgumentMapping,
+                      Stubs.FunctionOverride.Common,
+                      Stubs.FunctionOverride.Extension,
+                      Stubs.FunctionOverride.Extension.Types,
+                      Stubs.FunctionOverride.Overrides,
+                      Stubs.FunctionOverride.Overrides.CrucibleStrings,
+                      Stubs.FunctionOverride.Overrides.ForwardDeclarations,
+                      Stubs.FunctionOverride.Overrides.Printf,
+                      Stubs.FunctionOverride.StackArguments,
+                      Stubs.FunctionOverride.AArch32.Linux,
+                      Stubs.FunctionOverride.X86_64.Linux,
+                      Stubs.FunctionOverride.X86_64.Linux.Specialized,
+                      Stubs.Lift,
+                      Stubs.Loader.BinaryConfig,
+                      Stubs.Loader.LoadOptions,
+                      Stubs.Loader.Relocations,
+                      Stubs.Loader.Versioning,
+                      Stubs.Memory,
+                      Stubs.Memory.SharedMemory,
+                      Stubs.Memory.AArch32.Linux,
+                      Stubs.Memory.X86_64.Linux,
+                      Stubs.MonadState,
+                      Stubs.Override,
+                      Stubs.Panic,
+                      Stubs.Style,
+                      Stubs.Syscall,
+                      Stubs.Syscall.Overrides,
+                      Stubs.Syscall.Overrides.Networking,
+                      Stubs.Syscall.Overrides.Networking.Types,
+                      Stubs.Syscall.Overrides.SymIO,
+                      Stubs.Syscall.AArch32.Linux,
+                      Stubs.Syscall.X86_64.Linux,
+                      Stubs.Syscall.Names.X86_64.Linux,
+                      Stubs.Syscall.Names.AArch32.Linux,
+                      Stubs.Verifier.Concretize
+
+    -- Modules included in this library but not exported.
+    other-modules:
+
+    -- LANGUAGE extensions used by modules in this package.
+    -- other-extensions:
+    build-depends:    time,
+                      elf-edit,
+                      macaw-base,
+                      macaw-symbolic,
+                      macaw-loader,
+                      macaw-loader-x86,
+                      macaw-loader-aarch32,
+                      directory,
+                      file-embed,
+                      flexdis86,
+                      macaw-x86,
+                      macaw-x86-symbolic,
+                      asl-translator,
+                      macaw-aarch32,
+                      macaw-aarch32-symbolic,
+                      crucible,
+                      crucible-llvm,
+                      crucible-symio,
+                      crucible-syntax,
+                      what4,
+                      binary-symbols,
+                      language-c,
+                      indexed-traversable,
+                      utf8-string,
+                      nonempty-vector,
+                      vector,
+                      multiset,
+                      IntervalMap,
+                      split,
+                      temporary,
+                      aeson >= 2
+
+    hs-source-dirs:   src
+    default-language: Haskell2010
+    ghc-options: -Wall -Wcompat
+
+library stubs-wrapper 
+    import: shared 
+    exposed-modules: Stubs.Wrapper,
+                     Stubs.Wrapper.Exception
+    hs-source-dirs: src/Wrapper
+    default-language: Haskell2010 
+    ghc-options: -Wall -Wcompat
+    build-depends: stubs-common,
+                   what4,
+                   crucible,
+                   crucible-syntax,
+                   macaw-base,
+                   binary-symbols,
+                   macaw-loader,
+                   nonempty-vector,
+                   crucible-llvm,
+                   split,
+                   macaw-symbolic,
+                   IntervalMap,
+                   macaw-x86-symbolic
+
+library stubs-parser 
+    import: shared 
+    exposed-modules: Stubs.Parser
+    hs-source-dirs: src/Parser
+    default-language: Haskell2010 
+    ghc-options: -Wall -Wcompat
+    build-depends: directory,
+                   vector,
+                   stubs-common,
+                   crucible,
+                   crucible-llvm,
+                   crucible-syntax,
+                   what4,
+                   aeson >= 2
+
+library stubs-sym-exec 
+    import: shared 
+    exposed-modules: Stubs.SymbolicExecution,
+                     Stubs.Discovery,
+                     Stubs.Solver
+    hs-source-dirs: src/SymbolicExecutor 
+    default-language: Haskell2010 
+    ghc-options: -Wall -Wcompat
+    build-depends: stubs-common,
+                   what4,
+                   crucible,
+                   crucible-symio,
+                   macaw-base,
+                   macaw-symbolic,
+                   crucible-llvm,
+                   macaw-loader,
+                   binary-symbols,
+                   vector,
+                   nonempty-vector
+
+library stubs-loader 
+    import: shared 
+    exposed-modules: Stubs.Loader,
+                     Stubs.EntryPoint,
+                     Stubs.Loader.ELF.DecodeError,
+                     Stubs.Loader.ELF.DynamicLoader,
+                     Stubs.Loader.ELF.PLTStubDetector,
+                     Stubs.Loader.ELF.Symbols,
+                     Stubs.Loader.ELF.Symbols.AArch32
+    hs-source-dirs: src/Loader 
+    default-language: Haskell2010 
+    ghc-options: -Wall -Wcompat
+    build-depends: stubs-common,
+                   directory,
+                   vector,
+                   binary-symbols,
+                   what4,
+                   crucible,
+                   crucible-llvm,
+                   macaw-loader,
+                   macaw-base,
+                   macaw-symbolic,
+                   crucible-syntax,
+                   elf-edit,
+                   nonempty-vector,
+                   macaw-loader-x86,
+                   macaw-x86,
+                   macaw-x86-symbolic,
+                   macaw-aarch32,
+                   macaw-aarch32-symbolic,
+                   macaw-loader-aarch32
+
+library 
+    build-depends: stubs-common,
+                   stubs-wrapper,
+                   stubs-parser,
+                   stubs-sym-exec,
+                   stubs-loader
+    ghc-options: -Wall -Wcompat
+    default-language: Haskell2010 
+
+executable stubs
+    import: shared
+    main-is:          Main.hs
+    other-modules:
+                      Paths_stubs
+    autogen-modules:  Paths_stubs
+
+    -- Modules included in this executable, other than Main.
+    -- other-modules:
+
+    -- LANGUAGE extensions used by modules in this package.
+    -- other-extensions:
+    build-depends:
+        gitrev,
+        optparse-applicative,
+        stubs
+
+    hs-source-dirs:   tools/stubs
+    default-language: Haskell2010
+    ghc-options: -Wall -Wcompat -threaded -rtsopts "-with-rtsopts=-N"
+
+test-suite stubs-tests
+  import: shared
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules: Infrastructure
+  hs-source-dirs: tests
+  build-depends: stubs-common,
+                 stubs-wrapper,
+                 stubs-parser,
+                 stubs-sym-exec,
+                 stubs-loader,
+                 crucible,
+                 macaw-base,
+                 macaw-symbolic,
+                 crucible-syntax,
+                 crucible-llvm,
+                 what4,
+                 directory,
+                 tasty,
+                 tasty-ant-xml,
+                 tasty-expected-failure,
+                 tasty-hunit,
+                 yaml >= 0.11 && < 0.12
+  ghc-options: -Wall -Wcompat
+  default-language: Haskell2010
