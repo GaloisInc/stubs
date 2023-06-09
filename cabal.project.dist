@@ -1,4 +1,8 @@
 packages: .
+          ./stubs-parser
+          ./stubs-common
+          ./stubs-wrapper
+          ./stubs-loader
           submodules/llvm-pretty
           submodules/parameterized-utils
           submodules/what4/what4

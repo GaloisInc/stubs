@@ -1,0 +1,131 @@
+cabal-version:      2.4
+name:               stubs-common
+version:            0.1.0.0
+
+-- A short (one-line) description of the package.
+-- synopsis:
+
+-- A longer description of the package.
+-- description:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+
+-- The license under which the package is released.
+-- license:
+author:             Christian Fontenot
+maintainer:         cfontenot@galois.com
+
+-- A copyright notice.
+-- copyright:
+-- category:
+extra-source-files: CHANGELOG.md
+
+common shared
+    build-depends:
+        async >= 2 && < 3,
+        base >= 4.10 && < 5,
+        bytestring,
+        bv-sized,
+        containers,
+        exceptions,
+        filepath,
+        Glob,
+        lens >= 4 && < 6,
+        lumberjack >= 1 && < 1.1,
+        megaparsec >= 7 && < 10,
+        mtl >= 2 && < 3,
+        panic >= 0.4 && < 0.5,
+        pe-parser,
+        parameterized-utils >= 2 && < 3,
+        parser-combinators >= 1.2 && < 1.4,
+        prettyprinter >= 1.7 && < 1.8,
+        prettyprinter-ansi-terminal,
+        yaml >= 0.11 && < 0.12,
+        text
+
+library 
+    import: shared
+    exposed-modules:  Stubs.ABI,
+                      Stubs.Diagnostic,
+                      Stubs.EnvVar,
+                      Stubs.Exception,
+                      Stubs.Extensions,
+                      Stubs.Extensions.Memory,
+                      Stubs.FunctionOverride,
+                      Stubs.FunctionOverride.ArgumentMapping,
+                      Stubs.FunctionOverride.Common,
+                      Stubs.FunctionOverride.Extension,
+                      Stubs.FunctionOverride.Extension.Types,
+                      Stubs.FunctionOverride.Overrides,
+                      Stubs.FunctionOverride.Overrides.CrucibleStrings,
+                      Stubs.FunctionOverride.Overrides.ForwardDeclarations,
+                      Stubs.FunctionOverride.Overrides.Printf,
+                      Stubs.FunctionOverride.StackArguments,
+                      Stubs.FunctionOverride.AArch32.Linux,
+                      Stubs.FunctionOverride.X86_64.Linux,
+                      Stubs.FunctionOverride.X86_64.Linux.Specialized,
+                      Stubs.Lift,
+                      Stubs.Loader.BinaryConfig,
+                      Stubs.Loader.LoadOptions,
+                      Stubs.Loader.Relocations,
+                      Stubs.Loader.Versioning,
+                      Stubs.Memory,
+                      Stubs.Memory.SharedMemory,
+                      Stubs.Memory.AArch32.Linux,
+                      Stubs.Memory.X86_64.Linux,
+                      Stubs.MonadState,
+                      Stubs.Override,
+                      Stubs.Panic,
+                      Stubs.Style,
+                      Stubs.Syscall,
+                      Stubs.Syscall.Overrides,
+                      Stubs.Syscall.Overrides.Networking,
+                      Stubs.Syscall.Overrides.Networking.Types,
+                      Stubs.Syscall.Overrides.SymIO,
+                      Stubs.Syscall.AArch32.Linux,
+                      Stubs.Syscall.X86_64.Linux,
+                      Stubs.Syscall.Names.X86_64.Linux,
+                      Stubs.Syscall.Names.AArch32.Linux,
+                      Stubs.Verifier.Concretize
+
+    -- Modules included in this library but not exported.
+    other-modules:
+
+    -- LANGUAGE extensions used by modules in this package.
+    -- other-extensions:
+    build-depends:    time,
+                      elf-edit,
+                      macaw-base,
+                      macaw-symbolic,
+                      macaw-loader,
+                      macaw-loader-x86,
+                      macaw-loader-aarch32,
+                      directory,
+                      file-embed,
+                      flexdis86,
+                      macaw-x86,
+                      macaw-x86-symbolic,
+                      asl-translator,
+                      macaw-aarch32,
+                      macaw-aarch32-symbolic,
+                      crucible,
+                      crucible-llvm,
+                      crucible-symio,
+                      crucible-syntax,
+                      what4,
+                      binary-symbols,
+                      language-c,
+                      indexed-traversable,
+                      utf8-string,
+                      nonempty-vector,
+                      vector,
+                      multiset,
+                      IntervalMap,
+                      split,
+                      temporary,
+                      aeson >= 2
+
+    hs-source-dirs:   src
+    default-language: Haskell2010
+    ghc-options: -Wall -Wcompat

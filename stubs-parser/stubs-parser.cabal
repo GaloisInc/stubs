@@ -1,0 +1,60 @@
+cabal-version:      2.4
+name:               stubs-parser
+version:            0.1.0.0
+
+-- A short (one-line) description of the package.
+-- synopsis:
+
+-- A longer description of the package.
+-- description:
+
+-- A URL where users can report bugs.
+-- bug-reports:
+
+-- The license under which the package is released.
+-- license:
+author:             Christian Fontenot
+maintainer:         cfontenot@galois.com
+
+-- A copyright notice.
+-- copyright:
+-- category:
+extra-source-files: CHANGELOG.md
+
+common shared
+    build-depends:
+        async >= 2 && < 3,
+        base >= 4.10 && < 5,
+        bytestring,
+        bv-sized,
+        containers,
+        exceptions,
+        filepath,
+        Glob,
+        lens >= 4 && < 6,
+        lumberjack >= 1 && < 1.1,
+        megaparsec >= 7 && < 10,
+        mtl >= 2 && < 3,
+        panic >= 0.4 && < 0.5,
+        pe-parser,
+        parameterized-utils >= 2 && < 3,
+        parser-combinators >= 1.2 && < 1.4,
+        prettyprinter >= 1.7 && < 1.8,
+        prettyprinter-ansi-terminal,
+        yaml >= 0.11 && < 0.12,
+        text
+
+library 
+    import: shared 
+    exposed-modules: Stubs.Parser
+    hs-source-dirs: src
+    default-language: Haskell2010 
+    ghc-options: -Wall -Wcompat
+    build-depends: directory,
+                   vector,
+                   stubs-common,
+                   crucible,
+                   crucible-llvm,
+                   crucible-syntax,
+                   what4,
+                   aeson >= 2
