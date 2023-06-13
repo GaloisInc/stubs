@@ -47,7 +47,11 @@ common shared
 library 
     import: shared 
     exposed-modules: Stubs.Wrapper,
-                     Stubs.Wrapper.Exception
+                     Stubs.Wrapper.Exception,
+                     Stubs.AST,
+                     Stubs.Translate,
+                     Stubs.Translate.Core,
+                     Stubs.Translate.Type
     hs-source-dirs: src
     default-language: Haskell2010 
     ghc-options: -Wall -Wcompat
@@ -59,8 +63,31 @@ library
                    binary-symbols,
                    macaw-loader,
                    nonempty-vector,
+                   parameterized-utils,
                    crucible-llvm,
                    split,
                    macaw-symbolic,
                    IntervalMap,
                    macaw-x86-symbolic
+
+test-suite wrapper-tests
+  import: shared
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules: Infrastructure
+  hs-source-dirs: tests
+  build-depends: stubs-common,
+                 stubs-wrapper,
+                 crucible,
+                 macaw-base,
+                 macaw-symbolic,
+                 crucible-llvm,
+                 what4,
+                 directory,
+                 tasty,
+                 tasty-ant-xml,
+                 tasty-expected-failure,
+                 tasty-hunit,
+                 yaml >= 0.11 && < 0.12
+  ghc-options: -Wall -Wcompat
+  default-language: Haskell2010

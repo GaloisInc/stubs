@@ -36,7 +36,7 @@ import Lang.Crucible.Simulator.ExecutionTree
 import Lang.Crucible.Simulator.RegMap (RegEntry(regValue))
 import Control.Lens
 import Control.Monad.IO.Class
-import Data.Macaw.Symbolic (GenArchVals (lookupReg))
+import Data.Macaw.Symbolic (GenArchVals (lookupReg), SymArchConstraints)
 import What4.Interface (asConcrete, IsExpr (asInteger))
 import What4.Concrete (fromConcreteBV)
 import Stubs.Wrapper
@@ -57,6 +57,8 @@ import Data.Macaw.CFG as DMC
 import Data.Map as Map
 import qualified Lang.Crucible.Syntax.Concrete as LCSC
 import Stubs.FunctionOverride.Extension.Types as SFT
+import Stubs.AST as SA
+import Stubs.Translate as ST
 
 libcdir = "./tests/test-data/libc-overrides"
 logShim:: SD.Diagnostic -> IO ()
@@ -127,9 +129,9 @@ pipelineTest path parserFlag = do
                                         _ -> return Nothing
                 _ -> return Nothing
 
-loadManualCFG :: forall ext s w p sym arch. (IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, w ~ ArchAddrWidth arch, MemWidth w) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
+loadManualCFG :: forall ext s w p sym arch. (IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, w ~ ArchAddrWidth arch, MemWidth w,SymArchConstraints arch) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
 loadManualCFG ng hAlloc = do 
-    f <- manualCfgTest ng hAlloc
+    f <- stubsCfgTest ng hAlloc
     let overrides = [(libcdir++"/function/f.cbl",f)]
     loadParsedPrograms overrides [] []
 
@@ -176,4 +178,15 @@ manualCfgTest ng hAlloc = do
         LCSC.parsedProgCFGs = [ACFG args ret q],
         LCSC.parsedProgForwardDecs = Map.empty
     }
+    return prog
+
+stubsCfgTest :: forall ext s w arch. (IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, SymArchConstraints arch) => NonceGenerator IO s -> HandleAllocator -> IO (LCSC.ParsedProgram ext)
+stubsCfgTest ng halloc = do 
+    let fn = StubsFunction {
+        stubFnName="f",
+        stubFnArgTys=Ctx.extend Ctx.empty StubsIntRepr,
+        stubFnRetTy=StubsIntRepr,
+        stubFnBody=[SA.Return (SA.IntLit 20)]
+    }
+    (prog:_) <- ST.translateDecls ng halloc [SomeStubsFunction fn]
     return prog
