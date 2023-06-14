@@ -21,6 +21,7 @@ import qualified Lang.Crucible.Syntax.Concrete as LCSC
 import qualified Data.Parameterized as P
 import qualified Lang.Crucible.CFG.Core as LCCC
 import qualified Data.Parameterized.NatRepr as PN
+import Lang.Crucible.CFG.Reg as LCCR
 
 testFnTranslationBasic :: TestTree
 testFnTranslationBasic = testCase "Basic Translation" $ do 
@@ -30,7 +31,7 @@ testFnTranslationBasic = testCase "Basic Translation" $ do
         SA.stubFnName="f",
         SA.stubFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
         SA.stubFnRetTy=SA.StubsIntRepr,
-        SA.stubFnBody=[SA.Return (SA.IntLit 20)]
+        SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 20),SA.Return (SA.IntLit 20)]
     }
     p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
     let cfgs = LCSC.parsedProgCFGs p 
@@ -43,6 +44,46 @@ testFnTranslationBasic = testCase "Basic Translation" $ do
     Just P.Refl <- return $ P.testEquality r $ LCCC.BVRepr (PN.knownNat @64)
     return ()
 
+testFnTranslationITE :: TestTree 
+testFnTranslationITE = testCase "ITE Translation" $ do 
+    hAlloc <- LCF.newHandleAllocator
+    Some ng <- PN.newIONonceGenerator
+    let fn = SA.StubsFunction {
+        SA.stubFnName="f",
+        SA.stubFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+        SA.stubFnRetTy=SA.StubsIntRepr,
+        SA.stubFnBody=[SA.ITE (SA.BoolLit True) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 20)] [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 40)],SA.Return (SA.IntLit 20)]
+    }
+    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
+    let cfgs = LCSC.parsedProgCFGs p 
+
+    -- Expect single CFG
+    assertEqual "Unexpected CFG count" 1 (length cfgs)
+    LCSC.ACFG _ _ m <- return $ head cfgs
+    
+    let blocks = LCCR.cfgBlocks m
+    assertEqual "Unexpected Block count" 4 (length blocks)
+
+testFnTranslationLoop :: TestTree 
+testFnTranslationLoop = testCase "Loop Translation" $ do 
+    hAlloc <- LCF.newHandleAllocator
+    Some ng <- PN.newIONonceGenerator
+    let fn = SA.StubsFunction {
+        SA.stubFnName="f",
+        SA.stubFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+        SA.stubFnRetTy=SA.StubsIntRepr,
+        SA.stubFnBody=[SA.Loop (SA.BoolLit False) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 40)] ,SA.Return (SA.IntLit 20)]
+    }
+    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
+    let cfgs = LCSC.parsedProgCFGs p
+
+    -- Expect single CFG
+    assertEqual "Unexpected CFG count" 1 (length cfgs)
+    LCSC.ACFG _ _ m <- return $ head cfgs
+
+    let blocks = LCCR.cfgBlocks m
+    assertEqual "Unexpected Block count" 4 (length blocks) -- While this could be only 3, due to the Generator's implementation 4 blocks are made total
+
 main :: IO ()
 main = defaultMain $ do
-    testGroup "" [testFnTranslationBasic]
+    testGroup "" [testFnTranslationBasic, testFnTranslationITE, testFnTranslationLoop]

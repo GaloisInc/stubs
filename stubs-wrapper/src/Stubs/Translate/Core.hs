@@ -40,10 +40,15 @@ type family StubToCrucCtx (arch :: *) (stubTy :: Ctx StubsType) = (crucTy :: Ctx
     StubToCrucCtx arch 'EmptyCtx = 'EmptyCtx
     StubToCrucCtx arch (a ::> k) = StubToCrucCtx arch a ::> ArchTypeMatch arch k
 
-data StubsState arch ret s = forall ret2 . (ret ~ ArchTypeMatch arch ret2) => StubsState {
+data StubsState arch ret s= forall ret2 . (ret ~ ArchTypeMatch arch ret2) => StubsState {
+    -- Environment with arch info 
     stStubsenv::StubsEnv arch,
+    -- Return type of the current function being translated
     stRetRepr::StubsTypeRepr ret2,
-    stRegMap::MapF.MapF StubsVar (StubReg arch s) --TODO: this will have dynamic scoping if left as is
+    -- Map of variables in scope to registers
+    stRegMap::MapF.MapF StubsVar (StubReg arch s), --TODO: this will have dynamic scoping if left as is
+    -- Cache of expressions already made into atoms
+    stAtomCache::MapF.MapF StubsExpr (StubAtom arch s)
 }
 
 data StubsEnv arch = StubsEnv {
@@ -65,3 +70,4 @@ asStubsEnv f = do
     return res
 
 data StubReg arch s (a::StubsType) = forall tp. (tp ~ ArchTypeMatch arch a) => StubReg (LCCR.Reg s tp) (StubsTypeRepr a)
+data StubAtom arch s (a::StubsType) = forall tp . (tp ~ ArchTypeMatch arch a) => StubAtom (LCCR.Atom s tp)

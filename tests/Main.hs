@@ -187,6 +187,6 @@ stubsCfgTest ng halloc = do
         stubFnName="f",
         stubFnArgTys=Ctx.extend Ctx.empty StubsIntRepr,
         stubFnRetTy=StubsIntRepr,
-        stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.IntLit 20), SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 30),SA.Return (SA.IntLit 20)]
+        stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.IntLit 20), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
     }
     ST.translateDecls ng halloc [SomeStubsFunction fn]
