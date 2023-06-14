@@ -6,10 +6,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ImpredicativeTypes#-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Stubs.AST where
 import Data.Parameterized as P
 import Data.Parameterized.Context as Ctx
+import Data.Parameterized.TH.GADT
 
 data StubsType where
     StubsInt :: StubsType
@@ -31,12 +33,20 @@ data StubsTypeRepr a where
     --StubsTupleRepr :: Ctx.Assignment StubsTypeRepr ctx -> StubsTypeRepr (StubsTuple ctx)
     StubsAliasRepr :: P.SymbolRepr s -> StubsTypeRepr a -> StubsTypeRepr a
 
+$(return [])
+instance OrdF StubsTypeRepr where 
+    compareF = $(structuralTypeOrd [t|StubsTypeRepr|]
+                   [ (TypeApp (ConType [t|P.SymbolRepr|]) AnyType, [|compareF|]),
+                     (TypeApp AnyType AnyType, [|compareF|])
+                   , (TypeApp (TypeApp (ConType [t|Ctx.Assignment|]) AnyType) AnyType
+                     , [|compareF|]
+                     )
+                   ]
+                  )
+
 instance TestEquality StubsTypeRepr where
-    testEquality r1 r2 = case (r1,r2) of
-        (StubsIntRepr, StubsIntRepr) -> Just Refl
-        (StubsBoolRepr, StubsBoolRepr) -> Just Refl
-        (StubsUnitRepr, StubsUnitRepr) -> Just Refl
-        --(StubsTupleRepr a1, StubsTupleRepr a2) | Just Refl <- testEquality a1 a2 -> Just Refl
+    testEquality r1 r2 = case  compareF r1 r2 of 
+        EQF -> Just Refl 
         _ -> Nothing
 
 data StubsFunction (args::Ctx.Ctx StubsType) (ret::StubsType) = StubsFunction {
@@ -50,22 +60,33 @@ data SomeStubsFunction = forall a b . SomeStubsFunction(StubsFunction a b)
 data StubsExpr (a::StubsType) where
     IntLit :: Integer -> StubsExpr StubsInt
     UnitLit :: StubsExpr StubsUnit
-    --VarLit :: String -> StubsTypeRepr a -> StubsExpr a
+    VarLit :: StubsVar a-> StubsExpr a
     BoolLit :: Bool -> StubsExpr StubsBool
     --ITE :: StubsExpr StubsBool -> StubsExpr a -> StubsExpr a
     --TupleExpr :: Ctx.Assignment StubsExpr ctx -> StubsExpr (StubsTuple ctx)
     --AppExpr :: StubsFunction args ret -> Ctx.Assignment StubsExpr args -> StubsExpr ret
 
 data StubsStmt where
-    --Assignment :: String -> StubsExpr a -> StubsStmt StubsUnit 
-    --NoOp :: StubsStmt StubsUnit
-    --Seq :: StubsStmt a -> StubsStmt b -> StubsStmt b 
+    Assignment :: StubsVar a -> StubsExpr a -> StubsStmt
     --Loop :: StubsExpr StubsBool -> StubsStmt StubsUnit -> StubsStmt StubsUnit -- When a loop has ITE in it, what happens? Should ITE be a Stmt instead? Would be more C-like
     --ITE :: StubsExpr StubsBool -> StubsStmt a -> StubsStmt a -> StubsStmt a
     --FunCall :: StubsFunction args ret -> Ctx.Assignment StubsExpr args -> StubsStmt ret
     Return :: StubsExpr a -> StubsStmt
 
 type StubsTyDecl = forall a . String -> StubsTypeRepr a
+
+data StubsVar (a::StubsType) = StubsVar {
+    varName::String,
+    varType::StubsTypeRepr a
+}
+
+instance OrdF StubsVar where 
+    compareF v1 v2 = lexCompareF (varType v1) (varType v2) (fromOrdering (compare (varName v1) (varName v2)))
+
+instance TestEquality StubsVar where 
+    testEquality v1 v2 = case compareF v1 v2 of 
+        EQF -> Just Refl 
+        _ -> Nothing
 
 data StubsProgram = StubsProgram {
     stubsFnDecls :: [SomeStubsFunction],
@@ -78,6 +99,7 @@ stubsExprToTy e = case e of
     IntLit _ -> StubsIntRepr
     BoolLit _ -> StubsBoolRepr
     UnitLit -> StubsUnitRepr
+    VarLit v -> varType v
     
 
 --funex = FunDecl "f" (Ctx.extend Ctx.empty StubsIntRepr) StubsIntRepr (Return $ IntLit 20)

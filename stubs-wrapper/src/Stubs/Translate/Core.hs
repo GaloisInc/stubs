@@ -18,12 +18,17 @@ import qualified Data.Macaw.CFG as DMC
 
 import qualified Data.Parameterized.NatRepr as PN
 import Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.Map as MapF
 import qualified Data.Macaw.Symbolic as DMS
 
 import qualified Lang.Crucible.CFG.Generator as LCCG
 import qualified Lang.Crucible.CFG.Expr as LCCE
-import Control.Monad.Reader (Reader, runReader)
+import qualified Lang.Crucible.CFG.Reg as LCCR
 import Control.Monad.RWS
+import Control.Monad.State (State,runState)
+import qualified Data.Map as Map
+import Control.Monad.Reader (Reader, runReader)
+import qualified Data.Parameterized.Map as MapF
 
 type family ArchTypeMatch (arch :: *) (stubType :: StubsType) = (crucType :: LCT.CrucibleType) where
     ArchTypeMatch arch 'StubsInt = LCT.BVType (DMC.ArchAddrWidth arch)
@@ -37,8 +42,10 @@ type family StubToCrucCtx (arch :: *) (stubTy :: Ctx StubsType) = (crucTy :: Ctx
 
 data StubsState arch ret s = forall ret2 . (ret ~ ArchTypeMatch arch ret2) => StubsState {
     stStubsenv::StubsEnv arch,
-    stRetRepr::StubsTypeRepr ret2
+    stRetRepr::StubsTypeRepr ret2,
+    stRegMap::MapF.MapF StubsVar (StubReg arch s) --TODO: this will have dynamic scoping if left as is
 }
+
 data StubsEnv arch = StubsEnv {
     stArchWidth::PN.NatRepr (DMC.ArchAddrWidth arch)
 }
@@ -54,4 +61,7 @@ instance HasStubsEnv arch (Reader (StubsEnv arch)) where
 asStubsEnv :: Monad m' => (forall m. HasStubsEnv arch m => m a) ->  LCCG.Generator ext s (StubsState arch ret) ret m' a
 asStubsEnv f = do
     v <- gets stStubsenv
-    return $ runReader f v
+    let res = runReader f v
+    return res
+
+data StubReg arch s (a::StubsType) = forall tp. (tp ~ ArchTypeMatch arch a) => StubReg (LCCR.Reg s tp) (StubsTypeRepr a)

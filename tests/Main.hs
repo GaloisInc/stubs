@@ -49,7 +49,7 @@ import Lang.Crucible.CFG.Reg as LCCR
 import Lang.Crucible.CFG.Expr as LCCE
 import Lang.Crucible.CFG.Generator as LCCG
 import What4.ProgramLoc (Position(InternalPos))
-import Lang.Crucible.Syntax.Concrete (ACFG(ACFG))
+import Lang.Crucible.Syntax.Concrete (ACFG(ACFG), ParsedProgram (parsedProgCFGs))
 import Data.Parameterized.Nonce (NonceGenerator)
 import Lang.Crucible.FunctionHandle (HandleAllocator)
 import qualified Data.Parameterized.NatRepr as PN
@@ -130,12 +130,13 @@ pipelineTest path parserFlag = do
                 _ -> return Nothing
 
 loadManualCFG :: forall ext s w p sym arch. (IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, w ~ ArchAddrWidth arch, MemWidth w,SymArchConstraints arch) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
-loadManualCFG ng hAlloc = do 
+loadManualCFG ng hAlloc = do
     f <- stubsCfgTest ng hAlloc
+    print (parsedProgCFGs f)
     let overrides = [(libcdir++"/function/f.cbl",f)]
     loadParsedPrograms overrides [] []
 
-loadParsedOverride dir ng hAlloc parserHooks = do 
+loadParsedOverride dir ng hAlloc parserHooks = do
     case dir of
         Just dir -> do
             -- SFE.loadCrucibleSyntaxOverrides abi dir (piCCompiler pinst) ng hAlloc parserHooks --original pipeline
@@ -181,12 +182,11 @@ manualCfgTest ng hAlloc = do
     return prog
 
 stubsCfgTest :: forall ext s w arch. (IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, SymArchConstraints arch) => NonceGenerator IO s -> HandleAllocator -> IO (LCSC.ParsedProgram ext)
-stubsCfgTest ng halloc = do 
+stubsCfgTest ng halloc = do
     let fn = StubsFunction {
         stubFnName="f",
         stubFnArgTys=Ctx.extend Ctx.empty StubsIntRepr,
         stubFnRetTy=StubsIntRepr,
-        stubFnBody=[SA.Return (SA.IntLit 20)]
+        stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.IntLit 20), SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 30),SA.Return (SA.IntLit 20)]
     }
-    (prog:_) <- ST.translateDecls ng halloc [SomeStubsFunction fn]
-    return prog
+    ST.translateDecls ng halloc [SomeStubsFunction fn]

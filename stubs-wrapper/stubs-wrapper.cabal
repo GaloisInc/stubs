@@ -42,7 +42,8 @@ common shared
         prettyprinter >= 1.7 && < 1.8,
         prettyprinter-ansi-terminal,
         yaml >= 0.11 && < 0.12,
-        text
+        text,
+        template-haskell
 
 library 
     import: shared 
@@ -74,11 +75,11 @@ test-suite wrapper-tests
   import: shared
   type: exitcode-stdio-1.0
   main-is: Main.hs
-  other-modules: Infrastructure
   hs-source-dirs: tests
   build-depends: stubs-common,
                  stubs-wrapper,
                  crucible,
+                 crucible-syntax,
                  macaw-base,
                  macaw-symbolic,
                  crucible-llvm,
@@ -88,6 +89,8 @@ test-suite wrapper-tests
                  tasty-ant-xml,
                  tasty-expected-failure,
                  tasty-hunit,
-                 yaml >= 0.11 && < 0.12
+                 yaml >= 0.11 && < 0.12,
+                 macaw-x86,
+                 macaw-x86-symbolic
   ghc-options: -Wall -Wcompat
   default-language: Haskell2010
