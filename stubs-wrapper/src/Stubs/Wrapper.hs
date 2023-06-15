@@ -1,8 +1,11 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Stubs.Wrapper (
-    loadParsedPrograms
+    loadParsedPrograms,
+    loadStubsPrograms
 ) where
 
 import qualified Data.Macaw.Symbolic as DMS
@@ -26,6 +29,7 @@ import qualified Stubs.FunctionOverride.ArgumentMapping as SFA
 import qualified Stubs.FunctionOverride.Extension.Types as SFT
 
 import qualified Stubs.Wrapper.Exception as SWE
+import qualified Data.Parameterized.Nonce as PN
 
 import qualified Data.Map as Map
 import qualified Data.List as List
@@ -38,6 +42,27 @@ import           Data.Parameterized.Some ( Some(..) )
 import qualified Data.List.NonEmpty as NEL
 import           Control.Monad.IO.Class
 import Data.Word
+import qualified Stubs.AST as SA
+import qualified Stubs.Translate as ST
+import Data.Macaw.Symbolic (SymArchConstraints)
+import Data.Macaw.CFG
+
+stubsProgramToOverride :: forall ext p sym arch w. (ext ~ DMS.MacawExt arch, DMM.MemWidth w, SymArchConstraints arch, w ~ ArchAddrWidth arch) => SA.StubsProgram -> IO (SF.SomeFunctionOverride p sym arch)
+stubsProgramToOverride prog = do 
+  hAlloc <- LCF.newHandleAllocator
+  Some ng <- PN.newIONonceGenerator
+  (entry, parsed) <- ST.translateProgram ng hAlloc prog
+  parsedProgToFunctionOverride entry parsed
+
+loadStubsPrograms :: forall ext p sym arch w . (ext ~ DMS.MacawExt arch, DMM.MemWidth w,SymArchConstraints arch) => [SA.StubsProgram] -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
+loadStubsPrograms progs = do 
+  overrides <- mapM stubsProgramToOverride progs 
+  return SFT.CrucibleSyntaxOverrides {
+    SFT.csoAddressOverrides = Map.empty
+    , SFT.csoStartupOverrides = []
+    , SFT.csoNamedOverrides = overrides
+  }
+
 
 loadParsedPrograms :: forall ext p sym arch w . (ext ~ DMS.MacawExt arch, DMM.MemWidth w) => [(FilePath,LCSC.ParsedProgram ext)] -> [WF.FunctionName] -> [(FilePath, Word64,WF.FunctionName)] -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
 loadParsedPrograms pathProgs startupOverrides funAddrOverrides = do
@@ -79,14 +104,14 @@ loadParsedPrograms pathProgs startupOverrides funAddrOverrides = do
 -- override.
 parsedProgToFunctionOverride ::
   ( ext ~ DMS.MacawExt arch ) =>
-  FilePath ->
+  String ->
   LCSC.ParsedProgram ext ->
   IO (SF.SomeFunctionOverride p sym arch)
 parsedProgToFunctionOverride path parsedProg = do
   let fnName = DS.fromString $ FP.takeBaseName path
   let globals = LCSC.parsedProgGlobals parsedProg
   let externs = LCSC.parsedProgExterns parsedProg
-  let (matchCFGs, auxCFGs) = List.partition (hasSameNameAsCblFile path)
+  let (matchCFGs, auxCFGs) = List.partition (isEntryPoint path)
                                             (LCSC.parsedProgCFGs parsedProg)
   let fwdDecs = LCSC.parsedProgForwardDecs parsedProg
   case matchCFGs of
@@ -100,9 +125,9 @@ parsedProgToFunctionOverride path parsedProg = do
 
 -- | Does a function have the same name as the @.cbl@ file in which it is
 -- defined?
-hasSameNameAsCblFile :: FilePath -> LCSC.ACFG ext -> Bool
-hasSameNameAsCblFile path acfg =
-  acfgHandleName acfg == DS.fromString (FP.takeBaseName path)
+isEntryPoint :: String -> LCSC.ACFG ext -> Bool
+isEntryPoint path acfg =
+  acfgHandleName acfg == DS.fromString path
 
 -- | Retrieve the 'WF.FunctionName' in the handle in a 'LCSC.ACFG'.
 acfgHandleName :: LCSC.ACFG ext -> WF.FunctionName

@@ -56,7 +56,7 @@ parseCrucibleOverrides dir ng halloc hooks = do
   if exists then do 
     let functionDir = dir SF.</> "function"
     cbls <- SFG.glob (functionDir SF.</> "*.cbl")
-    ovmap <- traverse (\path -> (path,) <$> loadCblOverride path ng halloc hooks) cbls
+    ovmap <- traverse (\path -> (SF.takeBaseName path,) <$> loadCblOverride path ng halloc hooks) cbls
     let overridesYamlPath = dir SF.</> "overrides.yaml"
     overridesYamlExists <- SD.doesFileExist overridesYamlPath
     mbOverridesYaml <- if overridesYamlExists then do 

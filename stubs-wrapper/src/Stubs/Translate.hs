@@ -17,7 +17,8 @@ module Stubs.Translate (
  translateDecls,
  translateFn,
  translateStmt,
- translateStmts
+ translateStmts,
+ translateProgram
 ) where
 
 import Stubs.Translate.Core
@@ -58,22 +59,22 @@ translateExpr'' e = do
 translateExpr' :: forall arch s ret b sret. (b ~ ArchTypeMatch arch sret, LCCE.IsSyntaxExtension(DMS.MacawExt arch)) => SA.StubsExpr sret -> StubsM arch s ret (LCCR.Atom s b)
 translateExpr' e = do
     StubsState _ _ regMap _<- get
-    case e of 
-        SA.VarLit v -> case MapF.lookup v regMap of 
-            Just (StubReg reg _) -> do 
+    case e of
+        SA.VarLit v -> case MapF.lookup v regMap of
+            Just (StubReg reg _) -> do
                 t <- LCCG.readReg reg
                 LCCG.mkAtom t
             Nothing -> error "Undefined VarLit encountered"
-        _ -> do 
-            ce <- translateExpr'' e 
+        _ -> do
+            ce <- translateExpr'' e
             LCCG.mkAtom ce
 
 translateExpr  :: forall arch s ret b sret ext. (b ~ ArchTypeMatch arch sret, ext ~ DMS.MacawExt arch, LCCE.IsSyntaxExtension ext) => SA.StubsExpr sret -> StubsM arch s ret (LCCR.Expr (DMS.MacawExt arch) s b)
-translateExpr e = do 
+translateExpr e = do
     StubsState env retty regMap cache <- get
-    case MapF.lookup e cache of 
-        Nothing -> do 
-            t <- translateExpr' e 
+    case MapF.lookup e cache of
+        Nothing -> do
+            t <- translateExpr' e
             _ <- put (StubsState env retty regMap $ MapF.insert e (StubAtom t) cache )
             return $ LCCG.AtomExpr t
         Just (StubAtom t) -> return $ LCCG.AtomExpr t
@@ -130,3 +131,8 @@ translateDecls ng hAlloc fns = do
         LCSC.parsedProgCFGs = r,
         LCSC.parsedProgForwardDecs = Map.empty
     }
+
+translateProgram :: forall arch s . (DMS.SymArchConstraints arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => NonceGenerator IO s -> LCF.HandleAllocator -> SA.StubsProgram -> IO (String,LCSC.ParsedProgram (DMS.MacawExt arch))
+translateProgram ng halloc prog = do
+    p <- translateDecls ng halloc (SA.stubsFnDecls prog)
+    return (SA.stubsMain prog, p)

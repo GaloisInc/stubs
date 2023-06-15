@@ -98,7 +98,7 @@ pipelineTest path parserFlag = do
             let ?memOpts = LCLM.defaultMemOptions
             -- load the overrides
             csOverrides <-
-                (if parserFlag then loadManualCFG ng hAlloc else loadParsedOverride (piOverrideDir pinst) ng hAlloc parserHooks)
+                (if parserFlag then loadStubsCFG ng hAlloc else loadParsedOverride (piOverrideDir pinst) ng hAlloc parserHooks)
             -- setup environment to execute
             let execFeatures = []
             let seConf = SVS.SymbolicExecutionConfig
@@ -129,12 +129,19 @@ pipelineTest path parserFlag = do
                                         _ -> return Nothing
                 _ -> return Nothing
 
-loadManualCFG :: forall ext s w p sym arch. (IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, w ~ ArchAddrWidth arch, MemWidth w,SymArchConstraints arch) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
-loadManualCFG ng hAlloc = do
-    f <- stubsCfgTest ng hAlloc
-    print (parsedProgCFGs f)
-    let overrides = [(libcdir++"/function/f.cbl",f)]
-    loadParsedPrograms overrides [] []
+loadStubsCFG :: forall ext s w p sym arch. (IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, w ~ ArchAddrWidth arch, MemWidth w,SymArchConstraints arch) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
+loadStubsCFG ng hAlloc = do -- need args to match scope parameter
+    let fn = SA.StubsFunction {
+        SA.stubFnName="f",
+        SA.stubFnArgTys=Ctx.extend Ctx.empty StubsIntRepr,
+        SA.stubFnRetTy=StubsIntRepr,
+        SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.IntLit 20), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
+    }
+    let prog = SA.StubsProgram {
+        SA.stubsMain="f",
+        SA.stubsFnDecls = [SA.SomeStubsFunction fn]
+    }
+    loadStubsPrograms [prog]
 
 loadParsedOverride dir ng hAlloc parserHooks = do
     case dir of
@@ -161,25 +168,6 @@ overrideWrapperTest = testCase "" $ do
 main :: IO ()
 main = defaultMain $ do
     testGroup "" [overrideTest,overrideWrapperTest]
-
-manualCfgTest :: forall ext s w arch. (IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, w ~ ArchAddrWidth arch, MemWidth w) => NonceGenerator IO s -> HandleAllocator -> IO (LCSC.ParsedProgram ext)
-manualCfgTest ng hAlloc = do
-    let n = memWidthNatRepr @w
-    Some one <- return $ PN.mkNatRepr 1
-    Just PN.LeqProof <- return $ PN.testLeq one n
-    let intTy = LCT.BVRepr n
-    let v = LCCR.App  $ LCCE.IntLit 20
-    let args = Ctx.extend Ctx.empty intTy
-    let ret = intTy
-    testHandle <- LCF.mkHandle' hAlloc (WF.functionNameFromText "f") args ret
-    (SomeCFG q,_) <- LCCG.defineFunction @_ @ext InternalPos (Some ng) testHandle $ const (Const (), returnFromFunction $ LCCR.App (LCCE.IntegerToBV n v))
-    let prog = LCSC.ParsedProgram {
-        LCSC.parsedProgGlobals = Map.empty,
-        LCSC.parsedProgExterns = Map.empty,
-        LCSC.parsedProgCFGs = [ACFG args ret q],
-        LCSC.parsedProgForwardDecs = Map.empty
-    }
-    return prog
 
 stubsCfgTest :: forall ext s w arch. (IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, SymArchConstraints arch) => NonceGenerator IO s -> HandleAllocator -> IO (LCSC.ParsedProgram ext)
 stubsCfgTest ng halloc = do
