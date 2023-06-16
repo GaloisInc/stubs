@@ -28,9 +28,11 @@ testFnTranslationBasic = testCase "Basic Translation" $ do
     hAlloc <- LCF.newHandleAllocator
     Some ng <- PN.newIONonceGenerator
     let fn = SA.StubsFunction {
-        SA.stubFnName="f",
-        SA.stubFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
-        SA.stubFnRetTy=SA.StubsIntRepr,
+        SA.stubFnSig=SA.StubsSignature{
+            SA.sigFnName="f",
+            SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+            SA.sigFnRetTy=SA.StubsIntRepr
+        },
         SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 20),SA.Return (SA.IntLit 20)]
     }
     p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
@@ -49,9 +51,11 @@ testFnTranslationITE = testCase "ITE Translation" $ do
     hAlloc <- LCF.newHandleAllocator
     Some ng <- PN.newIONonceGenerator
     let fn = SA.StubsFunction {
-        SA.stubFnName="f",
-        SA.stubFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
-        SA.stubFnRetTy=SA.StubsIntRepr,
+        SA.stubFnSig=SA.StubsSignature{
+            SA.sigFnName="f",
+            SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+            SA.sigFnRetTy=SA.StubsIntRepr
+        },
         SA.stubFnBody=[SA.ITE (SA.BoolLit True) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 20)] [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 40)],SA.Return (SA.IntLit 20)]
     }
     p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
@@ -69,9 +73,11 @@ testFnTranslationLoop = testCase "Loop Translation" $ do
     hAlloc <- LCF.newHandleAllocator
     Some ng <- PN.newIONonceGenerator
     let fn = SA.StubsFunction {
-        SA.stubFnName="f",
-        SA.stubFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
-        SA.stubFnRetTy=SA.StubsIntRepr,
+        SA.stubFnSig=SA.StubsSignature{
+            SA.sigFnName="f",
+            SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+            SA.sigFnRetTy=SA.StubsIntRepr
+        },
         SA.stubFnBody=[SA.Loop (SA.BoolLit False) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 40)] ,SA.Return (SA.IntLit 20)]
     }
     p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]

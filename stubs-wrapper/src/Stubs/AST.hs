@@ -56,10 +56,14 @@ data StubsStmt where
     --FunCall :: StubsFunction args ret -> Ctx.Assignment StubsExpr args -> StubsStmt ret
     Return :: StubsExpr a -> StubsStmt
 
+data StubsSignature (args::Ctx.Ctx StubsType) (ret::StubsType) = StubsSignature {
+    sigFnName :: String,
+    sigFnArgTys :: Ctx.Assignment StubsTypeRepr args,
+    sigFnRetTy :: StubsTypeRepr ret
+}
+
 data StubsFunction (args::Ctx.Ctx StubsType) (ret::StubsType) = StubsFunction {
-    stubFnName :: String,
-    stubFnArgTys :: Ctx.Assignment StubsTypeRepr args,
-    stubFnRetTy :: StubsTypeRepr ret,
+    stubFnSig :: StubsSignature args ret,
     stubFnBody :: [StubsStmt]
 }
 data SomeStubsFunction = forall a b . SomeStubsFunction(StubsFunction a b)
@@ -77,11 +81,25 @@ instance TestEquality StubsVar where
         EQF -> Just Refl 
         _ -> Nothing
 
+data StubsArg (a::StubsType) = StubsArg {
+    argIdx::Int,
+    argType::StubsTypeRepr a
+}
+
+instance OrdF StubsArg where 
+    compareF a1 a2 = lexCompareF (argType a1) (argType a2) (fromOrdering (compare (argIdx a1) (argIdx a2)))
+
+instance TestEquality StubsArg where 
+    testEquality v1 v2 = case compareF v1 v2 of 
+        EQF -> Just Refl 
+        _ -> Nothing
+
 data StubsExpr (a::StubsType) where
     IntLit :: Integer -> StubsExpr StubsInt
     UnitLit :: StubsExpr StubsUnit
     VarLit :: StubsVar a-> StubsExpr a
     BoolLit :: Bool -> StubsExpr StubsBool
+    ArgLit :: StubsArg a -> StubsExpr a
     --TupleExpr :: Ctx.Assignment StubsExpr ctx -> StubsExpr (StubsTuple ctx)
     --AppExpr :: StubsFunction args ret -> Ctx.Assignment StubsExpr args -> StubsExpr ret
 
@@ -114,6 +132,4 @@ stubsExprToTy e = case e of
     BoolLit _ -> StubsBoolRepr
     UnitLit -> StubsUnitRepr
     VarLit v -> varType v
-    
-
---funex = FunDecl "f" (Ctx.extend Ctx.empty StubsIntRepr) StubsIntRepr (Return $ IntLit 20)
+    ArgLit a -> argType a

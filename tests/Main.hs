@@ -8,7 +8,6 @@
 
 module Main ( main ) where
 
-import qualified System.IO as IO
 import Test.Tasty
 import Test.Tasty.HUnit
 
@@ -31,39 +30,28 @@ import qualified Lumberjack as LJ
 import qualified Stubs.EntryPoint as SEp
 import qualified Stubs.Diagnostic as SD
 import qualified Data.BitVector.Sized as BV
-import Data.Maybe
 import Lang.Crucible.Simulator.ExecutionTree
 import Lang.Crucible.Simulator.RegMap (RegEntry(regValue))
 import Control.Lens
-import Control.Monad.IO.Class
 import Data.Macaw.Symbolic (GenArchVals (lookupReg), SymArchConstraints)
 import What4.Interface (asConcrete, IsExpr (asInteger))
 import What4.Concrete (fromConcreteBV)
 import Stubs.Wrapper
 import Infrastructure as SI
-import Stubs.Parser as SP
-import What4.FunctionName as WF
-import Data.Parameterized.Context.Unsafe as Ctx
-import qualified Lang.Crucible.Types as LCT
-import Lang.Crucible.CFG.Reg as LCCR
-import Lang.Crucible.CFG.Expr as LCCE
-import Lang.Crucible.CFG.Generator as LCCG
-import What4.ProgramLoc (Position(InternalPos))
-import Lang.Crucible.Syntax.Concrete (ACFG(ACFG), ParsedProgram (parsedProgCFGs))
+import qualified Stubs.Parser as SP
+import qualified Data.Parameterized.Context.Unsafe as Ctx
+import qualified Lang.Crucible.CFG.Expr as LCCE
 import Data.Parameterized.Nonce (NonceGenerator)
 import Lang.Crucible.FunctionHandle (HandleAllocator)
-import qualified Data.Parameterized.NatRepr as PN
 import Data.Macaw.CFG as DMC
-import Data.Map as Map
-import qualified Lang.Crucible.Syntax.Concrete as LCSC
 import Stubs.FunctionOverride.Extension.Types as SFT
 import Stubs.AST as SA
-import Stubs.Translate as ST
 
 libcdir = "./tests/test-data/libc-overrides"
 logShim:: SD.Diagnostic -> IO ()
 logShim _ = putStrLn ""
 --Should refactor so as to remove flag later
+pipelineTest :: FilePath -> Bool -> IO (Maybe Integer)
 pipelineTest path parserFlag = do
     contents <- B.readFile path
     hAlloc <- LCF.newHandleAllocator
@@ -129,12 +117,14 @@ pipelineTest path parserFlag = do
                                         _ -> return Nothing
                 _ -> return Nothing
 
-loadStubsCFG :: forall ext s w p sym arch. (IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, w ~ ArchAddrWidth arch, MemWidth w,SymArchConstraints arch) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
-loadStubsCFG ng hAlloc = do -- need args to match scope parameter
+loadStubsCFG :: forall ext s w p sym arch. (LCCE.IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, w ~ ArchAddrWidth arch, MemWidth w,SymArchConstraints arch) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
+loadStubsCFG _ _ = do -- need args to match scope parameter
     let fn = SA.StubsFunction {
-        SA.stubFnName="f",
-        SA.stubFnArgTys=Ctx.extend Ctx.empty StubsIntRepr,
-        SA.stubFnRetTy=StubsIntRepr,
+        SA.stubFnSig=SA.StubsSignature{
+            SA.sigFnName="f",
+            SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+            SA.sigFnRetTy=SA.StubsIntRepr
+        },
         SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.IntLit 20), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
     }
     let prog = SA.StubsProgram {
@@ -168,13 +158,3 @@ overrideWrapperTest = testCase "" $ do
 main :: IO ()
 main = defaultMain $ do
     testGroup "" [overrideTest,overrideWrapperTest]
-
-stubsCfgTest :: forall ext s w arch. (IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, SymArchConstraints arch) => NonceGenerator IO s -> HandleAllocator -> IO (LCSC.ParsedProgram ext)
-stubsCfgTest ng halloc = do
-    let fn = StubsFunction {
-        stubFnName="f",
-        stubFnArgTys=Ctx.extend Ctx.empty StubsIntRepr,
-        stubFnRetTy=StubsIntRepr,
-        stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.IntLit 20), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
-    }
-    ST.translateDecls ng halloc [SomeStubsFunction fn]
