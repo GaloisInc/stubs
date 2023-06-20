@@ -46,8 +46,6 @@ import qualified Stubs.AST as SA
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Nonce as PN
 import qualified Data.Parameterized as P
-import Data.Parameterized (FunctorFC(fmapFC))
-import Stubs.AST (stubsExprToTy)
 
 -- Unexported Internal Function
 translateExpr' :: forall arch s ret b sret args . (b ~ ArchTypeMatch arch sret, LCCE.IsSyntaxExtension(DMS.MacawExt arch)) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Atom s b)
@@ -93,7 +91,7 @@ translateExpr' e = do
                 SA.IntLit i -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit i)
                 SA.VarLit _ -> error "internal translateExpr called on VarLit"
                 SA.ArgLit _ -> error "internal translateExpr called on ArgLit"
-                SA.AppExpr _ _ _ -> error "internal translateExpr called on AppExpr"
+                SA.AppExpr {} -> error "internal translateExpr called on AppExpr"
 
 translateExpr  :: forall arch s ret b sret ext args . (b ~ ArchTypeMatch arch sret, ext ~ DMS.MacawExt arch, LCCE.IsSyntaxExtension ext) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s b)
 translateExpr e = do
@@ -105,7 +103,7 @@ translateExpr e = do
             return $ LCCG.AtomExpr t
         Just (StubAtom t _) -> return $ LCCG.AtomExpr t
 
-translateExprs :: (cctx ~ StubToCrucCtx arch ctx) => Ctx.Assignment SA.StubsExpr ctx -> StubsM arch s args ret (Ctx.Assignment (LCCR.Expr (DMS.MacawExt arch) s) cctx)
+translateExprs :: (cctx ~ ArchTypeMatchCtx arch ctx) => Ctx.Assignment SA.StubsExpr ctx -> StubsM arch s args ret (Ctx.Assignment (LCCR.Expr (DMS.MacawExt arch) s) cctx)
 translateExprs eAssign = case elist of 
     Ctx.AssignEmpty -> return Ctx.empty 
     Ctx.AssignExtend erest e -> do 
@@ -156,7 +154,7 @@ translateFn :: forall args ret s arch . (DMS.SymArchConstraints arch, LCCE.IsSyn
 translateFn ng hAlloc handles hdl SA.StubsFunction{SA.stubFnSig=SA.StubsSignature{SA.sigFnName=name, SA.sigFnArgTys=argtys, SA.sigFnRetTy=retty},SA.stubFnBody=body}= do
     let sig = SA.StubsSignature name argtys retty
     let e = StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch))
-    args <- runReaderT (stubToCrucTy argtys) e
+    args <- runReaderT (toCrucibleTyCtx argtys) e
     cret <- runReaderT (toCrucibleTy retty) e
     StubHandle _ _ handle <- return hdl
     (LCCR.SomeCFG q, aux) <- liftIO $ LCCG.defineFunction WF.InternalPos (Some ng) handle $ \crucArgs -> (StubsState e retty MapF.empty MapF.empty (translateFnArgs crucArgs argtys) handles,
@@ -193,14 +191,14 @@ translateProgram ng halloc prog = do
     p <- translateDecls ng halloc fns
     return (SA.stubsMain prog, p)
 
-mkHandle :: forall arch args ret . (DMS.SymArchConstraints arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCF.HandleAllocator -> SA.StubsSignature args ret -> IO ( LCF.FnHandle (StubToCrucCtx arch args) (ArchTypeMatch arch ret))
+mkHandle :: forall arch args ret . (DMS.SymArchConstraints arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCF.HandleAllocator -> SA.StubsSignature args ret -> IO ( LCF.FnHandle (ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret))
 mkHandle hAlloc fn = do 
     let e = StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch))
-    args <- runReaderT (stubToCrucTy (SA.sigFnArgTys fn)) e
+    args <- runReaderT (toCrucibleTyCtx (SA.sigFnArgTys fn)) e
     cret <- runReaderT (toCrucibleTy (SA.sigFnRetTy fn)) e
     LCF.mkHandle' hAlloc (WF.functionNameFromText (T.pack (SA.sigFnName fn))) args cret
 
-translateFnArgs :: forall arch s args . Ctx.Assignment (LCCR.Atom s) (StubToCrucCtx arch args) -> Ctx.Assignment SA.StubsTypeRepr args -> Ctx.Assignment (StubAtom arch s) args
+translateFnArgs :: forall arch s args . Ctx.Assignment (LCCR.Atom s) (ArchTypeMatchCtx arch args) -> Ctx.Assignment SA.StubsTypeRepr args -> Ctx.Assignment (StubAtom arch s) args
 translateFnArgs catoms tys = case (alist,tlist) of 
     (Ctx.AssignEmpty, Ctx.AssignEmpty) -> Ctx.empty 
     (Ctx.AssignExtend arest a, Ctx.AssignExtend trest t) -> Ctx.extend ( translateFnArgs arest trest) (StubAtom a t)

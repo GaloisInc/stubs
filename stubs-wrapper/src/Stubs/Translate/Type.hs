@@ -35,12 +35,12 @@ toCrucibleTy tyrepr =
         StubsAliasRepr _ t -> toCrucibleTy $ resolveAlias t
 
 
-stubToCrucTy :: forall ctx arch m. (DMS.SymArchConstraints arch, HasStubsEnv arch m) => Ctx.Assignment StubsTypeRepr ctx -> m (Ctx.Assignment LCT.TypeRepr (StubToCrucCtx arch ctx))
-stubToCrucTy assign = case alist of
+toCrucibleTyCtx :: forall ctx arch m. (DMS.SymArchConstraints arch, HasStubsEnv arch m) => Ctx.Assignment StubsTypeRepr ctx -> m (Ctx.Assignment LCT.TypeRepr (ArchTypeMatchCtx arch ctx))
+toCrucibleTyCtx assign = case alist of
         AssignEmpty -> return Ctx.empty
         AssignExtend a b -> do
             bc <- toCrucibleTy b
-            ac <- stubToCrucTy a
+            ac <- toCrucibleTyCtx a
             return $ Ctx.extend ac bc
     where
         alist = Ctx.viewAssign assign

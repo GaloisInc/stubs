@@ -80,7 +80,7 @@ pipelineTest path parserFlag = do
         let sym = LCB.backendGetSym bak
         (recordFn, _) <- buildRecordLLVMAnnotation
         let ?recordLLVMAnnotation = recordFn
-        SL.withBinary path contents Nothing hAlloc sym $ \archInfo abi archVals buildSyscallABI buildFunctionABI parserHooks buildGlobals numBytes binConf funAbiExt -> DMA.withArchConstraints archInfo $  do
+        SL.withBinary path contents Nothing hAlloc sym $ \archInfo _ archVals buildSyscallABI buildFunctionABI parserHooks buildGlobals _ binConf funAbiExt -> DMA.withArchConstraints archInfo $  do
             Just (SL.FunABIExt reg) <- return funAbiExt
             -- why is this necessary?
             let ?memOpts = LCLM.defaultMemOptions
