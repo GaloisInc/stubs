@@ -55,6 +55,7 @@ library stubs-sym-exec
                    what4,
                    crucible,
                    crucible-symio,
+                   crucible-syntax,
                    macaw-base,
                    macaw-symbolic,
                    crucible-llvm,

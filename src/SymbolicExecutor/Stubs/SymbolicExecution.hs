@@ -9,6 +9,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE EmptyCase #-}
 module Stubs.SymbolicExecution (
     SymbolicExecutionConfig(..)
   , SymbolicExecutionResult(..)
@@ -67,6 +68,7 @@ import qualified Lang.Crucible.Analysis.Postdom as LCAP
 import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Lang.Crucible.CFG.Extension as LCCE
+import qualified Lang.Crucible.Syntax.Concrete as LCSC
 import qualified Lang.Crucible.FunctionHandle as LCF
 import qualified Lang.Crucible.LLVM.Bytes as LCLB
 import qualified Lang.Crucible.LLVM.DataLayout as LCLD
@@ -1666,3 +1668,140 @@ symbolicallyExecute logAction bak halloc archInfo archVals seConf execFeatures e
                                  (ALB.bcDynamicGlobalVarAddrs binConf)
                                  (ALB.bcSupportedRelocations binConf)
   simulateFunction logAction bak execFeatures halloc archInfo archVals seConf initialMem entryPointAddr mFsRoot mFnCallLog binConf fnConf cliArgs envVars
+
+simulateFunction'
+  :: ( CMC.MonadThrow m
+     , MonadIO m
+     , ext ~ DMS.MacawExt arch
+     , LCCE.IsSyntaxExtension ext
+     , LCB.IsSymBackend sym bak
+     , LCLM.HasLLVMAnn sym
+     , DMS.SymArchConstraints arch
+     , w ~ DMC.ArchAddrWidth arch
+     , 16 <= w
+     , sym ~ WE.ExprBuilder scope st fs
+     , bak ~ LCBO.OnlineBackend solver scope st fs
+     , WPO.OnlineSolver solver
+     , ?memOpts :: LCLM.MemOptions
+     , p ~ AExt.AmbientSimulatorState sym arch
+     , ret ~ LCT.StructType (DMS.CtxToCrucibleType (DMS.ArchRegContext arch))
+     , args ~ (LCT.EmptyCtx LCT.::> LCT.StructType (DMS.CtxToCrucibleType (DMS.ArchRegContext arch)))
+     )
+  => bak
+  -> LCF.HandleAllocator
+  -> DMS.GenArchVals DMS.LLVMMemory arch
+  -> AM.InitialMemory sym w
+  -> DMC.ArchSegmentOff arch
+  -- ^ The address of the entry point function
+  -> FunctionConfig arch sym p
+  -- ^ Configuration parameters concerning functions and overrides
+  -> [BS.ByteString]
+  -- ^ The user-supplied command-line arguments
+  -> Map.Map BS.ByteString [WI.SymBV sym 8]
+  -- ^ The user-supplied environment variables
+  -> LCCC.SomeCFG ext args ret
+  -> LCS.RegMap sym args
+  -> m (SymbolicExecutionResult arch sym)
+simulateFunction' bak halloc archVals initialMem entryPointAddr fnConf cliArgs envVars cfg args= do
+  LCCC.SomeCFG cfg <- return cfg 
+  --todo: args
+  let sym = LCB.backendGetSym bak
+  let symArchFns = DMS.archFunctions archVals
+  let crucRegTypes = DMS.crucArchRegTypes symArchFns
+  let regsRepr = LCT.StructRepr crucRegTypes
+  -- Set up an initial register state (mostly symbolic, with an initial stack)
+  --
+  -- Put the stack pointer in the middle of our allocated stack so that both sides can be addressed
+  initialRegs <- liftIO $ DMS.macawAssignToCrucM (mkInitialRegVal symArchFns sym) (DMS.crucGenRegAssignment symArchFns)
+  stackInitialOffset <- liftIO $ WI.bvLit sym WI.knownRepr (BVS.mkBV WI.knownRepr stackOffset)
+  sp <- liftIO $ LCLM.ptrAdd sym WI.knownRepr (AM.imStackBasePtr initialMem) stackInitialOffset
+  let initialRegsEntry = LCS.RegEntry regsRepr initialRegs
+  let regsWithStack = DMS.updateReg archVals initialRegsEntry DMC.sp_reg sp
+
+  -- Initialize the file system
+  let fileContents = LCSy.emptyInitialFileSystemContents
+  let ?ptrWidth = WI.knownRepr
+  (fs, globals0, LCLS.SomeOverrideSim _) <- liftIO $
+    LCLS.initialLLVMFileSystem halloc sym WI.knownRepr fileContents [] (AM.imGlobals initialMem)
+
+  environGlob <- liftIO $
+    LCCC.freshGlobalVar halloc
+                        (DT.pack "AMBIENT_environ")
+                        LCLM.PtrRepr
+
+  let csOverrides = fcCrucibleSyntaxOverrides fnConf
+  let AF.BuildFunctionABI buildFunctionABI = fcBuildFunctionABI fnConf
+  let functionABI = buildFunctionABI AF.TestContext fs initialMem archVals
+                                     mempty
+                                     (AFET.csoAddressOverrides csOverrides)
+                                     (AFET.csoNamedOverrides csOverrides)
+                                     [Some environGlob]
+
+  let mem0 = case LCSG.lookupGlobal (AM.imMemVar initialMem) globals0 of
+               Just mem -> mem
+               Nothing  -> AP.panic AP.FunctionOverride "simulateFunction"
+                             [ "Failed to find global variable for memory: "
+                               ++ show (LCCC.globalName (AM.imMemVar initialMem)) ]
+  (mainReg0, mainReg1, mainReg2) <-
+    case AF.functionIntegerArgumentRegisters functionABI of
+      (reg0:reg1:reg2:_) -> pure (reg0, reg1, reg2)
+      _ -> AP.panic AP.SymbolicExecution "simulateFunction"
+             [ "Not enough registers for the main() function" ]
+  (mainArgVals, _, mem1) <- liftIO $
+    initMainArguments bak mem0 archVals mainReg0 mainReg1 mainReg2 cliArgs envVars regsWithStack
+  let globals2 = LCSG.insertGlobal (AM.imMemVar initialMem) mem1 $
+                 LCSG.insertGlobal environGlob (envpVal mainArgVals) globals0
+  
+  let simAction = LCS.runOverrideSim regsRepr $ do
+                    -- First, initialize the symbolic file system...
+                    --initFSOverride
+                    -- ...then simulate any startup overrides...
+                    F.traverse_ (\ov -> AF.functionOverride ov
+                                                            bak
+                                                            Ctx.Empty
+                                                            dummyGetVarArg
+                                                            -- NOTE: Startup
+                                                            -- overrides cannot
+                                                            -- currently call
+                                                            -- into parent
+                                                            -- overrides
+                                                            [])
+                                (AFET.csoStartupOverrides csOverrides)
+                    -- ...and finally, run the entrypoint function.
+                    LCS.regValue <$> LCS.callCFG cfg args
+    -- Register any externs, auxiliary functions, forward declarations used in
+    -- the startup overrides.
+  (startupBindings, globals4) <-
+      F.foldlM (\(bindings, globals) functionOv ->
+                 liftIO $ insertFunctionOverrideReferences
+                            bak functionABI functionOv bindings globals)
+               (LCF.emptyHandleMap, globals2)
+               (AFET.csoStartupOverrides csOverrides)
+    -- Also register the entry point function, as we will not be able to start
+    -- simulation without it.
+  let bindings = LCF.insertHandleMap (LCCC.cfgHandle cfg)
+                                       (LCS.UseCFG cfg (LCAP.postdomInfo cfg))
+                                       startupBindings
+  let ambientSimState = set AExt.discoveredFunctionHandles
+                          (Map.singleton entryPointAddr (LCCC.cfgHandle cfg))
+                          AExt.emptyAmbientSimulatorState
+    -- Note: the 'Handle' here is the target of any print statements in the
+    -- Crucible CFG; we shouldn't have any, but if we did it would be better to
+    -- capture the output over a pipe.
+  let emptyExt = LCSE.ExtensionImpl
+          { LCSE.extensionEval = \_sym _iTypes _log _f _state -> \case
+          , LCSE.extensionExec = \case
+          }
+  let ctx = LCS.initSimContext bak (MapF.union LCLI.llvmIntrinsicTypes LCLS.llvmSymIOIntrinsicTypes) halloc IO.stdout (LCS.FnBindings bindings) emptyExt ambientSimState
+  let s0 = LCS.InitialState ctx globals4 LCS.defaultAbortHandler regsRepr simAction
+
+  res <- liftIO $ LCS.executeCrucible [] s0
+  return $ SymbolicExecutionResult (AM.imMemVar initialMem)
+                                     res
+  where
+    -- Syntax overrides cannot make use of variadic arguments, so if this
+    -- callback is ever used, something has gone awry.
+    dummyGetVarArg :: AF.GetVarArg sym
+    dummyGetVarArg = AF.GetVarArg $ \_ ->
+      AP.panic AP.SymbolicExecution "simulateFunction"
+        ["A startup override cannot use variadic arguments"]
