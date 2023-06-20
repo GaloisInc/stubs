@@ -125,11 +125,19 @@ loadStubsCFG _ _ = do -- need args to match scope parameter
             SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
             SA.sigFnRetTy=SA.StubsIntRepr
         },
-        SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.IntLit 20), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
+        SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.IntLit 20) SA.StubsIntRepr]
+    }
+    let int_fun = SA.StubsFunction {
+        SA.stubFnSig=SA.StubsSignature{
+            SA.sigFnName="g",
+            SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+            SA.sigFnRetTy=SA.StubsIntRepr
+        },
+        SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
     }
     let prog = SA.StubsProgram {
         SA.stubsMain="f",
-        SA.stubsFnDecls = [SA.SomeStubsFunction fn]
+        SA.stubsFnDecls = [SA.SomeStubsFunction fn, SA.SomeStubsFunction int_fun]
     }
     loadStubsPrograms [prog]
 

@@ -51,9 +51,8 @@ instance TestEquality StubsTypeRepr where
 
 data StubsStmt where
     Assignment :: StubsVar a -> StubsExpr a -> StubsStmt
-    Loop :: StubsExpr StubsBool -> [StubsStmt] -> StubsStmt -- When a loop has ITE in it, what happens? Should ITE be a Stmt instead? Would be more C-like
+    Loop :: StubsExpr StubsBool -> [StubsStmt] -> StubsStmt
     ITE :: StubsExpr StubsBool -> [StubsStmt]-> [StubsStmt]  -> StubsStmt
-    --FunCall :: StubsFunction args ret -> Ctx.Assignment StubsExpr args -> StubsStmt ret
     Return :: StubsExpr a -> StubsStmt
 
 data StubsSignature (args::Ctx.Ctx StubsType) (ret::StubsType) = StubsSignature {
@@ -61,6 +60,17 @@ data StubsSignature (args::Ctx.Ctx StubsType) (ret::StubsType) = StubsSignature 
     sigFnArgTys :: Ctx.Assignment StubsTypeRepr args,
     sigFnRetTy :: StubsTypeRepr ret
 }
+
+data SomeStubsSignature = forall a b . SomeStubsSignature(StubsSignature a b)
+
+instance OrdF (StubsSignature a) where 
+    compareF s1 s2 = lexCompareF (sigFnRetTy s1) (sigFnRetTy s2) (fromOrdering $ mappend  (compare (sigFnArgTys s1) (sigFnArgTys s2))  (compare (sigFnName s1) (sigFnName s2)))
+
+instance TestEquality (StubsSignature a) where 
+    testEquality v1 v2 = case compareF v1 v2 of 
+        EQF -> Just Refl 
+        _ -> Nothing
+
 
 data StubsFunction (args::Ctx.Ctx StubsType) (ret::StubsType) = StubsFunction {
     stubFnSig :: StubsSignature args ret,
@@ -101,12 +111,12 @@ data StubsExpr (a::StubsType) where
     BoolLit :: Bool -> StubsExpr StubsBool
     ArgLit :: StubsArg a -> StubsExpr a
     --TupleExpr :: Ctx.Assignment StubsExpr ctx -> StubsExpr (StubsTuple ctx)
-    --AppExpr :: StubsFunction args ret -> Ctx.Assignment StubsExpr args -> StubsExpr ret
+    AppExpr :: String -> Ctx.Assignment StubsExpr args -> StubsTypeRepr a -> StubsExpr a
 
 $(return [])
 instance OrdF StubsExpr where 
     compareF = $(structuralTypeOrd [t|StubsExpr|]
-                   [ (TypeApp AnyType AnyType, [|compareF|])
+                   [  (TypeApp AnyType AnyType, [|compareF|])
                    , (TypeApp (TypeApp (ConType [t|Ctx.Assignment|]) AnyType) AnyType
                      , [|compareF|]
                      )
@@ -133,3 +143,12 @@ stubsExprToTy e = case e of
     UnitLit -> StubsUnitRepr
     VarLit v -> varType v
     ArgLit a -> argType a
+    AppExpr _ _ r -> r
+
+stubsAssignmentToTys :: Ctx.Assignment StubsExpr ctx -> Ctx.Assignment StubsTypeRepr ctx 
+stubsAssignmentToTys assign = case alist of 
+    Ctx.AssignEmpty -> Ctx.empty 
+    Ctx.AssignExtend rest elm -> 
+        Ctx.extend (stubsAssignmentToTys rest) (stubsExprToTy elm)
+    where 
+        alist = Ctx.viewAssign assign
