@@ -5,6 +5,9 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE PartialTypeSignatures #-}
 
 module Main ( main ) where
 
@@ -46,8 +49,21 @@ import Lang.Crucible.FunctionHandle (HandleAllocator)
 import Data.Macaw.CFG as DMC
 import Stubs.FunctionOverride.Extension.Types as SFT
 import Stubs.AST as SA
+import qualified Stubs.Translate as ST
 
-libcdir = "./tests/test-data/libc-overrides"
+import qualified Lang.Crucible.Syntax.Concrete as LCSC
+import qualified Lang.Crucible.CFG.Core as LCCC
+import qualified Lang.Crucible.Simulator as LCS
+import qualified Lang.Crucible.Types as LCT
+import qualified Data.Macaw.X86 as DMX
+import qualified Data.List as List
+import qualified Lang.Crucible.CFG.Core as LCSC
+import qualified Lang.Crucible.CFG.Reg as LCCR
+import qualified Lang.Crucible.CFG.SSAConversion as LCSSA
+import qualified Lang.Crucible.Simulator.RegMap as LCSR
+import qualified What4.Interface as WI
+import qualified Lang.Crucible.Simulator as LCSE
+
 logShim:: SD.Diagnostic -> IO ()
 logShim _ = putStrLn ""
 --Should refactor so as to remove flag later
@@ -66,7 +82,7 @@ pipelineTest path parserFlag = do
                                  piFloatMode=S.IEEE,
                                  piEntryPoint=SE.DefaultEntryPoint,
                                  piMemoryModel=SM.DefaultMemoryModel,
-                                 piOverrideDir=Just libcdir,
+                                 piOverrideDir=Just "./tests/test-data/libc-overrides",
                                  piIterationBound=Nothing,
                                  piRecursionBound=Nothing,
                                  piSolverInteractionFile=Nothing,
@@ -117,29 +133,46 @@ pipelineTest path parserFlag = do
                                         _ -> return Nothing
                 _ -> return Nothing
 
+smallPipeline :: forall arch args ret ext p. (DMS.SymArchConstraints arch, ext ~ DMS.MacawExt arch, p ~ ()) =>
+                                        LCSC.ParsedProgram (DMS.MacawExt arch) ->
+                                        LCCC.SomeCFG (DMS.MacawExt arch) args ret ->
+                                        (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args)) ->
+                                        LCT.TypeRepr ret->
+                                        (forall sym . WI.IsExprBuilder sym => (LCSE.ExecResult p sym ext (LCS.RegEntry sym ret)) -> IO Bool) ->
+                                        IO Bool
+smallPipeline prog cfg argsf ret check = do
+    hAlloc <- LCF.newHandleAllocator
+    let pinst = ProgramInstance{ piPath="",
+                                 piBinary="",
+                                 piFsRoot=Nothing,
+                                 piCommandLineArguments=[],
+                                 piConcreteEnvVars=[],
+                                 piConcreteEnvVarsFromBytes=[],
+                                 piSymbolicEnvVars=[],
+                                 piSolver=S.Z3,
+                                 piFloatMode=S.IEEE,
+                                 piEntryPoint=SE.DefaultEntryPoint,
+                                 piMemoryModel=SM.DefaultMemoryModel,
+                                 piOverrideDir=Nothing,
+                                 piIterationBound=Nothing,
+                                 piRecursionBound=Nothing,
+                                 piSolverInteractionFile=Nothing,
+                                 piSharedObjectDir=Nothing,
+                                 piLogSymbolicBranches=Nothing,
+                                 piLogFunctionCalls=Nothing
+                                 }
+    Some ng <- PN.newIONonceGenerator
+    S.withOnlineSolver (piSolver pinst) (piFloatMode pinst) ng $ \bak -> do
+        let sym = LCB.backendGetSym bak
+
+        LCCC.SomeCFG unwrappedCfg <- return cfg
+        args <- argsf sym (LCCC.cfgArgTypes unwrappedCfg)
+
+        SI.symexec bak hAlloc prog cfg args ret check
+
 loadStubsCFG :: forall ext s w p sym arch. (LCCE.IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, w ~ ArchAddrWidth arch, MemWidth w,SymArchConstraints arch) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
 loadStubsCFG _ _ = do -- need args to match scope parameter
-    let fn = SA.StubsFunction {
-        SA.stubFnSig=SA.StubsSignature{
-            SA.sigFnName="f",
-            SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
-            SA.sigFnRetTy=SA.StubsIntRepr
-        },
-        SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.IntLit 20) SA.StubsIntRepr]
-    }
-    let int_fun = SA.StubsFunction {
-        SA.stubFnSig=SA.StubsSignature{
-            SA.sigFnName="g",
-            SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
-            SA.sigFnRetTy=SA.StubsIntRepr
-        },
-        SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
-    }
-    let prog = SA.StubsProgram {
-        SA.stubsMain="f",
-        SA.stubsFnDecls = [SA.SomeStubsFunction fn, SA.SomeStubsFunction int_fun]
-    }
-    loadStubsPrograms [prog]
+    loadStubsPrograms [testProg]
 
 loadParsedOverride dir ng hAlloc parserHooks = do
     case dir of
@@ -148,6 +181,56 @@ loadParsedOverride dir ng hAlloc parserHooks = do
             (overrides, startupOverrides, funAddrOverrides) <- SP.parseCrucibleOverrides dir ng hAlloc parserHooks
             loadParsedPrograms overrides startupOverrides funAddrOverrides
         Nothing -> return SFE.emptyCrucibleSyntaxOverrides
+
+testProg :: StubsProgram
+testProg =
+    let fn = SA.StubsFunction {
+        SA.stubFnSig=SA.StubsSignature{
+            SA.sigFnName="f",
+            SA.sigFnArgTys=Ctx.empty,
+            SA.sigFnRetTy=SA.StubsIntRepr
+        },
+        SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.IntLit 20) SA.StubsIntRepr]
+    } in let int_fun = SA.StubsFunction {
+        SA.stubFnSig=SA.StubsSignature{
+            SA.sigFnName="g",
+            SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+            SA.sigFnRetTy=SA.StubsIntRepr
+        },
+        SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
+    } in SA.StubsProgram {
+        SA.stubsMain="f",
+        SA.stubsFnDecls = [SA.SomeStubsFunction fn, SA.SomeStubsFunction int_fun]
+    }
+
+symExecTest :: TestTree
+symExecTest = testCase "" $ do
+    Some ng <- PN.newIONonceGenerator
+    hAlloc <- LCF.newHandleAllocator
+    (entry, prog) <- ST.translateProgram @DMX.X86_64 ng hAlloc testProg
+    case lookupEntry entry (LCSC.parsedProgCFGs prog) of
+        Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
+        Just (LCSC.ACFG _ ret icfg) -> do
+            res <- smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
+            if res then assertBool "" True else assertFailure "Test failed"
+    where
+        lookupEntry e = List.find (\(LCSC.ACFG _ _ cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
+        f :: (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args))
+        f _ assign = case Ctx.viewAssign assign of
+            Ctx.AssignEmpty -> return Ctx.empty
+            _ -> error "Irrelevant to test"
+        check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
+        check retRepr crucibleRes = case crucibleRes of
+                FinishedResult _ r -> case r of
+                                        TotalRes v -> do
+                                            let q = view gpValue v
+                                            case retRepr of
+                                                LCT.BVRepr _ -> case asConcrete $ regValue q of
+                                                    Just k -> if BV.asUnsigned (fromConcreteBV k) == 20 then return True else print "Unexpected value received" >> return False
+                                                    Nothing -> print "Failed to concretize return" >> return False
+                                                _ -> print "Unexpected return type" >> return False
+                                        _ -> print "Failed to get complete result" >> return False
+                _ -> print "Failed to finish execution" >> return False
 
 overrideTest :: TestTree
 overrideTest = testCase "" $ do
@@ -165,4 +248,4 @@ overrideWrapperTest = testCase "" $ do
 
 main :: IO ()
 main = defaultMain $ do
-    testGroup "" [overrideTest,overrideWrapperTest]
+    testGroup "" [overrideTest,overrideWrapperTest,symExecTest]

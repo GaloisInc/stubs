@@ -1,12 +1,22 @@
 -- Module containing miscaellaneous testing infrastructure inherited from Ambient
-module Infrastructure 
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE EmptyCase #-}
+module Infrastructure
     (
         buildRecordLLVMAnnotation,
-        ProgramInstance(..)
+        ProgramInstance(..),
+        symexec,
+        SomeRegEntry(..)
     )
-where 
+where
 
-import           Control.Monad.IO.Class (liftIO )
+import           Control.Monad.IO.Class (liftIO, MonadIO )
 import qualified Data.ByteString as BS
 import           Data.IORef ( IORef, newIORef, modifyIORef')
 import qualified Data.Map as Map
@@ -25,6 +35,35 @@ import qualified Stubs.EnvVar as AEnv
 
 import qualified Stubs.Memory as AM
 import qualified Stubs.Solver as AS
+import Stubs.Loader
+import qualified Lang.Crucible.Syntax.Concrete as LCSC
+import qualified Data.Macaw.Symbolic as DMS
+
+import           Data.Macaw.BinaryLoader.X86 ()
+
+import           Data.Macaw.X86.Symbolic ()
+import qualified Lang.Crucible.FunctionHandle as LCF
+
+import qualified What4.Interface as WI
+import qualified Lang.Crucible.CFG.Expr as LCCE
+import Lang.Crucible.Simulator (RegEntry)
+import qualified Lang.Crucible.Simulator as LCS
+import qualified Lang.Crucible.Simulator.ExecutionTree as LCSE
+import qualified Lang.Crucible.LLVM.Intrinsics as LCLI
+import qualified Lang.Crucible.Simulator.GlobalState as LCSG
+import qualified Lang.Crucible.LLVM.SymIO as LCLS
+import qualified System.IO as IO
+import qualified Lang.Crucible.CFG.Core as LCCC
+import qualified Lang.Crucible.Analysis.Postdom as LCAP
+import qualified Lang.Crucible.CFG.SSAConversion as LCSSA
+import qualified Lang.Crucible.Types as LCT
+import qualified What4.Expr.Builder as WE
+import qualified What4.Protocol.Online as WPO
+import qualified Lang.Crucible.Backend.Online as LCBO
+import qualified Control.Monad.Catch as CMC
+import qualified Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.Map as MapF
+import What4.Interface (IsExprBuilder)
 
 -- | Build an LLVM annotation tracker to record instances of bad behavior
 -- checks.  Bad behavior encompasses both undefined behavior, and memory
@@ -101,3 +140,59 @@ data ProgramInstance =
                   , piLogFunctionCalls :: Maybe FilePath
                   -- ^ Optional location to log function calls to
                   }
+
+data SomeRegEntry tp = forall sym . (WI.IsExprBuilder sym) => SomeRegEntry (RegEntry sym tp)
+
+symexec
+  :: ( CMC.MonadThrow m
+     , MonadIO m
+     , ext ~ DMS.MacawExt arch
+     , LCCE.IsSyntaxExtension ext
+     , LCB.IsSymBackend sym bak
+     , DMS.SymArchConstraints arch
+     , sym ~ WE.ExprBuilder scope st fs
+     , bak ~ LCBO.OnlineBackend solver scope st fs
+     , WPO.OnlineSolver solver
+     , p ~ ()
+     )
+  => bak
+  -> LCF.HandleAllocator
+  -- ^ Configuration parameters concerning functions and overrides
+  -> LCSC.ParsedProgram (DMS.MacawExt arch)
+  -> LCCC.SomeCFG ext args ret
+  -> Ctx.Assignment (LCS.RegEntry sym) args
+  -> LCT.TypeRepr ret 
+  -> (WI.IsExprBuilder sym => (LCSE.ExecResult p sym ext (LCS.RegEntry sym ret)) -> m a)
+  -> m a
+symexec bak halloc prog cfg args retRepr check = do
+  LCCC.SomeCFG cfg <- return cfg
+
+  let simAction = LCS.runOverrideSim retRepr $ do
+                    -- First, initialize the symbolic file system...
+                    --initFSOverride
+                    -- ...then simulate any startup overrides...
+                    -- ...and finally, run the entrypoint function.
+                    LCS.regValue <$> LCS.callCFG cfg (LCS.RegMap args)
+
+  let cfgs = LCSC.parsedProgCFGs prog 
+  let hdlMap = foldr (\(LCSC.ACFG _ _ icfg) acc -> case LCSSA.toSSA icfg of 
+            (LCCC.SomeCFG ccfg) -> LCF.insertHandleMap (LCCC.cfgHandle ccfg)
+                                       (LCS.UseCFG ccfg (LCAP.postdomInfo ccfg))
+                                       acc
+        ) LCF.emptyHandleMap cfgs
+
+  let bindings = LCF.insertHandleMap (LCCC.cfgHandle cfg)
+                                       (LCS.UseCFG cfg (LCAP.postdomInfo cfg))
+                                       hdlMap
+    -- Note: the 'Handle' here is the target of any print statements in the
+    -- Crucible CFG; we shouldn't have any, but if we did it would be better to
+    -- capture the output over a pipe.
+  let emptyExt = LCSE.ExtensionImpl
+          { LCSE.extensionEval = \_sym _iTypes _log _f _state -> \case
+          , LCSE.extensionExec = \case
+          }
+  let ctx = LCS.initSimContext bak (MapF.union LCLI.llvmIntrinsicTypes LCLS.llvmSymIOIntrinsicTypes) halloc IO.stdout (LCS.FnBindings bindings) emptyExt ()
+  let s0 = LCS.InitialState ctx LCSG.emptyGlobals LCS.defaultAbortHandler retRepr simAction
+
+  res <- liftIO $ LCS.executeCrucible [] s0
+  check res
