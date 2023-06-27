@@ -5,7 +5,8 @@
 
 module Stubs.Wrapper (
     loadParsedPrograms,
-    loadStubsPrograms
+    loadStubsPrograms,
+    crucibleProgToParsedProg
 ) where
 
 import qualified Data.Macaw.Symbolic as DMS
@@ -46,15 +47,24 @@ import qualified Stubs.AST as SA
 import qualified Stubs.Translate as ST
 import Data.Macaw.Symbolic (SymArchConstraints)
 import Data.Macaw.CFG
+import qualified Stubs.Preamble as SPR
 
-stubsProgramToOverride :: forall ext p sym arch w. (ext ~ DMS.MacawExt arch, DMM.MemWidth w, SymArchConstraints arch, w ~ ArchAddrWidth arch) => SA.StubsProgram -> IO (SF.SomeFunctionOverride p sym arch)
+crucibleProgToParsedProg :: ST.CrucibleProgram arch -> LCSC.ParsedProgram (DMS.MacawExt arch) 
+crucibleProgToParsedProg ST.CrucibleProgram{ST.crCFGs=cfgs, ST.crGlobals= glbls, ST.crExterns=externs, ST.crFwdDecs=fwds} = LCSC.ParsedProgram {
+  LCSC.parsedProgCFGs= cfgs,
+  LCSC.parsedProgExterns=externs,
+  LCSC.parsedProgForwardDecs=fwds,
+  LCSC.parsedProgGlobals=glbls
+}
+
+stubsProgramToOverride :: forall ext p sym arch w. (ext ~ DMS.MacawExt arch, DMM.MemWidth w, SymArchConstraints arch, SPR.Preamble arch,w ~ ArchAddrWidth arch) => SA.StubsProgram -> IO (SF.SomeFunctionOverride p sym arch)
 stubsProgramToOverride prog = do 
   hAlloc <- LCF.newHandleAllocator
   Some ng <- PN.newIONonceGenerator
-  (entry, parsed) <- ST.translateProgram ng hAlloc prog
-  parsedProgToFunctionOverride entry parsed
+  crucProg <- ST.translateProgram ng hAlloc prog
+  parsedProgToFunctionOverride (ST.crEntry crucProg) (crucibleProgToParsedProg crucProg)
 
-loadStubsPrograms :: forall ext p sym arch w . (ext ~ DMS.MacawExt arch, DMM.MemWidth w,SymArchConstraints arch) => [SA.StubsProgram] -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
+loadStubsPrograms :: forall ext p sym arch w . (ext ~ DMS.MacawExt arch, DMM.MemWidth w,SymArchConstraints arch,SPR.Preamble arch) => [SA.StubsProgram] -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
 loadStubsPrograms progs = do 
   overrides <- mapM stubsProgramToOverride progs 
   return SFT.CrucibleSyntaxOverrides {

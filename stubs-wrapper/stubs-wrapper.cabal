@@ -52,7 +52,9 @@ library
                      Stubs.AST,
                      Stubs.Translate,
                      Stubs.Translate.Core,
-                     Stubs.Translate.Type
+                     Stubs.Translate.Type,
+                     Stubs.Preamble,
+                     Stubs.Preamble.X86
     hs-source-dirs: src
     default-language: Haskell2010 
     ghc-options: -Wall -Wcompat
@@ -69,7 +71,11 @@ library
                    split,
                    macaw-symbolic,
                    IntervalMap,
-                   macaw-x86-symbolic
+                   macaw-x86-symbolic,
+                   macaw-x86,
+                   macaw-aarch32,
+                   macaw-aarch32-symbolic,
+                   semmc-aarch32
 
 test-suite wrapper-tests
   import: shared
@@ -92,5 +98,5 @@ test-suite wrapper-tests
                  yaml >= 0.11 && < 0.12,
                  macaw-x86,
                  macaw-x86-symbolic
-  ghc-options: -Wall -Wcompat
+  ghc-options: -Wextra -Wcompat
   default-language: Haskell2010

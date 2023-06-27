@@ -8,6 +8,7 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 
 module Main ( main ) where
 
@@ -63,6 +64,8 @@ import qualified Lang.Crucible.CFG.SSAConversion as LCSSA
 import qualified Lang.Crucible.Simulator.RegMap as LCSR
 import qualified What4.Interface as WI
 import qualified Lang.Crucible.Simulator as LCSE
+import qualified Stubs.Preamble as SPR
+import Stubs.Preamble.X86 () --for instance
 
 logShim:: SD.Diagnostic -> IO ()
 logShim _ = putStrLn ""
@@ -133,8 +136,8 @@ pipelineTest path parserFlag = do
                                         _ -> return Nothing
                 _ -> return Nothing
 
-smallPipeline :: forall arch args ret ext p. (DMS.SymArchConstraints arch, ext ~ DMS.MacawExt arch, p ~ ()) =>
-                                        LCSC.ParsedProgram (DMS.MacawExt arch) ->
+smallPipeline :: forall arch args ret ext p. (DMS.SymArchConstraints arch, ext ~ DMS.MacawExt arch, p ~ (), SPR.Preamble arch) =>
+                                        ST.CrucibleProgram arch ->
                                         LCCC.SomeCFG (DMS.MacawExt arch) args ret ->
                                         (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args)) ->
                                         LCT.TypeRepr ret->
@@ -170,7 +173,7 @@ smallPipeline prog cfg argsf ret check = do
 
         SI.symexec bak hAlloc prog cfg args ret check
 
-loadStubsCFG :: forall ext s w p sym arch. (LCCE.IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, w ~ ArchAddrWidth arch, MemWidth w,SymArchConstraints arch) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
+loadStubsCFG :: forall ext s w p sym arch. (LCCE.IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, w ~ ArchAddrWidth arch, MemWidth w,SymArchConstraints arch, SPR.Preamble arch) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
 loadStubsCFG _ _ = do -- need args to match scope parameter
     loadStubsPrograms [testProg]
 
@@ -207,8 +210,8 @@ symExecTest :: TestTree
 symExecTest = testCase "" $ do
     Some ng <- PN.newIONonceGenerator
     hAlloc <- LCF.newHandleAllocator
-    (entry, prog) <- ST.translateProgram @DMX.X86_64 ng hAlloc testProg
-    case lookupEntry entry (LCSC.parsedProgCFGs prog) of
+    prog <- ST.translateProgram @DMX.X86_64 ng hAlloc testProg
+    case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
         Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
         Just (LCSC.ACFG _ ret icfg) -> do
             res <- smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
@@ -246,6 +249,44 @@ overrideWrapperTest = testCase "" $ do
         Nothing -> assertFailure "Failed to get value"
         Just x -> assertEqual "Values not equal: Parser-less Test" x 20
 
+
+linkerTest :: TestTree 
+linkerTest = testCase "Can link preamble into stub properly" $ do 
+    let sprog = SA.StubsProgram {
+        SA.stubsFnDecls = [
+            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "double" (Ctx.extend Ctx.empty (SA.IntLit 5)) SA.StubsIntRepr)] ),
+            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "double" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) [SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) SA.StubsIntRepr)])
+        ],
+        SA.stubsMain = "main",
+        SA.stubsTyDecls = []::[SA.StubsTyDecl]
+    }
+    Some ng <- PN.newIONonceGenerator
+    hAlloc <- LCF.newHandleAllocator
+    prog <- ST.translateProgram @DMX.X86_64 ng hAlloc sprog
+    case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
+        Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
+        Just (LCSC.ACFG _ ret icfg) -> do
+            res <- smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
+            if res then assertBool "" True else assertFailure "Test failed"
+    where
+        lookupEntry e = List.find (\(LCSC.ACFG _ _ cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
+        f :: (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args))
+        f _ assign = case Ctx.viewAssign assign of
+            Ctx.AssignEmpty -> return Ctx.empty
+            _ -> error "Irrelevant to test"
+        check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
+        check retRepr crucibleRes = case crucibleRes of
+                FinishedResult _ r -> case r of
+                                        TotalRes v -> do
+                                            let q = view gpValue v
+                                            case retRepr of
+                                                LCT.BVRepr _ -> case asConcrete $ regValue q of
+                                                    Just k -> if BV.asUnsigned (fromConcreteBV k) == 10 then return True else print "Unexpected value received" >> return False
+                                                    Nothing -> print "Failed to concretize return" >> return False
+                                                _ -> print "Unexpected return type" >> return False
+                                        _ -> print "Failed to get complete result" >> return False
+                _ -> print "Failed to finish execution" >> return False
+
 main :: IO ()
 main = defaultMain $ do
-    testGroup "" [overrideTest,overrideWrapperTest,symExecTest]
+    testGroup "" [overrideTest,overrideWrapperTest,symExecTest, linkerTest]

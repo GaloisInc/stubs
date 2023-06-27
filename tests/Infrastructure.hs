@@ -7,6 +7,8 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE EmptyCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications #-}
 module Infrastructure
     (
         buildRecordLLVMAnnotation,
@@ -64,6 +66,16 @@ import qualified Control.Monad.Catch as CMC
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import What4.Interface (IsExprBuilder)
+import Control.Monad.RWS (MonadState(get), MonadReader (ask))
+import qualified What4.FunctionName as WF
+import qualified Lang.Crucible.Simulator.CallFrame as LCSCF
+import Control.Lens
+import Data.Parameterized (Some(..))
+import qualified Stubs.Preamble as SP
+import qualified Data.Macaw.CFG as DMC
+import qualified Stubs.Preamble as SPR
+import qualified Stubs.Translate as ST
+import qualified Stubs.Translate.Core as STC
 
 -- | Build an LLVM annotation tracker to record instances of bad behavior
 -- checks.  Bad behavior encompasses both undefined behavior, and memory
@@ -144,7 +156,7 @@ data ProgramInstance =
 data SomeRegEntry tp = forall sym . (WI.IsExprBuilder sym) => SomeRegEntry (RegEntry sym tp)
 
 symexec
-  :: ( CMC.MonadThrow m
+  :: forall m ext arch sym bak scope st fs solver p w args ret a. ( CMC.MonadThrow m
      , MonadIO m
      , ext ~ DMS.MacawExt arch
      , LCCE.IsSyntaxExtension ext
@@ -154,14 +166,15 @@ symexec
      , bak ~ LCBO.OnlineBackend solver scope st fs
      , WPO.OnlineSolver solver
      , p ~ ()
+     , (w ~ DMC.ArchAddrWidth arch )
      )
   => bak
   -> LCF.HandleAllocator
   -- ^ Configuration parameters concerning functions and overrides
-  -> LCSC.ParsedProgram (DMS.MacawExt arch)
+  -> ST.CrucibleProgram arch
   -> LCCC.SomeCFG ext args ret
   -> Ctx.Assignment (LCS.RegEntry sym) args
-  -> LCT.TypeRepr ret 
+  -> LCT.TypeRepr ret
   -> (WI.IsExprBuilder sym => (LCSE.ExecResult p sym ext (LCS.RegEntry sym ret)) -> m a)
   -> m a
 symexec bak halloc prog cfg args retRepr check = do
@@ -174,8 +187,8 @@ symexec bak halloc prog cfg args retRepr check = do
                     -- ...and finally, run the entrypoint function.
                     LCS.regValue <$> LCS.callCFG cfg (LCS.RegMap args)
 
-  let cfgs = LCSC.parsedProgCFGs prog 
-  let hdlMap = foldr (\(LCSC.ACFG _ _ icfg) acc -> case LCSSA.toSSA icfg of 
+  let cfgs = ST.crCFGs prog
+  let hdlMap = foldr (\(LCSC.ACFG _ _ icfg) acc -> case LCSSA.toSSA icfg of
             (LCCC.SomeCFG ccfg) -> LCF.insertHandleMap (LCCC.cfgHandle ccfg)
                                        (LCS.UseCFG ccfg (LCAP.postdomInfo ccfg))
                                        acc
@@ -184,14 +197,16 @@ symexec bak halloc prog cfg args retRepr check = do
   let bindings = LCF.insertHandleMap (LCCC.cfgHandle cfg)
                                        (LCS.UseCFG cfg (LCAP.postdomInfo cfg))
                                        hdlMap
-    -- Note: the 'Handle' here is the target of any print statements in the
-    -- Crucible CFG; we shouldn't have any, but if we did it would be better to
-    -- capture the output over a pipe.
+
+  -- Link preamble
+  let wrappedovs = ST.crFnHandleMap prog
+  let linkedMap = foldr (\(ST.SomeWrappedOverride (ST.WrappedOverride ovf (STC.StubHandle _ _ h))) acc -> LCF.insertHandleMap h (LCS.UseOverride (ovf bak)) acc) bindings wrappedovs
+
   let emptyExt = LCSE.ExtensionImpl
           { LCSE.extensionEval = \_sym _iTypes _log _f _state -> \case
           , LCSE.extensionExec = \case
           }
-  let ctx = LCS.initSimContext bak (MapF.union LCLI.llvmIntrinsicTypes LCLS.llvmSymIOIntrinsicTypes) halloc IO.stdout (LCS.FnBindings bindings) emptyExt ()
+  let ctx = LCS.initSimContext bak (MapF.union LCLI.llvmIntrinsicTypes LCLS.llvmSymIOIntrinsicTypes) halloc IO.stdout (LCS.FnBindings linkedMap) emptyExt ()
   let s0 = LCS.InitialState ctx LCSG.emptyGlobals LCS.defaultAbortHandler retRepr simAction
 
   res <- liftIO $ LCS.executeCrucible [] s0
