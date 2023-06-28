@@ -68,6 +68,7 @@ import Data.Macaw.Types (BVType)
 import Data.Macaw.X86.X86Reg as DMX
 import qualified Stubs.Preamble as SPR
 import Stubs.Preamble.X86 ()
+import Stubs.Preamble.AArch32 ()
 
 data FunABIExt arch = FunABIExt {
   abiExtArchReg :: ArchReg arch (BVType (ArchAddrWidth arch))
@@ -166,33 +167,33 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
                 binConf
                 (Just (FunABIExt DMX.RAX))
             Nothing -> CMC.throwM (AE.UnsupportedELFArchitecture name DE.EM_X86_64 DE.ELFCLASS64)
-        -- (DE.EM_ARM, DE.ELFCLASS32) -> do
-        --   tlsGlob <- liftIO $ AMAL.freshTLSGlobalVar hdlAlloc
-        --   let extOverride = AMAL.aarch32LinuxStmtExtensionOverride
-        --   case DMS.archVals (Proxy @Macaw.AArch32.ARM) (Just extOverride) of
-        --     Just archVals -> do
-        --       binsAndPaths <- loadElfBinaries options ehi hdrMachine hdrClass
-        --       let bins = NEV.map fst binsAndPaths
-        --       (unsupportedRels, supportedRels) <- liftIO $ ALESA.elfAarch32Rels bins
-        --       let dynGlobSymMap = ALES.elfDynamicGlobalSymbolMap supportedRels bins
-        --       binConf <- mkElfBinConf AA.AArch32Linux
-        --                               (Proxy @DE.ARM32_RelocationType)
-        --                               binsAndPaths
-        --                               dynGlobSymMap
-        --                               unsupportedRels
-        --                               supportedRels
-        --       k Macaw.AArch32.arm_linux_info
-        --         AA.AArch32Linux
-        --         archVals
-        --         ASAL.aarch32LinuxSyscallABI
-        --         (AFAL.aarch32LinuxFunctionABI tlsGlob)
-        --         (AFE.machineCodeParserHooks (Proxy @Macaw.AArch32.ARM)
-        --                                     AFAL.aarch32LinuxTypes)
-        --         (AMAL.aarch32LinuxInitGlobals tlsGlob)
-        --         (elfBinarySizeTotal bins)
-        --         binConf
-        --         Nothing
-        --     Nothing -> CMC.throwM (AE.UnsupportedELFArchitecture name DE.EM_ARM DE.ELFCLASS32)
+        (DE.EM_ARM, DE.ELFCLASS32) -> do
+          tlsGlob <- liftIO $ AMAL.freshTLSGlobalVar hdlAlloc
+          let extOverride = AMAL.aarch32LinuxStmtExtensionOverride
+          case DMS.archVals (Proxy @Macaw.AArch32.ARM) (Just extOverride) of
+            Just archVals -> do
+              binsAndPaths <- loadElfBinaries options ehi hdrMachine hdrClass
+              let bins = NEV.map fst binsAndPaths
+              (unsupportedRels, supportedRels) <- liftIO $ ALESA.elfAarch32Rels bins
+              let dynGlobSymMap = ALES.elfDynamicGlobalSymbolMap supportedRels bins
+              binConf <- mkElfBinConf AA.AArch32Linux
+                                      (Proxy @DE.ARM32_RelocationType)
+                                      binsAndPaths
+                                      dynGlobSymMap
+                                      unsupportedRels
+                                      supportedRels
+              k Macaw.AArch32.arm_linux_info
+                AA.AArch32Linux
+                archVals
+                ASAL.aarch32LinuxSyscallABI
+                (AFAL.aarch32LinuxFunctionABI tlsGlob)
+                (AFE.machineCodeParserHooks (Proxy @Macaw.AArch32.ARM)
+                                            AFAL.aarch32LinuxTypes)
+                (AMAL.aarch32LinuxInitGlobals tlsGlob)
+                (elfBinarySizeTotal bins)
+                binConf
+                Nothing
+            Nothing -> CMC.throwM (AE.UnsupportedELFArchitecture name DE.EM_ARM DE.ELFCLASS32)
         (machine, klass) -> CMC.throwM (AE.UnsupportedELFArchitecture name machine klass)
     Left _ -> throwDecodeFailure name bytes
   where
