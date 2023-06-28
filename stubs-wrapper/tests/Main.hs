@@ -22,6 +22,7 @@ import qualified Data.Parameterized as P
 import qualified Lang.Crucible.CFG.Core as LCCC
 import qualified Data.Parameterized.NatRepr as PN
 import Lang.Crucible.CFG.Reg as LCCR
+import Stubs.Preamble.X86 ()
 
 testFnTranslationBasic :: TestTree
 testFnTranslationBasic = testCase "Basic Translation" $ do 
@@ -35,12 +36,12 @@ testFnTranslationBasic = testCase "Basic Translation" $ do
         },
         SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 20),SA.Return (SA.IntLit 20)]
     }
-    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn] []
+    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
     let cfgs = ST.crCFGs p 
 
     -- Expect single CFG
     assertEqual "Unexpected CFG count" (length cfgs) 1
-    LCSC.ACFG _ r m <- return $ head cfgs
+    LCSC.ACFG _ r _ <- return $ head cfgs
 
     -- Expect Int to be BV 64 on X86_64
     Just P.Refl <- return $ P.testEquality r $ LCCC.BVRepr (PN.knownNat @64)
@@ -58,7 +59,7 @@ testFnTranslationITE = testCase "ITE Translation" $ do
         },
         SA.stubFnBody=[SA.ITE (SA.BoolLit True) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 20)] [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 40)],SA.Return (SA.IntLit 20)]
     }
-    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn] []
+    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
     let cfgs = ST.crCFGs p 
 
     -- Expect single CFG
@@ -80,7 +81,7 @@ testFnTranslationLoop = testCase "Loop Translation" $ do
         },
         SA.stubFnBody=[SA.Loop (SA.BoolLit False) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 40)] ,SA.Return (SA.IntLit 20)]
     }
-    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn] []
+    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
     let cfgs = ST.crCFGs p
 
     -- Expect single CFG

@@ -30,6 +30,11 @@ class (DMS.SymArchConstraints arch) => Preamble arch where
 
 stubsPreamble :: [SA.SomeStubsSignature]
 stubsPreamble = [
-    SA.SomeStubsSignature(SA.StubsSignature "plus" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr)
+    SA.SomeStubsSignature(SA.StubsSignature "plus" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "minus" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "mult" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "gt" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsBoolRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "lt" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsBoolRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "eq" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsBoolRepr)
     ]
 

@@ -57,8 +57,6 @@ import qualified What4.Interface as WI
 import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Stubs.Preamble as SPR
-import qualified What4.Expr.Builder
-import qualified Stubs.Translate.Core as SA
 import qualified Stubs.Translate.Core as STC
 
 data CrucibleProgram arch = CrucibleProgram {
@@ -72,7 +70,7 @@ data CrucibleProgram arch = CrucibleProgram {
 }
 
 data SomeWrappedOverride arch = forall args ret . SomeWrappedOverride(WrappedOverride arch args ret)
-data WrappedOverride arch args ret = WrappedOverride (forall sym bak solver scope st fs p r . (bak ~ LCBO.OnlineBackend solver scope st fs, LCB.HasSymInterface sym bak, WI.IsExprBuilder sym) =>
+data WrappedOverride arch args ret = WrappedOverride (forall sym bak solver scope st fs p . (bak ~ LCBO.OnlineBackend solver scope st fs, LCB.HasSymInterface sym bak, WI.IsExprBuilder sym) =>
     bak -> LCS.Override p sym (DMS.MacawExt arch) (STC.ArchTypeMatchCtx arch args) (STC.ArchTypeMatch arch ret)) (StubHandle arch args ret)
 
 -- Unexported Internal Function

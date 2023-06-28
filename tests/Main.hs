@@ -287,6 +287,46 @@ linkerTest = testCase "Can link preamble into stub properly" $ do
                                         _ -> print "Failed to get complete result" >> return False
                 _ -> print "Failed to finish execution" >> return False
 
+factorialTest :: TestTree 
+factorialTest = testCase "calculates factorial" $ do 
+    let sprog = SA.StubsProgram {
+        SA.stubsFnDecls = [
+            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "factorial" (Ctx.extend (Ctx.extend Ctx.empty (SA.IntLit 5)) (SA.IntLit 1)) SA.StubsIntRepr)] ),
+            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "factorial" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr) 
+            [SA.ITE (SA.AppExpr "gt" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.IntLit 0) ) SA.StubsBoolRepr) 
+            [SA.Return (SA.AppExpr "factorial"  (Ctx.extend (Ctx.extend Ctx.empty (SA.AppExpr "minus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.IntLit 1)) SA.StubsIntRepr ) ) (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty  (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)))  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) SA.StubsIntRepr   )  )  SA.StubsIntRepr)   ] 
+            [(SA.Return (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)) )] ])
+        ],
+        SA.stubsMain = "main",
+        SA.stubsTyDecls = []::[SA.StubsTyDecl]
+    }
+    Some ng <- PN.newIONonceGenerator
+    hAlloc <- LCF.newHandleAllocator
+    prog <- ST.translateProgram @DMX.X86_64 ng hAlloc sprog
+    case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
+        Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
+        Just (LCSC.ACFG _ ret icfg) -> do
+            res <- smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
+            if res then assertBool "" True else assertFailure "Test failed"
+    where
+        lookupEntry e = List.find (\(LCSC.ACFG _ _ cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
+        f :: (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args))
+        f _ assign = case Ctx.viewAssign assign of
+            Ctx.AssignEmpty -> return Ctx.empty
+            _ -> error "Irrelevant to test"
+        check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
+        check retRepr crucibleRes = case crucibleRes of
+                FinishedResult _ r -> case r of
+                                        TotalRes v -> do
+                                            let q = view gpValue v
+                                            case retRepr of
+                                                LCT.BVRepr _ -> case asConcrete $ regValue q of
+                                                    Just k -> if BV.asUnsigned (fromConcreteBV k) == 120 then return True else print "Unexpected value received" >> return False
+                                                    Nothing -> print "Failed to concretize return" >> return False
+                                                _ -> print "Unexpected return type" >> return False
+                                        _ -> print "Failed to get complete result" >> return False
+                _ -> print "Failed to finish execution" >> return False
+
 main :: IO ()
 main = defaultMain $ do
-    testGroup "" [overrideTest,overrideWrapperTest,symExecTest, linkerTest]
+    testGroup "" [overrideTest,overrideWrapperTest,symExecTest, linkerTest,factorialTest]
