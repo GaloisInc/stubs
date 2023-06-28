@@ -58,6 +58,7 @@ import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Stubs.Preamble as SPR
 import qualified Stubs.Translate.Core as STC
+import GHC.Natural (naturalToInteger)
 
 data CrucibleProgram arch = CrucibleProgram {
   crCFGs :: [LCSC.ACFG (DMS.MacawExt arch)],
@@ -115,6 +116,7 @@ translateExpr' e = do
                 SA.BoolLit b -> LCCR.App $ LCCE.BoolLit b
                 SA.UnitLit -> LCCR.App LCCE.EmptyApp
                 SA.IntLit i -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit i)
+                SA.UIntLit u -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit (naturalToInteger u)) -- Should be safe as Integer is infinite size, and once its a bitvector we can treat as unsigned
                 SA.VarLit _ -> error "internal translateExpr called on VarLit"
                 SA.ArgLit _ -> error "internal translateExpr called on ArgLit"
                 SA.AppExpr {} -> error "internal translateExpr called on AppExpr"

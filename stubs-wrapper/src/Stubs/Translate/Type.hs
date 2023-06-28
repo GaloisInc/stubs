@@ -33,6 +33,9 @@ toCrucibleTy tyrepr =
         StubsUnitRepr -> return LCT.UnitRepr
         --StubsTupleRepr ctx -> Some $ LCT.UnitRepr -- todo change
         StubsAliasRepr _ t -> toCrucibleTy $ resolveAlias t
+        StubsUIntRepr -> do
+            n <- stArchWidth <$> getStubEnv
+            return $ LCT.BVRepr n
 
 
 toCrucibleTyCtx :: forall ctx arch m. (DMS.SymArchConstraints arch, HasStubsEnv arch m) => Ctx.Assignment StubsTypeRepr ctx -> m (Ctx.Assignment LCT.TypeRepr (ArchTypeMatchCtx arch ctx))

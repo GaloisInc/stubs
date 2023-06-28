@@ -31,6 +31,7 @@ import qualified Stubs.AST as SA
 
 type family ArchTypeMatch (arch :: *) (stubType :: SA.StubsType) = (crucType :: LCT.CrucibleType) where
     ArchTypeMatch arch 'SA.StubsInt = LCT.BVType (DMC.ArchAddrWidth arch)
+    ArchTypeMatch arch 'SA.StubsUInt = LCT.BVType (DMC.ArchAddrWidth arch)
     ArchTypeMatch arch 'SA.StubsBool = LCT.BoolType
     ArchTypeMatch arch 'SA.StubsUnit = LCT.UnitType
     ArchTypeMatch arch ('SA.StubsAlias a b) = ArchTypeMatch arch b

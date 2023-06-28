@@ -12,17 +12,20 @@ module Stubs.AST where
 import Data.Parameterized as P
 import Data.Parameterized.Context as Ctx
 import Data.Parameterized.TH.GADT
+import GHC.TypeLits
 
 data StubsType where
     StubsInt :: StubsType
     StubsUnit :: StubsType
     StubsBool :: StubsType
+    StubsUInt :: StubsType -- unsigned integer
     --StubsTuple :: Ctx.Ctx StubsType -> StubsType
     StubsAlias :: Symbol -> StubsType -> StubsType
 
 type StubsInt = 'StubsInt
 type StubsUnit = 'StubsUnit
 type StubsBool = 'StubsBool
+type StubsUInt = 'StubsUInt
 --type StubsTuple = 'StubsTuple
 type StubsAlias = 'StubsAlias
 
@@ -30,6 +33,7 @@ data StubsTypeRepr a where
     StubsIntRepr :: StubsTypeRepr StubsInt
     StubsUnitRepr :: StubsTypeRepr StubsUnit
     StubsBoolRepr :: StubsTypeRepr StubsBool
+    StubsUIntRepr :: StubsTypeRepr StubsUInt
     --StubsTupleRepr :: Ctx.Assignment StubsTypeRepr ctx -> StubsTypeRepr (StubsTuple ctx)
     StubsAliasRepr :: P.SymbolRepr s -> StubsTypeRepr a -> StubsTypeRepr a
 
@@ -107,6 +111,7 @@ instance TestEquality StubsArg where
 data StubsExpr (a::StubsType) where
     IntLit :: Integer -> StubsExpr StubsInt
     UnitLit :: StubsExpr StubsUnit
+    UIntLit :: Natural -> StubsExpr StubsUInt
     VarLit :: StubsVar a-> StubsExpr a
     BoolLit :: Bool -> StubsExpr StubsBool
     ArgLit :: StubsArg a -> StubsExpr a
@@ -141,6 +146,7 @@ stubsExprToTy e = case e of
     IntLit _ -> StubsIntRepr
     BoolLit _ -> StubsBoolRepr
     UnitLit -> StubsUnitRepr
+    UIntLit _ -> StubsUIntRepr
     VarLit v -> varType v
     ArgLit a -> argType a
     AppExpr _ _ r -> r
