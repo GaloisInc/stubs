@@ -61,6 +61,7 @@ library
                    directory,
                    vector,
                    binary-symbols,
+                   asl-translator,
                    what4,
                    crucible,
                    crucible-llvm,

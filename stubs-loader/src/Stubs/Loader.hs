@@ -69,6 +69,8 @@ import Data.Macaw.X86.X86Reg as DMX
 import qualified Stubs.Preamble as SPR
 import Stubs.Preamble.X86 ()
 import Stubs.Preamble.AArch32 ()
+import qualified Data.Macaw.ARM.ARMReg as ARMReg
+import qualified Language.ASL.Globals as ASL
 
 data FunABIExt arch = FunABIExt {
   abiExtArchReg :: ArchReg arch (BVType (ArchAddrWidth arch))
@@ -192,7 +194,7 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
                 (AMAL.aarch32LinuxInitGlobals tlsGlob)
                 (elfBinarySizeTotal bins)
                 binConf
-                Nothing
+                (Just (FunABIExt (ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R0"))))
             Nothing -> CMC.throwM (AE.UnsupportedELFArchitecture name DE.EM_ARM DE.ELFCLASS32)
         (machine, klass) -> CMC.throwM (AE.UnsupportedELFArchitecture name machine klass)
     Left _ -> throwDecodeFailure name bytes
