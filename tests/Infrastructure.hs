@@ -37,7 +37,6 @@ import qualified Stubs.EnvVar as AEnv
 
 import qualified Stubs.Memory as AM
 import qualified Stubs.Solver as AS
-import Stubs.Loader
 import qualified Lang.Crucible.Syntax.Concrete as LCSC
 import qualified Data.Macaw.Symbolic as DMS
 
@@ -65,15 +64,7 @@ import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Control.Monad.Catch as CMC
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
-import What4.Interface (IsExprBuilder)
-import Control.Monad.RWS (MonadState(get), MonadReader (ask))
-import qualified What4.FunctionName as WF
-import qualified Lang.Crucible.Simulator.CallFrame as LCSCF
-import Control.Lens
-import Data.Parameterized (Some(..))
-import qualified Stubs.Preamble as SP
 import qualified Data.Macaw.CFG as DMC
-import qualified Stubs.Preamble as SPR
 import qualified Stubs.Translate as ST
 import qualified Stubs.Translate.Core as STC
 
