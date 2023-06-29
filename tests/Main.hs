@@ -68,7 +68,7 @@ import qualified Stubs.Preamble as SPR
 import Stubs.Preamble.X86 () --for instance
 
 logShim:: SD.Diagnostic -> IO ()
-logShim _ = putStrLn ""
+logShim _ = return ()
 --Should refactor so as to remove flag later
 pipelineTest :: FilePath -> Bool -> IO (Maybe Integer)
 pipelineTest path parserFlag = do
@@ -206,44 +206,15 @@ testProg =
         SA.stubsFnDecls = [SA.SomeStubsFunction fn, SA.SomeStubsFunction int_fun]
     }
 
-symExecTest :: TestTree
-symExecTest = testCase "" $ do
-    Some ng <- PN.newIONonceGenerator
-    hAlloc <- LCF.newHandleAllocator
-    prog <- ST.translateProgram @DMX.X86_64 ng hAlloc testProg
-    case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
-        Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
-        Just (LCSC.ACFG _ ret icfg) -> do
-            res <- smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
-            if res then assertBool "" True else assertFailure "Test failed"
-    where
-        lookupEntry e = List.find (\(LCSC.ACFG _ _ cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
-        f :: (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args))
-        f _ assign = case Ctx.viewAssign assign of
-            Ctx.AssignEmpty -> return Ctx.empty
-            _ -> error "Irrelevant to test"
-        check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
-        check retRepr crucibleRes = case crucibleRes of
-                FinishedResult _ r -> case r of
-                                        TotalRes v -> do
-                                            let q = view gpValue v
-                                            case retRepr of
-                                                LCT.BVRepr _ -> case asConcrete $ regValue q of
-                                                    Just k -> if BV.asUnsigned (fromConcreteBV k) == 20 then return True else print "Unexpected value received" >> return False
-                                                    Nothing -> print "Failed to concretize return" >> return False
-                                                _ -> print "Unexpected return type" >> return False
-                                        _ -> print "Failed to get complete result" >> return False
-                _ -> print "Failed to finish execution" >> return False
-
 overrideTest :: TestTree
-overrideTest = testCase "" $ do
+overrideTest = testCase "Main Pipeline Test: Using Parser" $ do
     res <- pipelineTest "./tests/test-data/a.out" False
     case res of
         Nothing -> assertFailure "Failed to get value"
         Just x -> assertEqual "Values not equal: Parser-Based Test" x 20
 
 overrideWrapperTest :: TestTree
-overrideWrapperTest = testCase "" $ do
+overrideWrapperTest = testCase "Main Pipeline Test: Parserless" $ do
     res <- pipelineTest "./tests/test-data/a.out" True
     case res of
         Nothing -> assertFailure "Failed to get value"
@@ -251,29 +222,15 @@ overrideWrapperTest = testCase "" $ do
 
 
 linkerTest :: TestTree 
-linkerTest = testCase "Can link preamble into stub properly" $ do 
-    let sprog = SA.StubsProgram {
+linkerTest = genTestCase ( SA.StubsProgram {
         SA.stubsFnDecls = [
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "double" (Ctx.extend Ctx.empty (SA.IntLit 5)) SA.StubsIntRepr)] ),
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "double" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) [SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) SA.StubsIntRepr)])
         ],
         SA.stubsMain = "main",
         SA.stubsTyDecls = []::[SA.StubsTyDecl]
-    }
-    Some ng <- PN.newIONonceGenerator
-    hAlloc <- LCF.newHandleAllocator
-    prog <- ST.translateProgram @DMX.X86_64 ng hAlloc sprog
-    case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
-        Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
-        Just (LCSC.ACFG _ ret icfg) -> do
-            res <- smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
-            if res then assertBool "" True else assertFailure "Test failed"
-    where
-        lookupEntry e = List.find (\(LCSC.ACFG _ _ cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
-        f :: (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args))
-        f _ assign = case Ctx.viewAssign assign of
-            Ctx.AssignEmpty -> return Ctx.empty
-            _ -> error "Irrelevant to test"
+    }) check "Can link preamble into stub"
+    where 
         check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
         check retRepr crucibleRes = case crucibleRes of
                 FinishedResult _ r -> case r of
@@ -287,9 +244,8 @@ linkerTest = testCase "Can link preamble into stub properly" $ do
                                         _ -> print "Failed to get complete result" >> return False
                 _ -> print "Failed to finish execution" >> return False
 
-factorialTest :: TestTree 
-factorialTest = testCase "calculates factorial" $ do 
-    let sprog = SA.StubsProgram {
+factorialTest :: TestTree
+factorialTest = genTestCase (SA.StubsProgram {
         SA.stubsFnDecls = [
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "factorial" (Ctx.extend (Ctx.extend Ctx.empty (SA.IntLit 5)) (SA.IntLit 1)) SA.StubsIntRepr)] ),
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "factorial" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr) 
@@ -299,21 +255,8 @@ factorialTest = testCase "calculates factorial" $ do
         ],
         SA.stubsMain = "main",
         SA.stubsTyDecls = []::[SA.StubsTyDecl]
-    }
-    Some ng <- PN.newIONonceGenerator
-    hAlloc <- LCF.newHandleAllocator
-    prog <- ST.translateProgram @DMX.X86_64 ng hAlloc sprog
-    case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
-        Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
-        Just (LCSC.ACFG _ ret icfg) -> do
-            res <- smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
-            if res then assertBool "" True else assertFailure "Test failed"
-    where
-        lookupEntry e = List.find (\(LCSC.ACFG _ _ cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
-        f :: (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args))
-        f _ assign = case Ctx.viewAssign assign of
-            Ctx.AssignEmpty -> return Ctx.empty
-            _ -> error "Irrelevant to test"
+    }) check "calculates factorial of 5"
+    where 
         check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
         check retRepr crucibleRes = case crucibleRes of
                 FinishedResult _ r -> case r of
@@ -326,6 +269,39 @@ factorialTest = testCase "calculates factorial" $ do
                                                 _ -> print "Unexpected return type" >> return False
                                         _ -> print "Failed to get complete result" >> return False
                 _ -> print "Failed to finish execution" >> return False
+
+symExecTest :: TestTree
+symExecTest = genTestCase testProg check "Symbolic Execution smoke test"
+    where
+        check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
+        check retRepr crucibleRes = case crucibleRes of
+                FinishedResult _ r -> case r of
+                                        TotalRes v -> do
+                                            let q = view gpValue v
+                                            case retRepr of
+                                                LCT.BVRepr _ -> case asConcrete $ regValue q of
+                                                    Just k -> if BV.asUnsigned (fromConcreteBV k) == 20 then return True else print "Unexpected value received" >> return False
+                                                    Nothing -> print "Failed to concretize return" >> return False
+                                                _ -> print "Unexpected return type" >> return False
+                                        _ -> print "Failed to get complete result" >> return False
+                _ -> print "Failed to finish execution" >> return False
+
+genTestCase :: StubsProgram ->  (forall sym ret . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult () sym (DMS.MacawExt DMX.X86_64) (LCS.RegEntry sym ret) -> IO Bool) -> TestName -> TestTree
+genTestCase sprog check tag = testCase tag $ do 
+    Some ng <- PN.newIONonceGenerator
+    hAlloc <- LCF.newHandleAllocator
+    prog <- ST.translateProgram @DMX.X86_64 ng hAlloc sprog
+    case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
+        Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
+        Just (LCSC.ACFG _ ret icfg) -> do
+            res <- smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
+            if res then assertBool "" True else assertFailure "Test failed"
+    where 
+        lookupEntry e = List.find (\(LCSC.ACFG _ _ cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
+        f :: (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args))
+        f _ assign = case Ctx.viewAssign assign of
+            Ctx.AssignEmpty -> return Ctx.empty
+            _ -> error "Irrelevant to test"
 
 main :: IO ()
 main = defaultMain $ do

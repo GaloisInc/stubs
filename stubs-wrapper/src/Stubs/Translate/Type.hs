@@ -18,25 +18,20 @@ import qualified Lang.Crucible.Types as LCT
 import Data.Parameterized.Context as Ctx
 import qualified Data.Macaw.Symbolic as DMS
 
-
 resolveAlias :: StubsTypeRepr a -> StubsTypeRepr a
 resolveAlias (StubsAliasRepr _ a) = resolveAlias a
 resolveAlias x = x
 
 toCrucibleTy ::forall arch a m. (DMS.SymArchConstraints arch, HasStubsEnv arch m) => StubsTypeRepr a -> m (LCT.TypeRepr (ArchTypeMatch arch a))
-toCrucibleTy tyrepr =
+toCrucibleTy tyrepr = do 
+    n <- stArchWidth <$> getStubEnv
     case tyrepr of
-        StubsIntRepr -> do
-            n <- stArchWidth <$> getStubEnv
-            return $ LCT.BVRepr n
+        StubsIntRepr -> return $ LCT.BVRepr n
         StubsBoolRepr -> return LCT.BoolRepr
         StubsUnitRepr -> return LCT.UnitRepr
         --StubsTupleRepr ctx -> Some $ LCT.UnitRepr -- todo change
         StubsAliasRepr _ t -> toCrucibleTy $ resolveAlias t
-        StubsUIntRepr -> do
-            n <- stArchWidth <$> getStubEnv
-            return $ LCT.BVRepr n
-
+        StubsUIntRepr -> return $ LCT.BVRepr n
 
 toCrucibleTyCtx :: forall ctx arch m. (DMS.SymArchConstraints arch, HasStubsEnv arch m) => Ctx.Assignment StubsTypeRepr ctx -> m (Ctx.Assignment LCT.TypeRepr (ArchTypeMatchCtx arch ctx))
 toCrucibleTyCtx assign = case alist of
