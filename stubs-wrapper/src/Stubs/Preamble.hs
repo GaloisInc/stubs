@@ -38,7 +38,13 @@ stubsPreamble = [
     SA.SomeStubsSignature(SA.StubsSignature "eq" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsBoolRepr),
     SA.SomeStubsSignature(SA.StubsSignature "int" (Ctx.extend Ctx.empty SA.StubsUIntRepr) SA.StubsIntRepr),
     SA.SomeStubsSignature(SA.StubsSignature "uint" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsUIntRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "long" (Ctx.extend Ctx.empty SA.StubsULongRepr) SA.StubsLongRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "ulong" (Ctx.extend Ctx.empty SA.StubsLongRepr) SA.StubsULongRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "short" (Ctx.extend Ctx.empty SA.StubsUShortRepr) SA.StubsShortRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "ushort" (Ctx.extend Ctx.empty SA.StubsShortRepr) SA.StubsUShortRepr),
     SA.SomeStubsSignature(SA.StubsSignature "long_i" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsLongRepr),
-    SA.SomeStubsSignature(SA.StubsSignature "int_s" (Ctx.extend Ctx.empty SA.StubsShortRepr) SA.StubsIntRepr)
+    SA.SomeStubsSignature(SA.StubsSignature "int_s" (Ctx.extend Ctx.empty SA.StubsShortRepr) SA.StubsIntRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "ulong_i" (Ctx.extend Ctx.empty SA.StubsUIntRepr) SA.StubsULongRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "uint_s" (Ctx.extend Ctx.empty SA.StubsUShortRepr) SA.StubsUIntRepr)
     ]
 

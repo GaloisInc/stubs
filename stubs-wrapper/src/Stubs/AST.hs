@@ -21,6 +21,8 @@ data StubsType where
     StubsUInt :: StubsType -- unsigned integer
     StubsLong :: StubsType
     StubsShort :: StubsType
+    StubsUShort :: StubsType 
+    StubsULong :: StubsType
     StubsAlias :: Symbol -> StubsType -> StubsType
 
 type StubsInt = 'StubsInt
@@ -29,6 +31,8 @@ type StubsBool = 'StubsBool
 type StubsUInt = 'StubsUInt
 type StubsLong = 'StubsLong
 type StubsShort = 'StubsShort
+type StubsULong = 'StubsULong
+type StubsUShort = 'StubsUShort
 type StubsAlias = 'StubsAlias
 
 
@@ -39,6 +43,8 @@ data StubsTypeRepr a where
     StubsUIntRepr :: StubsTypeRepr StubsUInt
     StubsLongRepr :: StubsTypeRepr StubsLong
     StubsShortRepr :: StubsTypeRepr StubsShort
+    StubsULongRepr :: StubsTypeRepr StubsULong
+    StubsUShortRepr :: StubsTypeRepr StubsUShort
     StubsAliasRepr :: P.SymbolRepr s -> StubsTypeRepr a -> StubsTypeRepr a
 
 $(return [])
@@ -118,6 +124,8 @@ data StubsLit (a::StubsType) where
     UIntLit :: Natural -> StubsLit StubsUInt
     LongLit :: Integer -> StubsLit StubsLong
     ShortLit :: Integer -> StubsLit StubsShort
+    ULongLit :: Natural -> StubsLit StubsULong
+    UShortLit :: Natural -> StubsLit StubsUShort
     BoolLit :: Bool -> StubsLit StubsBool
 
 
@@ -173,6 +181,8 @@ stubsExprToTy e = case e of
     LitExpr(UIntLit _) -> StubsUIntRepr
     LitExpr(LongLit _) -> StubsLongRepr
     LitExpr(ShortLit _) -> StubsShortRepr
+    LitExpr(ULongLit _) -> StubsULongRepr
+    LitExpr(UShortLit _) -> StubsUShortRepr
     VarLit v -> varType v
     ArgLit a -> argType a
     AppExpr _ _ r -> r

@@ -47,9 +47,9 @@ cmpBinOverride op name bak = LCS.mkOverride' (WF.functionNameFromText name) LCT.
     execCmpBin @arch sym op args
   )
 
-bvIdOverride :: forall arch bak solver scope st fs w p ext sym. (bak ~ LCBO.OnlineBackend solver scope st fs, LCB.HasSymInterface sym bak, WI.IsExprBuilder sym, STC.StubsArch arch, w ~  STC.ArchIntSize arch) =>
+bvIdOverride :: forall arch bak solver scope st fs w p ext sym. (bak ~ LCBO.OnlineBackend solver scope st fs, LCB.HasSymInterface sym bak, WI.IsExprBuilder sym, STC.StubsArch arch, 1 PN.<= w, KnownNat w) =>
                 Text -> bak -> LCS.Override p sym ext (LCT.EmptyCtx LCT.::> LCT.BVType w) (LCT.BVType w)
-bvIdOverride name bak = LCS.mkOverride' (WF.functionNameFromText name) (LCT.BVRepr (PN.knownNat @(STC.ArchIntSize arch))) (do
+bvIdOverride name bak = LCS.mkOverride' (WF.functionNameFromText name) (LCT.BVRepr (PN.knownNat @w)) (do
     LCS.RegMap args <-  LCS.getOverrideArgs
     let sym = LCB.backendGetSym bak
     execId @arch sym args
@@ -64,7 +64,7 @@ bvExtendOverride name signed bak = LCS.mkOverride' (WF.functionNameFromText name
     execExtend @arch sym signed args
   )
 
-execId :: forall arch sym m w . (MonadIO m, WI.IsExprBuilder sym, (STC.StubsArch arch), w ~ STC.ArchIntSize arch) =>
+execId :: forall arch sym m w . (MonadIO m, WI.IsExprBuilder sym, (STC.StubsArch arch), 1 PN.<= w, KnownNat w) =>
             sym -> Ctx.Assignment (LCS.RegEntry sym) (Ctx.EmptyCtx Ctx.::> LCT.BVType w) ->  m (LCS.RegValue sym (LCT.BVType w))
 execId _ (Ctx.Empty Ctx.:> bv1) = do 
     return $ LCS.regValue bv1

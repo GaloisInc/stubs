@@ -30,6 +30,8 @@ instance STC.StubsArch DMX.X86_64 where
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsUInt = LCT.BVType (STC.ArchIntSize DMX.X86_64)
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsLong = LCT.BVType (STC.ArchLongSize DMX.X86_64)
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsShort = LCT.BVType (STC.ArchShortSize DMX.X86_64)
+    type instance ArchTypeMatch DMX.X86_64 'SA.StubsULong = LCT.BVType (STC.ArchLongSize DMX.X86_64)
+    type instance ArchTypeMatch DMX.X86_64 'SA.StubsUShort = LCT.BVType (STC.ArchShortSize DMX.X86_64)
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsBool = LCT.BoolType
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsUnit = LCT.UnitType
     type instance ArchTypeMatch DMX.X86_64 ('SA.StubsAlias a b) = STC.ArchTypeMatch DMX.X86_64 b
@@ -47,6 +49,8 @@ instance STC.StubsArch DMX.X86_64 where
             SA.StubsUIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
             SA.StubsLongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
             SA.StubsShortRepr-> return $ LCT.BVRepr (PN.knownNat @16)
+            SA.StubsULongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
+            SA.StubsUShortRepr-> return $ LCT.BVRepr (PN.knownNat @16)
 
     translateLit lit = do 
         let n = PN.knownNat @32
@@ -58,6 +62,8 @@ instance STC.StubsArch DMX.X86_64 where
             SA.IntLit i -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit i)
             SA.LongLit i -> LCCR.App (LCCE.IntegerToBV ln $ LCCR.App $ LCCE.IntLit i)
             SA.UIntLit u -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit (naturalToInteger u))
+            SA.ULongLit u -> LCCR.App (LCCE.IntegerToBV ln $ LCCR.App $ LCCE.IntLit (naturalToInteger u))
+            SA.UShortLit u -> LCCR.App (LCCE.IntegerToBV sn $ LCCR.App $ LCCE.IntLit (naturalToInteger u))
             SA.ShortLit s -> LCCR.App (LCCE.IntegerToBV sn $ LCCR.App $ LCCE.IntLit s)
 
 instance SPR.Preamble DMX.X86_64 where
@@ -71,4 +77,11 @@ instance SPR.Preamble DMX.X86_64 where
     preambleMap SA.StubsSignature{SA.sigFnName="uint",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsIntRepr), SA.sigFnRetTy=SA.StubsUIntRepr} = bvIdOverride @DMX.X86_64 "uint"
     preambleMap SA.StubsSignature{SA.sigFnName="int_s",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsShortRepr), SA.sigFnRetTy=SA.StubsIntRepr} = bvExtendOverride @DMX.X86_64 "int_s" True
     preambleMap SA.StubsSignature{SA.sigFnName="long_i",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsIntRepr), SA.sigFnRetTy=SA.StubsLongRepr} = bvExtendOverride @DMX.X86_64 "long_i" True
+    preambleMap SA.StubsSignature{SA.sigFnName="short",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUShortRepr), SA.sigFnRetTy=SA.StubsShortRepr} = bvIdOverride @DMX.X86_64 "short"
+    preambleMap SA.StubsSignature{SA.sigFnName="ushort",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsShortRepr), SA.sigFnRetTy=SA.StubsUShortRepr} = bvIdOverride @DMX.X86_64 "ushort"
+    preambleMap SA.StubsSignature{SA.sigFnName="long",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsULongRepr), SA.sigFnRetTy=SA.StubsLongRepr} = bvIdOverride @DMX.X86_64 "long"
+    preambleMap SA.StubsSignature{SA.sigFnName="ulong",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsLongRepr), SA.sigFnRetTy=SA.StubsULongRepr} = bvIdOverride @DMX.X86_64 "ulong"
+    preambleMap SA.StubsSignature{SA.sigFnName="uint_s",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUShortRepr), SA.sigFnRetTy=SA.StubsUIntRepr} = bvExtendOverride @DMX.X86_64 "uint_s" False 
+    preambleMap SA.StubsSignature{SA.sigFnName="ulong_i",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUIntRepr), SA.sigFnRetTy=SA.StubsULongRepr} = bvExtendOverride @DMX.X86_64 "ulong_i" False
+
     preambleMap sig = error ("Missing implementation for preamble function:"++SA.sigFnName sig)

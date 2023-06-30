@@ -30,6 +30,8 @@ instance STC.StubsArch SAA.AArch32 where
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsUInt = LCT.BVType (STC.ArchIntSize SAA.AArch32)
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsLong = LCT.BVType (STC.ArchLongSize SAA.AArch32)
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsShort = LCT.BVType (STC.ArchShortSize SAA.AArch32)
+    type instance ArchTypeMatch SAA.AArch32 'SA.StubsULong = LCT.BVType (STC.ArchLongSize SAA.AArch32)
+    type instance ArchTypeMatch SAA.AArch32 'SA.StubsUShort = LCT.BVType (STC.ArchShortSize SAA.AArch32)
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsBool = LCT.BoolType
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsUnit = LCT.UnitType
     type instance ArchTypeMatch SAA.AArch32 ('SA.StubsAlias a b) = STC.ArchTypeMatch SAA.AArch32 b
@@ -47,6 +49,8 @@ instance STC.StubsArch SAA.AArch32 where
             SA.StubsUIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
             SA.StubsLongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
             SA.StubsShortRepr -> return $ LCT.BVRepr (PN.knownNat @16)
+            SA.StubsULongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
+            SA.StubsUShortRepr -> return $ LCT.BVRepr (PN.knownNat @16)
 
     translateLit lit = do 
         let n = PN.knownNat @32
@@ -58,6 +62,8 @@ instance STC.StubsArch SAA.AArch32 where
             SA.IntLit i -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit i)
             SA.LongLit i -> LCCR.App (LCCE.IntegerToBV ln $ LCCR.App $ LCCE.IntLit i)
             SA.ShortLit i -> LCCR.App (LCCE.IntegerToBV sn $ LCCR.App $ LCCE.IntLit i)
+            SA.ULongLit u -> LCCR.App (LCCE.IntegerToBV ln $ LCCR.App $ LCCE.IntLit (naturalToInteger u))
+            SA.UShortLit u -> LCCR.App (LCCE.IntegerToBV sn $ LCCR.App $ LCCE.IntLit (naturalToInteger u))
             SA.UIntLit u -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit (naturalToInteger u))
 
 
@@ -72,4 +78,10 @@ instance SPR.Preamble SAA.AArch32 where
     preambleMap SA.StubsSignature{SA.sigFnName="uint",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsIntRepr), SA.sigFnRetTy=SA.StubsUIntRepr} = bvIdOverride @SAA.AArch32 "uint"
     preambleMap SA.StubsSignature{SA.sigFnName="int_s",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsShortRepr), SA.sigFnRetTy=SA.StubsIntRepr} = bvExtendOverride @SAA.AArch32 "int_s" True
     preambleMap SA.StubsSignature{SA.sigFnName="long_i",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsIntRepr), SA.sigFnRetTy=SA.StubsLongRepr} = bvExtendOverride @SAA.AArch32 "long_i" True
+    preambleMap SA.StubsSignature{SA.sigFnName="short",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUShortRepr), SA.sigFnRetTy=SA.StubsShortRepr} = bvIdOverride @SAA.AArch32 "short"
+    preambleMap SA.StubsSignature{SA.sigFnName="ushort",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsShortRepr), SA.sigFnRetTy=SA.StubsUShortRepr} = bvIdOverride @SAA.AArch32 "ushort"
+    preambleMap SA.StubsSignature{SA.sigFnName="long",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsULongRepr), SA.sigFnRetTy=SA.StubsLongRepr} = bvIdOverride @SAA.AArch32 "long"
+    preambleMap SA.StubsSignature{SA.sigFnName="ulong",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsLongRepr), SA.sigFnRetTy=SA.StubsULongRepr} = bvIdOverride @SAA.AArch32 "ulong"
+    preambleMap SA.StubsSignature{SA.sigFnName="uint_s",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUShortRepr), SA.sigFnRetTy=SA.StubsUIntRepr} = bvExtendOverride @SAA.AArch32 "uint_s" False 
+    preambleMap SA.StubsSignature{SA.sigFnName="ulong_i",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUIntRepr), SA.sigFnRetTy=SA.StubsULongRepr} = bvExtendOverride @SAA.AArch32 "ulong_i" False
     preambleMap sig = error ("Missing implementation for preamble function:"++SA.sigFnName sig)
