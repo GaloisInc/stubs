@@ -19,6 +19,7 @@ data StubsType where
     StubsUnit :: StubsType
     StubsBool :: StubsType
     StubsUInt :: StubsType -- unsigned integer
+    StubsLong :: StubsType
     --StubsTuple :: Ctx.Ctx StubsType -> StubsType
     StubsAlias :: Symbol -> StubsType -> StubsType
 
@@ -26,14 +27,17 @@ type StubsInt = 'StubsInt
 type StubsUnit = 'StubsUnit
 type StubsBool = 'StubsBool
 type StubsUInt = 'StubsUInt
+type StubsLong = 'StubsLong
 --type StubsTuple = 'StubsTuple
 type StubsAlias = 'StubsAlias
+
 
 data StubsTypeRepr a where
     StubsIntRepr :: StubsTypeRepr StubsInt
     StubsUnitRepr :: StubsTypeRepr StubsUnit
     StubsBoolRepr :: StubsTypeRepr StubsBool
     StubsUIntRepr :: StubsTypeRepr StubsUInt
+    StubsLongRepr :: StubsTypeRepr StubsLong
     --StubsTupleRepr :: Ctx.Assignment StubsTypeRepr ctx -> StubsTypeRepr (StubsTuple ctx)
     StubsAliasRepr :: P.SymbolRepr s -> StubsTypeRepr a -> StubsTypeRepr a
 
@@ -108,17 +112,36 @@ instance TestEquality StubsArg where
         EQF -> Just Refl 
         _ -> Nothing
 
+data StubsLit (a::StubsType) where 
+    IntLit :: Integer -> StubsLit StubsInt
+    UnitLit :: StubsLit StubsUnit
+    UIntLit :: Natural -> StubsLit StubsUInt
+    LongLit :: Integer -> StubsLit StubsLong
+    BoolLit :: Bool -> StubsLit StubsBool
+
+
 data StubsExpr (a::StubsType) where
-    IntLit :: Integer -> StubsExpr StubsInt
-    UnitLit :: StubsExpr StubsUnit
-    UIntLit :: Natural -> StubsExpr StubsUInt
+    LitExpr :: StubsLit a -> StubsExpr a
     VarLit :: StubsVar a-> StubsExpr a
-    BoolLit :: Bool -> StubsExpr StubsBool
     ArgLit :: StubsArg a -> StubsExpr a
     --TupleExpr :: Ctx.Assignment StubsExpr ctx -> StubsExpr (StubsTuple ctx)
     AppExpr :: String -> Ctx.Assignment StubsExpr args -> StubsTypeRepr a -> StubsExpr a
 
 $(return [])
+instance OrdF StubsLit where     
+     compareF = $(structuralTypeOrd [t|StubsLit|]
+                   [  (TypeApp AnyType AnyType, [|compareF|])
+                   , (TypeApp (TypeApp (ConType [t|Ctx.Assignment|]) AnyType) AnyType
+                     , [|compareF|]
+                     )
+                   ]
+                  )
+
+instance TestEquality StubsLit where 
+    testEquality e1 e2 = case compareF e1 e2 of 
+        EQF -> Just Refl 
+        _ -> Nothing
+        
 instance OrdF StubsExpr where 
     compareF = $(structuralTypeOrd [t|StubsExpr|]
                    [  (TypeApp AnyType AnyType, [|compareF|])
@@ -142,11 +165,12 @@ data StubsProgram = StubsProgram {
 }
 
 stubsExprToTy :: StubsExpr a -> StubsTypeRepr a
-stubsExprToTy e = case e of 
-    IntLit _ -> StubsIntRepr
-    BoolLit _ -> StubsBoolRepr
-    UnitLit -> StubsUnitRepr
-    UIntLit _ -> StubsUIntRepr
+stubsExprToTy e = case e of
+    LitExpr(IntLit _) ->StubsIntRepr
+    LitExpr(BoolLit _) -> StubsBoolRepr
+    LitExpr UnitLit -> StubsUnitRepr
+    LitExpr(UIntLit _) -> StubsUIntRepr
+    LitExpr(LongLit _) -> StubsLongRepr
     VarLit v -> varType v
     ArgLit a -> argType a
     AppExpr _ _ r -> r

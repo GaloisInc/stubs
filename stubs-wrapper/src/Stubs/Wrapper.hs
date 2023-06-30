@@ -48,6 +48,7 @@ import qualified Stubs.Translate as ST
 import Data.Macaw.Symbolic (SymArchConstraints)
 import Data.Macaw.CFG
 import qualified Stubs.Preamble as SPR
+import qualified Stubs.Translate.Core as STC
 
 crucibleProgToParsedProg :: ST.CrucibleProgram arch -> LCSC.ParsedProgram (DMS.MacawExt arch) 
 crucibleProgToParsedProg ST.CrucibleProgram{ST.crCFGs=cfgs, ST.crGlobals= glbls, ST.crExterns=externs, ST.crFwdDecs=fwds} = LCSC.ParsedProgram {
@@ -57,14 +58,14 @@ crucibleProgToParsedProg ST.CrucibleProgram{ST.crCFGs=cfgs, ST.crGlobals= glbls,
   LCSC.parsedProgGlobals=glbls
 }
 
-stubsProgramToOverride :: forall ext p sym arch w. (ext ~ DMS.MacawExt arch, DMM.MemWidth w, SymArchConstraints arch, SPR.Preamble arch,w ~ ArchAddrWidth arch) => SA.StubsProgram -> IO (SF.SomeFunctionOverride p sym arch)
+stubsProgramToOverride :: forall ext p sym arch w. (ext ~ DMS.MacawExt arch, STC.StubsArch arch, SPR.Preamble arch) => SA.StubsProgram -> IO (SF.SomeFunctionOverride p sym arch)
 stubsProgramToOverride prog = do 
   hAlloc <- LCF.newHandleAllocator
   Some ng <- PN.newIONonceGenerator
   crucProg <- ST.translateProgram ng hAlloc prog
   parsedProgToFunctionOverride (ST.crEntry crucProg) (crucibleProgToParsedProg crucProg)
 
-loadStubsPrograms :: forall ext p sym arch w . (ext ~ DMS.MacawExt arch, DMM.MemWidth w,SymArchConstraints arch,SPR.Preamble arch) => [SA.StubsProgram] -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
+loadStubsPrograms :: forall ext p sym arch w . (ext ~ DMS.MacawExt arch, STC.StubsArch arch,SPR.Preamble arch) => [SA.StubsProgram] -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
 loadStubsPrograms progs = do 
   overrides <- mapM stubsProgramToOverride progs 
   return SFT.CrucibleSyntaxOverrides {

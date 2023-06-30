@@ -9,8 +9,9 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ImpredicativeTypes#-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TypeApplications #-}
 
-module Stubs.Translate.Core where 
+module Stubs.Translate.Core where
 
 import qualified Lang.Crucible.Types as LCT
 import qualified Data.Macaw.CFG as DMC
@@ -28,17 +29,20 @@ import Control.Monad.RWS
 import Control.Monad.Reader (ReaderT)
 import qualified Lang.Crucible.FunctionHandle as LCF
 import qualified Stubs.AST as SA
+import GHC.TypeNats (Nat, KnownNat)
 
-type family ArchTypeMatch (arch :: *) (stubType :: SA.StubsType) = (crucType :: LCT.CrucibleType) where
-    ArchTypeMatch arch 'SA.StubsInt = LCT.BVType (DMC.ArchAddrWidth arch)
-    ArchTypeMatch arch 'SA.StubsUInt = LCT.BVType (DMC.ArchAddrWidth arch)
-    ArchTypeMatch arch 'SA.StubsBool = LCT.BoolType
-    ArchTypeMatch arch 'SA.StubsUnit = LCT.UnitType
-    ArchTypeMatch arch ('SA.StubsAlias a b) = ArchTypeMatch arch b
 
 type family ArchTypeMatchCtx (arch :: *) (stubTy :: Ctx SA.StubsType) = (crucTy :: Ctx LCT.CrucibleType) where
     ArchTypeMatchCtx arch 'EmptyCtx = 'EmptyCtx
     ArchTypeMatchCtx arch (a ::> k) = ArchTypeMatchCtx arch a ::> ArchTypeMatch arch k
+
+
+class (DMS.SymArchConstraints arch, ArchTypeMatch arch SA.StubsBool ~ LCT.BoolType, 16 PN.<= ArchIntSize arch, 1 PN.<= ArchIntSize arch, KnownNat (ArchIntSize arch)) => StubsArch arch where 
+    type ArchTypeMatch arch (stubType :: SA.StubsType) :: LCT.CrucibleType
+    type ArchIntSize arch :: Nat
+    toCrucibleTy ::forall a m. (HasStubsEnv arch m) => SA.StubsTypeRepr a -> m (LCT.TypeRepr (ArchTypeMatch arch a))
+    translateLit :: (b ~ ArchTypeMatch arch a) => SA.StubsLit a -> LCCR.Expr (DMS.MacawExt arch) s b
+
 
 data StubsState arch ret args s = forall ret2 . (ret ~ ArchTypeMatch arch ret2) => StubsState {
     -- Environment with arch info 
@@ -55,10 +59,14 @@ data StubsState arch ret args s = forall ret2 . (ret ~ ArchTypeMatch arch ret2) 
     stFns :: Map.Map String (SomeHandle arch)
 }
 
-withReturn :: (forall ret2 . ret ~ ArchTypeMatch arch ret2 =>  SA.StubsTypeRepr ret2 -> StubsM arch s args ret a ) -> StubsM arch s args ret a 
-withReturn f = do 
+withReturn :: (forall ret2 . ret ~ ArchTypeMatch arch ret2 =>  SA.StubsTypeRepr ret2 -> StubsM arch s args ret a ) -> StubsM arch s args ret a
+withReturn f = do
     StubsState _ retrepr _ _ _ _ <- get
     f retrepr
+
+resolveAlias :: SA.StubsTypeRepr a -> SA.StubsTypeRepr a
+resolveAlias (SA.StubsAliasRepr _ a) = resolveAlias a
+resolveAlias x = x
 
 data StubsEnv arch = StubsEnv {
     stArchWidth::PN.NatRepr (DMC.ArchAddrWidth arch)

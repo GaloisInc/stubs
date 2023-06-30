@@ -66,6 +66,7 @@ import qualified What4.Interface as WI
 import qualified Lang.Crucible.Simulator as LCSE
 import qualified Stubs.Preamble as SPR
 import Stubs.Preamble.X86 () --for instance
+import qualified Stubs.Translate.Core as STC
 
 logShim:: SD.Diagnostic -> IO ()
 logShim _ = return ()
@@ -173,7 +174,7 @@ smallPipeline prog cfg argsf ret check = do
 
         SI.symexec bak hAlloc prog cfg args ret check
 
-loadStubsCFG :: forall ext s w p sym arch. (LCCE.IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, w ~ ArchAddrWidth arch, MemWidth w,SymArchConstraints arch, SPR.Preamble arch) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
+loadStubsCFG :: forall ext s w p sym arch. (LCCE.IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, MemWidth w,STC.StubsArch arch, SPR.Preamble arch) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
 loadStubsCFG _ _ = do -- need args to match scope parameter
     loadStubsPrograms [testProg]
 
@@ -193,7 +194,7 @@ testProg =
             SA.sigFnArgTys=Ctx.empty,
             SA.sigFnRetTy=SA.StubsIntRepr
         },
-        SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.IntLit 20) SA.StubsIntRepr]
+        SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.LitExpr $ SA.IntLit 20) SA.StubsIntRepr]
     } in let int_fun = SA.StubsFunction {
         SA.stubFnSig=SA.StubsSignature{
             SA.sigFnName="g",
@@ -224,7 +225,7 @@ overrideWrapperTest = testCase "Main Pipeline Test: Parserless" $ do
 linkerTest :: TestTree 
 linkerTest = genTestCase ( SA.StubsProgram {
         SA.stubsFnDecls = [
-            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "double" (Ctx.extend Ctx.empty (SA.IntLit 5)) SA.StubsIntRepr)] ),
+            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "double" (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) SA.StubsIntRepr)] ),
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "double" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) [SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) SA.StubsIntRepr)])
         ],
         SA.stubsMain = "main",
@@ -247,10 +248,10 @@ linkerTest = genTestCase ( SA.StubsProgram {
 factorialTest :: TestTree
 factorialTest = genTestCase (SA.StubsProgram {
         SA.stubsFnDecls = [
-            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "factorial" (Ctx.extend (Ctx.extend Ctx.empty (SA.IntLit 5)) (SA.IntLit 1)) SA.StubsIntRepr)] ),
+            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "factorial" (Ctx.extend (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) (SA.LitExpr $SA.IntLit 1)) SA.StubsIntRepr)] ),
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "factorial" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr) 
-            [SA.ITE (SA.AppExpr "gt" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.IntLit 0) ) SA.StubsBoolRepr) 
-            [SA.Return (SA.AppExpr "factorial"  (Ctx.extend (Ctx.extend Ctx.empty (SA.AppExpr "minus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.IntLit 1)) SA.StubsIntRepr ) ) (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty  (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)))  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) SA.StubsIntRepr   )  )  SA.StubsIntRepr)   ] 
+            [SA.ITE (SA.AppExpr "gt" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.LitExpr $ SA.IntLit 0) ) SA.StubsBoolRepr) 
+            [SA.Return (SA.AppExpr "factorial"  (Ctx.extend (Ctx.extend Ctx.empty (SA.AppExpr "minus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr ) ) (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty  (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)))  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) SA.StubsIntRepr   )  )  SA.StubsIntRepr)   ] 
             [(SA.Return (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)) )] ])
         ],
         SA.stubsMain = "main",

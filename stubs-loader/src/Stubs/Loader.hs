@@ -71,6 +71,7 @@ import Stubs.Preamble.X86 ()
 import Stubs.Preamble.AArch32 ()
 import qualified Data.Macaw.ARM.ARMReg as ARMReg
 import qualified Language.ASL.Globals as ASL
+import qualified Stubs.Translate.Core as STC
 
 data FunABIExt arch = FunABIExt {
   abiExtArchReg :: ArchReg arch (BVType (ArchAddrWidth arch))
@@ -107,6 +108,7 @@ withBinary
         , 16 <= DMC.ArchAddrWidth arch
         , DMS.SymArchConstraints arch
         , SPR.Preamble arch
+        , STC.StubsArch arch
         , mem ~ DMS.LLVMMemory
         , p ~ AExt.AmbientSimulatorState sym arch
         , w ~ DMC.RegAddrWidth (DMC.ArchReg arch)

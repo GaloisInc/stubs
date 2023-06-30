@@ -75,7 +75,7 @@ data WrappedOverride arch args ret = WrappedOverride (forall sym bak solver scop
     bak -> LCS.Override p sym (DMS.MacawExt arch) (STC.ArchTypeMatchCtx arch args) (STC.ArchTypeMatch arch ret)) (StubHandle arch args ret)
 
 -- Unexported Internal Function
-translateExpr' :: forall arch s ret b sret args . (b ~ ArchTypeMatch arch sret, LCCE.IsSyntaxExtension(DMS.MacawExt arch)) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Atom s b)
+translateExpr' :: forall arch s ret b sret args . (b ~ ArchTypeMatch arch sret, LCCE.IsSyntaxExtension(DMS.MacawExt arch), STC.StubsArch arch) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Atom s b)
 translateExpr' e = do
     regMap <- gets stRegMap
     argmap <- gets stParams
@@ -112,16 +112,13 @@ translateExpr' e = do
         translateExpr'' :: forall ext. (b ~ ArchTypeMatch arch sret, ext ~ DMS.MacawExt arch, LCCE.IsSyntaxExtension ext) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s b)
         translateExpr'' e' = do
             let n = DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)
-            return $ case e' of
-                SA.BoolLit b -> LCCR.App $ LCCE.BoolLit b
-                SA.UnitLit -> LCCR.App LCCE.EmptyApp
-                SA.IntLit i -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit i)
-                SA.UIntLit u -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit (naturalToInteger u)) -- Should be safe as Integer is infinite size, and once its a bitvector we can treat as unsigned
+            case e' of
+                SA.LitExpr l -> return $ STC.translateLit l
                 SA.VarLit _ -> error "internal translateExpr called on VarLit"
                 SA.ArgLit _ -> error "internal translateExpr called on ArgLit"
                 SA.AppExpr {} -> error "internal translateExpr called on AppExpr"
 
-translateExpr  :: forall arch s ret b sret ext args . (b ~ ArchTypeMatch arch sret, ext ~ DMS.MacawExt arch, LCCE.IsSyntaxExtension ext) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s b)
+translateExpr  :: forall arch s ret b sret ext args . (b ~ ArchTypeMatch arch sret, ext ~ DMS.MacawExt arch, LCCE.IsSyntaxExtension ext, STC.StubsArch arch) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s b)
 translateExpr e = do
     cache <- gets stAtomCache
     case MapF.lookup e cache of
@@ -131,7 +128,7 @@ translateExpr e = do
             return $ LCCG.AtomExpr t
         Just (StubAtom t _) -> return $ LCCG.AtomExpr t
 
-translateExprs :: (cctx ~ ArchTypeMatchCtx arch ctx) => Ctx.Assignment SA.StubsExpr ctx -> StubsM arch s args ret (Ctx.Assignment (LCCR.Expr (DMS.MacawExt arch) s) cctx)
+translateExprs :: (cctx ~ ArchTypeMatchCtx arch ctx, STC.StubsArch arch) => Ctx.Assignment SA.StubsExpr ctx -> StubsM arch s args ret (Ctx.Assignment (LCCR.Expr (DMS.MacawExt arch) s) cctx)
 translateExprs eAssign = case elist of
     Ctx.AssignEmpty -> return Ctx.empty
     Ctx.AssignExtend erest e -> do
@@ -146,7 +143,7 @@ updateRegs f = modify $ \s -> s {stRegMap = f (stRegMap s)}
 updateCache :: (MapF.MapF SA.StubsExpr (StubAtom arch s) -> MapF.MapF SA.StubsExpr (StubAtom arch s)) -> StubsM arch s args ret ()
 updateCache f = modify $ \s -> s {stAtomCache = f (stAtomCache s)}
 
-translateStmt :: forall arch s ret args . SA.StubsStmt  -> StubsM arch s args (ArchTypeMatch arch ret) ()
+translateStmt :: forall arch s ret args . (STC.StubsArch arch) => SA.StubsStmt  -> StubsM arch s args (ArchTypeMatch arch ret) ()
 translateStmt stmt = withReturn $ \retty -> do
     regMap <- gets stRegMap
     case stmt of
@@ -172,13 +169,13 @@ translateStmt stmt = withReturn $ \retty -> do
         SA.Loop c body -> do
             LCCG.while (WF.InternalPos, translateExpr c ) (WF.InternalPos, translateStmts @_ @_ @ret body)
 
-translateStmts :: forall arch s ret args . [SA.StubsStmt] -> StubsM arch s args (ArchTypeMatch arch ret) ()
+translateStmts :: forall arch s ret args . (STC.StubsArch arch) => [SA.StubsStmt] -> StubsM arch s args (ArchTypeMatch arch ret) ()
 translateStmts [] = return ()
 translateStmts (s:stmts) = do
     _ <- translateStmt @_ @_ @ret s
     translateStmts @_ @_ @ret stmts
 
-translateFn :: forall args ret s arch . (DMS.SymArchConstraints arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> Map.Map String (SomeHandle arch )-> StubHandle arch args ret -> SA.StubsFunction args ret ->  IO (LCSC.ACFG (DMS.MacawExt arch))
+translateFn :: forall args ret s arch . (DMS.SymArchConstraints arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch),STC.StubsArch arch) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> Map.Map String (SomeHandle arch )-> StubHandle arch args ret -> SA.StubsFunction args ret ->  IO (LCSC.ACFG (DMS.MacawExt arch))
 translateFn ng _ handles hdl SA.StubsFunction{SA.stubFnSig=SA.StubsSignature{SA.sigFnArgTys=argtys, SA.sigFnRetTy=retty},SA.stubFnBody=body}= do
     let e = StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch))
     args <- runReaderT (toCrucibleTyCtx argtys) e
@@ -188,7 +185,7 @@ translateFn ng _ handles hdl SA.StubsFunction{SA.stubFnSig=SA.StubsSignature{SA.
                                                                                                      translateStmts @arch @_ @ret body >> LCCG.reportError (LCCR.App $ LCCE.StringEmpty UnicodeRepr))
     return $ LCSC.ACFG args cret cfg
 
-translateDecls :: forall arch s. (DMS.SymArchConstraints arch, SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> [SA.SomeStubsFunction]-> IO (CrucibleProgram arch)
+translateDecls :: forall arch s. (STC.StubsArch arch, SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> [SA.SomeStubsFunction]-> IO (CrucibleProgram arch)
 translateDecls ng hAlloc fns = do
     hdls <- mapM (\(SA.SomeStubsFunction f) -> do
         let sig = SA.stubFnSig f
@@ -221,13 +218,13 @@ translateDecls ng hAlloc fns = do
         crFnHandleMap = map snd ovMap
     }
 
-translateProgram :: forall arch s . (DMS.SymArchConstraints arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> SA.StubsProgram -> IO (CrucibleProgram arch)
+translateProgram :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> SA.StubsProgram -> IO (CrucibleProgram arch)
 translateProgram ng halloc prog = do
     let fns = SA.stubsFnDecls prog
     p <- translateDecls ng halloc fns
     return p{crEntry=SA.stubsMain prog}
 
-mkHandle :: forall arch args ret . (DMS.SymArchConstraints arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCF.HandleAllocator -> SA.StubsSignature args ret -> IO ( LCF.FnHandle (ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret))
+mkHandle :: forall arch args ret . (STC.StubsArch arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCF.HandleAllocator -> SA.StubsSignature args ret -> IO ( LCF.FnHandle (ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret))
 mkHandle hAlloc fn = do
     let e = StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch))
     args <- runReaderT (toCrucibleTyCtx (SA.sigFnArgTys fn)) e

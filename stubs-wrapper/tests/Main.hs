@@ -34,7 +34,7 @@ testFnTranslationBasic = testCase "Basic Translation" $ do
             SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
             SA.sigFnRetTy=SA.StubsIntRepr
         },
-        SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 20),SA.Return (SA.IntLit 20)]
+        SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 20),SA.Return (SA.LitExpr $ SA.IntLit 20)]
     }
     p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
     let cfgs = ST.crCFGs p 
@@ -43,8 +43,8 @@ testFnTranslationBasic = testCase "Basic Translation" $ do
     assertEqual "Unexpected CFG count" (length cfgs) 1
     LCSC.ACFG _ r _ <- return $ head cfgs
 
-    -- Expect Int to be BV 64 on X86_64
-    Just P.Refl <- return $ P.testEquality r $ LCCC.BVRepr (PN.knownNat @64)
+    -- Expect Int to be BV 32 on X86_64 -- TODO: make less brittle
+    Just P.Refl <- return $ P.testEquality r $ LCCC.BVRepr (PN.knownNat @32) 
     return ()
 
 testFnTranslationITE :: TestTree 
@@ -57,7 +57,7 @@ testFnTranslationITE = testCase "ITE Translation" $ do
             SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
             SA.sigFnRetTy=SA.StubsIntRepr
         },
-        SA.stubFnBody=[SA.ITE (SA.BoolLit True) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 20)] [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 40)],SA.Return (SA.IntLit 20)]
+        SA.stubFnBody=[SA.ITE (SA.LitExpr $ SA.BoolLit True) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 20)] [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 40)],SA.Return (SA.LitExpr $ SA.IntLit 20)]
     }
     p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
     let cfgs = ST.crCFGs p 
@@ -79,7 +79,7 @@ testFnTranslationLoop = testCase "Loop Translation" $ do
             SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
             SA.sigFnRetTy=SA.StubsIntRepr
         },
-        SA.stubFnBody=[SA.Loop (SA.BoolLit False) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.IntLit 40)] ,SA.Return (SA.IntLit 20)]
+        SA.stubFnBody=[SA.Loop (SA.LitExpr $ SA.BoolLit False) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 40)] ,SA.Return (SA.LitExpr $ SA.IntLit 20)]
     }
     p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
     let cfgs = ST.crCFGs p

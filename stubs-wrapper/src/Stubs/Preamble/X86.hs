@@ -6,6 +6,8 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds #-}
 module Stubs.Preamble.X86() where
 import qualified Stubs.AST as SA
 import qualified Data.Macaw.X86 as DMX
@@ -15,6 +17,42 @@ import qualified Data.Parameterized.Context as Ctx
 import Data.Macaw.X86.ArchTypes ()
 import Data.Macaw.X86.Symbolic ()
 import Stubs.Preamble.Common 
+import qualified Data.Macaw.CFG as DMC
+import qualified Lang.Crucible.Types as LCT
+import qualified Stubs.Translate.Core as STC
+import qualified Data.Parameterized.NatRepr as PN
+import qualified Lang.Crucible.CFG.Reg as LCCR
+import qualified Lang.Crucible.CFG.Expr as LCCE
+import GHC.Natural (naturalToInteger)
+
+instance STC.StubsArch DMX.X86_64 where 
+    type instance ArchTypeMatch DMX.X86_64 'SA.StubsInt = LCT.BVType (STC.ArchIntSize DMX.X86_64)
+    type instance ArchTypeMatch DMX.X86_64 'SA.StubsUInt = LCT.BVType (STC.ArchIntSize DMX.X86_64)
+    type instance ArchTypeMatch DMX.X86_64 'SA.StubsLong = LCT.BVType 64
+    type instance ArchTypeMatch DMX.X86_64 'SA.StubsBool = LCT.BoolType
+    type instance ArchTypeMatch DMX.X86_64 'SA.StubsUnit = LCT.UnitType
+    type instance ArchTypeMatch DMX.X86_64 ('SA.StubsAlias a b) = STC.ArchTypeMatch DMX.X86_64 b
+
+    type instance ArchIntSize DMX.X86_64 = 32
+    
+    toCrucibleTy tyrepr = do
+        case tyrepr of
+            SA.StubsIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
+            SA.StubsBoolRepr -> return LCT.BoolRepr
+            SA.StubsUnitRepr -> return LCT.UnitRepr
+            SA.StubsAliasRepr _ t -> STC.toCrucibleTy $ STC.resolveAlias t
+            SA.StubsUIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
+            SA.StubsLongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
+
+    translateLit lit = do 
+        let n = PN.knownNat @32
+        let ln = PN.knownNat @64
+        case lit of 
+            SA.BoolLit b -> LCCR.App $ LCCE.BoolLit b
+            SA.UnitLit -> LCCR.App LCCE.EmptyApp
+            SA.IntLit i -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit i)
+            SA.LongLit i -> LCCR.App (LCCE.IntegerToBV ln $ LCCR.App $ LCCE.IntLit i)
+            SA.UIntLit u -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit (naturalToInteger u))
 
 instance SPR.Preamble DMX.X86_64 where
     preambleMap SA.StubsSignature{SA.sigFnName="plus",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsIntRepr Ctx.:> SA.StubsIntRepr ), SA.sigFnRetTy=SA.StubsIntRepr} = arithBinOverride @DMX.X86_64 WI.bvAdd "plus"

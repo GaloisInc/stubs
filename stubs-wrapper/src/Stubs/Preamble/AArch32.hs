@@ -6,6 +6,8 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+{-# LANGUAGE DataKinds #-}
+{-# LANGUAGE TypeFamilies #-}
 module Stubs.Preamble.AArch32() where
 import qualified Stubs.AST as SA
 import qualified What4.Interface as WI
@@ -16,6 +18,42 @@ import Data.Macaw.X86.Symbolic ()
 import qualified SemMC.Architecture.AArch32 as SAA
 import Data.Macaw.AArch32.Symbolic ()
 import Stubs.Preamble.Common
+import qualified Stubs.Translate.Core as STC
+import qualified Lang.Crucible.Types as LCT
+import qualified Data.Parameterized.NatRepr as PN
+import qualified Lang.Crucible.CFG.Expr as LCCE
+import qualified Lang.Crucible.CFG.Reg as LCCR
+import GHC.Natural (naturalToInteger)
+
+instance STC.StubsArch SAA.AArch32 where 
+    type instance ArchTypeMatch SAA.AArch32 'SA.StubsInt = LCT.BVType (STC.ArchIntSize SAA.AArch32)
+    type instance ArchTypeMatch SAA.AArch32 'SA.StubsUInt = LCT.BVType (STC.ArchIntSize SAA.AArch32)
+    type instance ArchTypeMatch SAA.AArch32 'SA.StubsLong = LCT.BVType 64
+    type instance ArchTypeMatch SAA.AArch32 'SA.StubsBool = LCT.BoolType
+    type instance ArchTypeMatch SAA.AArch32 'SA.StubsUnit = LCT.UnitType
+    type instance ArchTypeMatch SAA.AArch32 ('SA.StubsAlias a b) = STC.ArchTypeMatch SAA.AArch32 b
+
+    type instance ArchIntSize SAA.AArch32 = 32
+    
+    toCrucibleTy tyrepr = do
+        case tyrepr of
+            SA.StubsIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
+            SA.StubsBoolRepr -> return LCT.BoolRepr
+            SA.StubsUnitRepr -> return LCT.UnitRepr
+            SA.StubsAliasRepr _ t -> STC.toCrucibleTy $ STC.resolveAlias t
+            SA.StubsUIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
+            SA.StubsLongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
+
+    translateLit lit = do 
+        let n = PN.knownNat @32
+        let ln = PN.knownNat @64
+        case lit of 
+            SA.BoolLit b -> LCCR.App $ LCCE.BoolLit b
+            SA.UnitLit -> LCCR.App LCCE.EmptyApp
+            SA.IntLit i -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit i)
+            SA.LongLit i -> LCCR.App (LCCE.IntegerToBV ln $ LCCR.App $ LCCE.IntLit i)
+            SA.UIntLit u -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit (naturalToInteger u))
+
 
 instance SPR.Preamble SAA.AArch32 where
     preambleMap SA.StubsSignature{SA.sigFnName="plus",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsIntRepr Ctx.:> SA.StubsIntRepr ), SA.sigFnRetTy=SA.StubsIntRepr} = arithBinOverride @SAA.AArch32 WI.bvAdd "plus"
@@ -25,5 +63,5 @@ instance SPR.Preamble SAA.AArch32 where
     preambleMap SA.StubsSignature{SA.sigFnName="lt",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsIntRepr Ctx.:> SA.StubsIntRepr ), SA.sigFnRetTy=SA.StubsBoolRepr} = cmpBinOverride @SAA.AArch32 WI.bvSlt "lt"
     preambleMap SA.StubsSignature{SA.sigFnName="eq",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsIntRepr Ctx.:> SA.StubsIntRepr ), SA.sigFnRetTy=SA.StubsBoolRepr} = cmpBinOverride @SAA.AArch32 WI.bvEq "eq"
     preambleMap SA.StubsSignature{SA.sigFnName="int",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUIntRepr), SA.sigFnRetTy=SA.StubsIntRepr} = bvIdOverride @SAA.AArch32 "int"
-    preambleMap SA.StubsSignature{SA.sigFnName="Uint",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsIntRepr), SA.sigFnRetTy=SA.StubsUIntRepr} = bvIdOverride @SAA.AArch32 "uint"
+    preambleMap SA.StubsSignature{SA.sigFnName="uint",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsIntRepr), SA.sigFnRetTy=SA.StubsUIntRepr} = bvIdOverride @SAA.AArch32 "uint"
     preambleMap sig = error ("Missing implementation for preamble function:"++SA.sigFnName sig)
