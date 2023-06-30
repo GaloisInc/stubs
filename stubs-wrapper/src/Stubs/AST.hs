@@ -20,7 +20,7 @@ data StubsType where
     StubsBool :: StubsType
     StubsUInt :: StubsType -- unsigned integer
     StubsLong :: StubsType
-    --StubsTuple :: Ctx.Ctx StubsType -> StubsType
+    StubsShort :: StubsType
     StubsAlias :: Symbol -> StubsType -> StubsType
 
 type StubsInt = 'StubsInt
@@ -28,7 +28,7 @@ type StubsUnit = 'StubsUnit
 type StubsBool = 'StubsBool
 type StubsUInt = 'StubsUInt
 type StubsLong = 'StubsLong
---type StubsTuple = 'StubsTuple
+type StubsShort = 'StubsShort
 type StubsAlias = 'StubsAlias
 
 
@@ -38,7 +38,7 @@ data StubsTypeRepr a where
     StubsBoolRepr :: StubsTypeRepr StubsBool
     StubsUIntRepr :: StubsTypeRepr StubsUInt
     StubsLongRepr :: StubsTypeRepr StubsLong
-    --StubsTupleRepr :: Ctx.Assignment StubsTypeRepr ctx -> StubsTypeRepr (StubsTuple ctx)
+    StubsShortRepr :: StubsTypeRepr StubsShort
     StubsAliasRepr :: P.SymbolRepr s -> StubsTypeRepr a -> StubsTypeRepr a
 
 $(return [])
@@ -117,6 +117,7 @@ data StubsLit (a::StubsType) where
     UnitLit :: StubsLit StubsUnit
     UIntLit :: Natural -> StubsLit StubsUInt
     LongLit :: Integer -> StubsLit StubsLong
+    ShortLit :: Integer -> StubsLit StubsShort
     BoolLit :: Bool -> StubsLit StubsBool
 
 
@@ -141,7 +142,7 @@ instance TestEquality StubsLit where
     testEquality e1 e2 = case compareF e1 e2 of 
         EQF -> Just Refl 
         _ -> Nothing
-        
+
 instance OrdF StubsExpr where 
     compareF = $(structuralTypeOrd [t|StubsExpr|]
                    [  (TypeApp AnyType AnyType, [|compareF|])
@@ -171,6 +172,7 @@ stubsExprToTy e = case e of
     LitExpr UnitLit -> StubsUnitRepr
     LitExpr(UIntLit _) -> StubsUIntRepr
     LitExpr(LongLit _) -> StubsLongRepr
+    LitExpr(ShortLit _) -> StubsShortRepr
     VarLit v -> varType v
     ArgLit a -> argType a
     AppExpr _ _ r -> r

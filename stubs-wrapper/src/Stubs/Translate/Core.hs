@@ -37,9 +37,15 @@ type family ArchTypeMatchCtx (arch :: *) (stubTy :: Ctx SA.StubsType) = (crucTy 
     ArchTypeMatchCtx arch (a ::> k) = ArchTypeMatchCtx arch a ::> ArchTypeMatch arch k
 
 
-class (DMS.SymArchConstraints arch, ArchTypeMatch arch SA.StubsBool ~ LCT.BoolType, 16 PN.<= ArchIntSize arch, 1 PN.<= ArchIntSize arch, KnownNat (ArchIntSize arch)) => StubsArch arch where 
+class (DMS.SymArchConstraints arch, 
+        ArchTypeMatch arch SA.StubsBool ~ LCT.BoolType, 
+        16 PN.<= ArchIntSize arch, 1 PN.<= ArchIntSize arch, KnownNat (ArchIntSize arch),
+        16 PN.<= ArchShortSize arch, 1 PN.<= ArchShortSize arch, KnownNat (ArchShortSize arch),
+        16 PN.<= ArchLongSize arch, 1 PN.<= ArchLongSize arch, KnownNat (ArchLongSize arch)) => StubsArch arch where 
     type ArchTypeMatch arch (stubType :: SA.StubsType) :: LCT.CrucibleType
     type ArchIntSize arch :: Nat
+    type ArchShortSize arch :: Nat
+    type ArchLongSize arch :: Nat 
     toCrucibleTy ::forall a m. (HasStubsEnv arch m) => SA.StubsTypeRepr a -> m (LCT.TypeRepr (ArchTypeMatch arch a))
     translateLit :: (b ~ ArchTypeMatch arch a) => SA.StubsLit a -> LCCR.Expr (DMS.MacawExt arch) s b
 

@@ -28,12 +28,15 @@ import GHC.Natural (naturalToInteger)
 instance STC.StubsArch SAA.AArch32 where 
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsInt = LCT.BVType (STC.ArchIntSize SAA.AArch32)
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsUInt = LCT.BVType (STC.ArchIntSize SAA.AArch32)
-    type instance ArchTypeMatch SAA.AArch32 'SA.StubsLong = LCT.BVType 64
+    type instance ArchTypeMatch SAA.AArch32 'SA.StubsLong = LCT.BVType (STC.ArchLongSize SAA.AArch32)
+    type instance ArchTypeMatch SAA.AArch32 'SA.StubsShort = LCT.BVType (STC.ArchShortSize SAA.AArch32)
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsBool = LCT.BoolType
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsUnit = LCT.UnitType
     type instance ArchTypeMatch SAA.AArch32 ('SA.StubsAlias a b) = STC.ArchTypeMatch SAA.AArch32 b
 
     type instance ArchIntSize SAA.AArch32 = 32
+    type instance ArchShortSize SAA.AArch32 =16
+    type instance ArchLongSize SAA.AArch32 = 64
     
     toCrucibleTy tyrepr = do
         case tyrepr of
@@ -43,15 +46,18 @@ instance STC.StubsArch SAA.AArch32 where
             SA.StubsAliasRepr _ t -> STC.toCrucibleTy $ STC.resolveAlias t
             SA.StubsUIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
             SA.StubsLongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
+            SA.StubsShortRepr -> return $ LCT.BVRepr (PN.knownNat @16)
 
     translateLit lit = do 
         let n = PN.knownNat @32
         let ln = PN.knownNat @64
+        let sn = PN.knownNat @16
         case lit of 
             SA.BoolLit b -> LCCR.App $ LCCE.BoolLit b
             SA.UnitLit -> LCCR.App LCCE.EmptyApp
             SA.IntLit i -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit i)
             SA.LongLit i -> LCCR.App (LCCE.IntegerToBV ln $ LCCR.App $ LCCE.IntLit i)
+            SA.ShortLit i -> LCCR.App (LCCE.IntegerToBV sn $ LCCR.App $ LCCE.IntLit i)
             SA.UIntLit u -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit (naturalToInteger u))
 
 

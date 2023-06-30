@@ -28,12 +28,15 @@ import GHC.Natural (naturalToInteger)
 instance STC.StubsArch DMX.X86_64 where 
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsInt = LCT.BVType (STC.ArchIntSize DMX.X86_64)
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsUInt = LCT.BVType (STC.ArchIntSize DMX.X86_64)
-    type instance ArchTypeMatch DMX.X86_64 'SA.StubsLong = LCT.BVType 64
+    type instance ArchTypeMatch DMX.X86_64 'SA.StubsLong = LCT.BVType (STC.ArchLongSize DMX.X86_64)
+    type instance ArchTypeMatch DMX.X86_64 'SA.StubsShort = LCT.BVType (STC.ArchShortSize DMX.X86_64)
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsBool = LCT.BoolType
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsUnit = LCT.UnitType
     type instance ArchTypeMatch DMX.X86_64 ('SA.StubsAlias a b) = STC.ArchTypeMatch DMX.X86_64 b
 
     type instance ArchIntSize DMX.X86_64 = 32
+    type instance ArchShortSize DMX.X86_64 = 16
+    type instance ArchLongSize DMX.X86_64 = 64
     
     toCrucibleTy tyrepr = do
         case tyrepr of
@@ -43,16 +46,19 @@ instance STC.StubsArch DMX.X86_64 where
             SA.StubsAliasRepr _ t -> STC.toCrucibleTy $ STC.resolveAlias t
             SA.StubsUIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
             SA.StubsLongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
+            SA.StubsShortRepr-> return $ LCT.BVRepr (PN.knownNat @16)
 
     translateLit lit = do 
         let n = PN.knownNat @32
         let ln = PN.knownNat @64
+        let sn = PN.knownNat @16
         case lit of 
             SA.BoolLit b -> LCCR.App $ LCCE.BoolLit b
             SA.UnitLit -> LCCR.App LCCE.EmptyApp
             SA.IntLit i -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit i)
             SA.LongLit i -> LCCR.App (LCCE.IntegerToBV ln $ LCCR.App $ LCCE.IntLit i)
             SA.UIntLit u -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit (naturalToInteger u))
+            SA.ShortLit s -> LCCR.App (LCCE.IntegerToBV sn $ LCCR.App $ LCCE.IntLit s)
 
 instance SPR.Preamble DMX.X86_64 where
     preambleMap SA.StubsSignature{SA.sigFnName="plus",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsIntRepr Ctx.:> SA.StubsIntRepr ), SA.sigFnRetTy=SA.StubsIntRepr} = arithBinOverride @DMX.X86_64 WI.bvAdd "plus"
