@@ -37,6 +37,8 @@ stubsPreamble = [
     SA.SomeStubsSignature(SA.StubsSignature "lt" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsBoolRepr),
     SA.SomeStubsSignature(SA.StubsSignature "eq" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsBoolRepr),
     SA.SomeStubsSignature(SA.StubsSignature "int" (Ctx.extend Ctx.empty SA.StubsUIntRepr) SA.StubsIntRepr),
-    SA.SomeStubsSignature(SA.StubsSignature "uint" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsUIntRepr)
+    SA.SomeStubsSignature(SA.StubsSignature "uint" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsUIntRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "long_i" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsLongRepr),
+    SA.SomeStubsSignature(SA.StubsSignature "int_s" (Ctx.extend Ctx.empty SA.StubsShortRepr) SA.StubsIntRepr)
     ]
 

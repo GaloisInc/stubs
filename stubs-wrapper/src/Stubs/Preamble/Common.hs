@@ -10,7 +10,8 @@
 module Stubs.Preamble.Common (
     arithBinOverride,
     cmpBinOverride,
-    bvIdOverride
+    bvIdOverride,
+    bvExtendOverride
 ) where 
 
 
@@ -27,6 +28,7 @@ import Control.Monad.IO.Class
 import Data.Text
 import qualified Stubs.Translate.Core as STC
 import qualified Data.Parameterized.NatRepr as PN
+import GHC.TypeLits (KnownNat)
 
 -- binary arithmetic operations, parametrized over operations
 arithBinOverride :: forall arch bak solver scope st fs w p ext sym. (bak ~ LCBO.OnlineBackend solver scope st fs, LCB.HasSymInterface sym bak, WI.IsExprBuilder sym, STC.StubsArch arch, w ~ STC.ArchIntSize arch) =>
@@ -53,6 +55,15 @@ bvIdOverride name bak = LCS.mkOverride' (WF.functionNameFromText name) (LCT.BVRe
     execId @arch sym args
   )
 
+bvExtendOverride :: forall arch bak solver scope st fs w1 w2 p ext sym. (bak ~ LCBO.OnlineBackend solver scope st fs, LCB.HasSymInterface sym bak, WI.IsExprBuilder sym, STC.StubsArch arch,
+                    1 PN.<= w1, w1 PN.+1 PN.<= w2, KnownNat w2, 1 PN.<= w2) =>
+                Text -> Bool -> bak -> LCS.Override p sym ext (LCT.EmptyCtx LCT.::> LCT.BVType w1) (LCT.BVType w2)
+bvExtendOverride name signed bak = LCS.mkOverride' (WF.functionNameFromText name) (LCT.BVRepr (PN.knownNat @w2)) (do
+    LCS.RegMap args <-  LCS.getOverrideArgs
+    let sym = LCB.backendGetSym bak
+    execExtend @arch sym signed args
+  )
+
 execId :: forall arch sym m w . (MonadIO m, WI.IsExprBuilder sym, (STC.StubsArch arch), w ~ STC.ArchIntSize arch) =>
             sym -> Ctx.Assignment (LCS.RegEntry sym) (Ctx.EmptyCtx Ctx.::> LCT.BVType w) ->  m (LCS.RegValue sym (LCT.BVType w))
 execId _ (Ctx.Empty Ctx.:> bv1) = do 
@@ -68,3 +79,8 @@ execCmpBin :: forall arch sym m w . (MonadIO m, WI.IsExprBuilder sym, (STC.Stubs
             sym ->(sym -> WI.SymBV sym w -> WI.SymBV sym w -> IO (WI.Pred sym) )-> Ctx.Assignment (LCS.RegEntry sym) (Ctx.EmptyCtx Ctx.::> LCT.BVType w Ctx.::> LCT.BVType w) ->  m (LCS.RegValue sym LCT.BoolType)
 execCmpBin sym op (Ctx.Empty Ctx.:> bv1 Ctx.:> bv2) = do
   liftIO $ op sym (LCS.regValue bv1) (LCS.regValue bv2)
+
+execExtend :: forall arch sym m w1 w2 . (MonadIO m, WI.IsExprBuilder sym, (STC.StubsArch arch), 1 PN.<= w1, w1 PN.+1 PN.<= w2, KnownNat w2 ) =>
+            sym -> Bool -> Ctx.Assignment (LCS.RegEntry sym) (Ctx.EmptyCtx Ctx.::> LCT.BVType w1) ->  m (LCS.RegValue sym (LCT.BVType w2))
+execExtend sym signed (Ctx.Empty Ctx.:> bv) = do 
+  if signed then liftIO $ WI.bvSext sym (PN.knownNat @w2) (LCS.regValue bv) else liftIO $ WI.bvZext sym (PN.knownNat @w2) (LCS.regValue bv)
