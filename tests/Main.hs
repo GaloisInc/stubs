@@ -204,7 +204,11 @@ testProg =
         SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
     } in SA.StubsProgram {
         SA.stubsMain="f",
-        SA.stubsFnDecls = [SA.SomeStubsFunction fn, SA.SomeStubsFunction int_fun]
+        SA.stubsLibs=[SA.StubsLibrary{
+            SA.fnDecls=[SA.SomeStubsFunction fn, SA.SomeStubsFunction int_fun],
+            SA.externSigs=[],
+            SA.libName=""
+        }]
     }
 
 overrideTest :: TestTree
@@ -224,12 +228,15 @@ overrideWrapperTest = testCase "Main Pipeline Test: Parserless" $ do
 
 linkerTest :: TestTree 
 linkerTest = genTestCase ( SA.StubsProgram {
-        SA.stubsFnDecls = [
+        SA.stubsLibs=[SA.StubsLibrary{
+            SA.fnDecls = [
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "double" (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) SA.StubsIntRepr)] ),
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "double" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) [SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) SA.StubsIntRepr)])
         ],
-        SA.stubsMain = "main",
-        SA.stubsTyDecls = []::[SA.StubsTyDecl]
+            SA.externSigs=[],
+            SA.libName=""
+        }],
+        SA.stubsMain = "main"
     }) check "Can link preamble into stub"
     where 
         check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
@@ -247,15 +254,18 @@ linkerTest = genTestCase ( SA.StubsProgram {
 
 factorialTest :: TestTree
 factorialTest = genTestCase (SA.StubsProgram {
-        SA.stubsFnDecls = [
+        SA.stubsLibs=[SA.StubsLibrary{
+            SA.fnDecls = [
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "factorial" (Ctx.extend (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) (SA.LitExpr $SA.IntLit 1)) SA.StubsIntRepr)] ),
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "factorial" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr) 
             [SA.ITE (SA.AppExpr "gt" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.LitExpr $ SA.IntLit 0) ) SA.StubsBoolRepr) 
             [SA.Return (SA.AppExpr "factorial"  (Ctx.extend (Ctx.extend Ctx.empty (SA.AppExpr "minus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr ) ) (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty  (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)))  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) SA.StubsIntRepr   )  )  SA.StubsIntRepr)   ] 
             [(SA.Return (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)) )] ])
         ],
-        SA.stubsMain = "main",
-        SA.stubsTyDecls = []::[SA.StubsTyDecl]
+        SA.externSigs = [],
+        SA.libName=""
+        }],
+        SA.stubsMain = "main"
     }) check "calculates factorial of 5"
     where 
         check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
@@ -274,6 +284,53 @@ factorialTest = genTestCase (SA.StubsProgram {
 symExecTest :: TestTree
 symExecTest = genTestCase testProg check "Symbolic Execution smoke test"
     where
+        check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
+        check retRepr crucibleRes = case crucibleRes of
+                FinishedResult _ r -> case r of
+                                        TotalRes v -> do
+                                            let q = view gpValue v
+                                            case retRepr of
+                                                LCT.BVRepr _ -> case asConcrete $ regValue q of
+                                                    Just k -> if BV.asUnsigned (fromConcreteBV k) == 20 then return True else print "Unexpected value received" >> return False
+                                                    Nothing -> print "Failed to concretize return" >> return False
+                                                _ -> print "Unexpected return type" >> return False
+                                        _ -> print "Failed to get complete result" >> return False
+                _ -> print "Failed to finish execution" >> return False
+
+moduleTest :: TestTree 
+moduleTest = genTestCase SA.StubsProgram{
+    SA.stubsMain="f",
+    SA.stubsLibs=[
+        SA.StubsLibrary{
+            SA.libName="core",
+            SA.fnDecls=[SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="f",
+                    SA.sigFnArgTys=Ctx.empty,
+                    SA.sigFnRetTy=SA.StubsIntRepr
+                    },
+                    SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.LitExpr $ SA.IntLit 20) SA.StubsIntRepr]
+            }],
+            SA.externSigs = [
+                SA.SomeStubsSignature $ SA.StubsSignature{SA.sigFnName="g",SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,SA.sigFnRetTy=SA.StubsIntRepr}]
+        },
+        SA.StubsLibrary{
+            SA.libName="internal",
+            SA.externSigs=[],
+            SA.fnDecls=[SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="g",
+                    SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+                    SA.sigFnRetTy=SA.StubsIntRepr
+                },
+            SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
+            }]
+        }
+    ]
+} check "Module Test"
+    where 
         check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
         check retRepr crucibleRes = case crucibleRes of
                 FinishedResult _ r -> case r of
@@ -306,4 +363,4 @@ genTestCase sprog check tag = testCase tag $ do
 
 main :: IO ()
 main = defaultMain $ do
-    testGroup "" [overrideTest,overrideWrapperTest,symExecTest, linkerTest,factorialTest]
+    testGroup "" [overrideTest,overrideWrapperTest,symExecTest, linkerTest,factorialTest,moduleTest]

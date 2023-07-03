@@ -85,6 +85,11 @@ instance TestEquality (StubsSignature a) where
         EQF -> Just Refl 
         _ -> Nothing
 
+instance Eq SomeStubsSignature where 
+    (==) (SomeStubsSignature (StubsSignature n1 arg1 ret1)) (SomeStubsSignature (StubsSignature n2 arg2 ret2)) = case (compareF arg1 arg2,compareF ret1 ret2, n1==n2) of 
+        (EQF,EQF,True) -> True
+        _ -> False
+
 
 data StubsFunction (args::Ctx.Ctx StubsType) (ret::StubsType) = StubsFunction {
     stubFnSig :: StubsSignature args ret,
@@ -167,9 +172,26 @@ instance TestEquality StubsExpr where
 
 type StubsTyDecl = forall a . String -> StubsTypeRepr a
 
+data StubsLibrary = StubsLibrary {
+    libName :: String,
+    fnDecls :: [SomeStubsFunction],
+    externSigs :: [SomeStubsSignature]
+}
+
+-- Note: These instances do not give complete equality checking, this is needed for Ord for using a map / bimap
+instance Eq SomeStubsFunction where 
+    (==) (SomeStubsFunction (StubsFunction sig1 _)) (SomeStubsFunction (StubsFunction sig2 _)) = (SomeStubsSignature sig1) == (SomeStubsSignature sig2)
+
+instance Eq StubsLibrary where 
+    (==) a b = case ((fnDecls a) == (fnDecls b), (libName a)== (libName b)) of 
+        (True,True) -> True 
+        _ -> False
+        
+instance Ord StubsLibrary where 
+    compare a b = if a == b then EQ else compare (libName a) (libName b)
+
 data StubsProgram = StubsProgram {
-    stubsFnDecls :: [SomeStubsFunction],
-    stubsTyDecls::[StubsTyDecl],
+    stubsLibs :: [StubsLibrary],
     stubsMain::String 
 }
 
@@ -194,3 +216,6 @@ stubsAssignmentToTys assign = case alist of
         Ctx.extend (stubsAssignmentToTys rest) (stubsExprToTy elm)
     where 
         alist = Ctx.viewAssign assign
+
+stubsLibDefs :: StubsLibrary -> [SomeStubsSignature] 
+stubsLibDefs lib = map (\(SomeStubsFunction f) -> SomeStubsSignature (stubFnSig f)) (fnDecls lib)

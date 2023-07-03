@@ -36,8 +36,8 @@ testFnTranslationBasic = testCase "Basic Translation" $ do
         },
         SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 20),SA.Return (SA.LitExpr $ SA.IntLit 20)]
     }
-    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
-    let cfgs = ST.crCFGs p 
+    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [] [] [SA.SomeStubsFunction fn]
+    let cfgs = map fst p 
 
     -- Expect single CFG
     assertEqual "Unexpected CFG count" (length cfgs) 1
@@ -59,8 +59,8 @@ testFnTranslationITE = testCase "ITE Translation" $ do
         },
         SA.stubFnBody=[SA.ITE (SA.LitExpr $ SA.BoolLit True) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 20)] [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 40)],SA.Return (SA.LitExpr $ SA.IntLit 20)]
     }
-    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
-    let cfgs = ST.crCFGs p 
+    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [] [] [SA.SomeStubsFunction fn]
+    let cfgs = map fst p 
 
     -- Expect single CFG
     assertEqual "Unexpected CFG count" 1 (length cfgs)
@@ -81,8 +81,8 @@ testFnTranslationLoop = testCase "Loop Translation" $ do
         },
         SA.stubFnBody=[SA.Loop (SA.LitExpr $ SA.BoolLit False) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 40)] ,SA.Return (SA.LitExpr $ SA.IntLit 20)]
     }
-    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [SA.SomeStubsFunction fn]
-    let cfgs = ST.crCFGs p
+    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [] [] [SA.SomeStubsFunction fn]
+    let cfgs = map fst p
 
     -- Expect single CFG
     assertEqual "Unexpected CFG count" 1 (length cfgs)

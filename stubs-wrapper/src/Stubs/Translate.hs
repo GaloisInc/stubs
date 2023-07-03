@@ -12,6 +12,7 @@
 {-# LANGUAGE ImpredicativeTypes#-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Stubs.Translate (
  translateExpr,
@@ -59,6 +60,9 @@ import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Stubs.Preamble as SPR
 import qualified Stubs.Translate.Core as STC
 import GHC.Natural (naturalToInteger)
+import Stubs.AST (stubsLibDefs)
+import qualified Data.List as List
+import qualified Data.Graph as Graph
 
 data CrucibleProgram arch = CrucibleProgram {
   crCFGs :: [LCSC.ACFG (DMS.MacawExt arch)],
@@ -69,6 +73,14 @@ data CrucibleProgram arch = CrucibleProgram {
   crFnHandleMap :: [SomeWrappedOverride arch],
   crEntry :: String -- name of entry point
 }
+
+data CrucibleLibrary arch = CrucibleLibrary {
+    crLibCFGs :: [LCSC.ACFG (DMS.MacawExt arch)],
+    crExportedHandles :: [(String,STC.SomeHandle arch)]
+}
+
+combineCrucLibrary :: CrucibleLibrary arch -> CrucibleLibrary arch -> CrucibleLibrary arch
+combineCrucLibrary c CrucibleLibrary{crLibCFGs=cfg2,crExportedHandles=hdls2} = c{crLibCFGs= crLibCFGs c ++cfg2, crExportedHandles=crExportedHandles c ++ hdls2}
 
 data SomeWrappedOverride arch = forall args ret . SomeWrappedOverride(WrappedOverride arch args ret)
 data WrappedOverride arch args ret = WrappedOverride (forall sym bak solver scope st fs p . (bak ~ LCBO.OnlineBackend solver scope st fs, LCB.HasSymInterface sym bak, WI.IsExprBuilder sym) =>
@@ -185,44 +197,85 @@ translateFn ng _ handles hdl SA.StubsFunction{SA.stubFnSig=SA.StubsSignature{SA.
                                                                                                      translateStmts @arch @_ @ret body >> LCCG.reportError (LCCR.App $ LCCE.StringEmpty UnicodeRepr))
     return $ LCSC.ACFG args cret cfg
 
-translateDecls :: forall arch s. (STC.StubsArch arch, SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> [SA.SomeStubsFunction]-> IO (CrucibleProgram arch)
-translateDecls ng hAlloc fns = do
+translateDecls :: forall arch s. (STC.StubsArch arch, SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => 
+        PN.NonceGenerator IO s -> 
+        LCF.HandleAllocator ->
+        [(String, SomeWrappedOverride arch)] -> -- Override mappings
+        [(String, SomeHandle arch)] -> -- Handles for previously translated functions (from modules already processed)
+        [SA.SomeStubsFunction] -> -- Functions to translate 
+        IO [(LCSC.ACFG (DMS.MacawExt arch), (String,SomeHandle arch))]
+translateDecls ng hAlloc ovMap prevHdls fns = do
     hdls <- mapM (\(SA.SomeStubsFunction f) -> do
         let sig = SA.stubFnSig f
         h <- mkHandle @arch hAlloc sig
         return (SA.sigFnName sig, SomeHandle @arch (StubHandle @arch (SA.sigFnArgTys sig) (SA.sigFnRetTy sig) h))
         ) fns
 
-    ovMap <- mapM (\(SA.SomeStubsSignature sig) -> do
-            hdl <-  mkHandle @arch hAlloc sig
-            let q = (SA.sigFnName sig, SomeWrappedOverride $ WrappedOverride (SPR.preambleMap @arch sig ) (StubHandle @arch (SA.sigFnArgTys sig) (SA.sigFnRetTy sig) hdl))
-            return q) SPR.stubsPreamble
-
     let preambleHdls = map (\(n,SomeWrappedOverride(WrappedOverride _ s)) -> (n,SomeHandle s)) ovMap
 
-    let handles = Map.fromList (preambleHdls++hdls)
-    r <- mapM (\(SA.SomeStubsFunction f) -> do
+    let handles = Map.fromList (preambleHdls++prevHdls++hdls)
+    mapM (\(SA.SomeStubsFunction f) -> do
         let sig = SA.stubFnSig f
         Just (SomeHandle hdl) <- return $ Map.lookup (SA.sigFnName sig) handles
         StubHandle args ret _ <- return hdl
         case (P.testEquality ret (SA.sigFnRetTy sig), P.testEquality args $ SA.sigFnArgTys sig) of
-            (Just P.Refl, Just P.Refl) -> translateFn @_ @_ @s @arch ng hAlloc handles hdl f
+            (Just P.Refl, Just P.Refl) -> do 
+                t <- translateFn @_ @_ @s @arch ng hAlloc handles hdl f
+                return (t,(SA.sigFnName sig,SomeHandle hdl))
             _ -> error "Should not occur: Translating undefined function"
         ) fns
-    return $ CrucibleProgram {
-        crGlobals = Map.empty,
-        crExterns = Map.empty,
-        crCFGs = r,
-        crFwdDecs = Map.empty,
-        crEntry = "",
-        crFnHandleMap = map snd ovMap
+
+translateLibrary :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => 
+            PN.NonceGenerator IO s -> 
+            LCF.HandleAllocator -> 
+            [(String, SomeWrappedOverride arch)] -> 
+            [(String, SomeHandle arch)] ->
+            SA.StubsLibrary -> IO (CrucibleLibrary arch)
+translateLibrary ng halloc ovMap prevHdls lib = do
+    cfghdls <- translateDecls ng halloc ovMap prevHdls (SA.fnDecls lib)
+    return CrucibleLibrary {
+        crLibCFGs=map fst cfghdls,
+        crExportedHandles=map snd cfghdls
     }
+
 
 translateProgram :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> SA.StubsProgram -> IO (CrucibleProgram arch)
 translateProgram ng halloc prog = do
-    let fns = SA.stubsFnDecls prog
-    p <- translateDecls ng halloc fns
-    return p{crEntry=SA.stubsMain prog}
+
+    --Every lib shares the same preamble handles
+    ovMap <- mapM (\(SA.SomeStubsSignature sig) -> do
+            hdl <-  mkHandle @arch halloc sig
+            let q = (SA.sigFnName sig, SomeWrappedOverride $ WrappedOverride (SPR.preambleMap @arch sig ) (StubHandle @arch (SA.sigFnArgTys sig) (SA.sigFnRetTy sig) hdl))
+            return q) SPR.stubsPreamble
+
+    let libs = SA.stubsLibs prog
+
+    let dependencyList = map (\ lib -> (lib,filter (\olib -> not $ List.null $ List.intersect (stubsLibDefs olib ) (SA.externSigs lib)) libs)) libs
+    let libMapping = fst $ foldr (\lib (acc,idx) -> (Map.insert lib idx acc,idx+1)  ) (Map.empty,0) libs
+    v <- mapM (\(l, deps) -> do
+        Just libI <- return $ Map.lookup l libMapping
+        mdepI <- mapM (\ol -> return (Map.lookup ol  libMapping)) deps
+        let depI = map (\case
+                Just d -> d 
+                _ -> error "lost mapping" -- Should be impossible, by the map's construction
+                ) mdepI
+        return (l,libI, depI)
+        ) dependencyList
+
+    let (g',vl,_) = Graph.graphFromEdges v
+    let orderedLibs = map (\v -> case vl v of 
+            (l,_,_)-> l
+            ) $ Graph.topSort $ Graph.transposeG g'
+
+
+    translatedLibs <- foldM (\ (tlibs,acc) lib -> do 
+                translated <- translateLibrary ng halloc ovMap acc lib
+                let cfgs = crLibCFGs translated
+                let accHdls = crExportedHandles translated
+                return (cfgs++tlibs,accHdls++acc)
+            ) ([],[]) orderedLibs
+    --translatedLibs <- mapM (translateLibrary ng halloc ovMap ) orderedLibs
+    return CrucibleProgram{crEntry=SA.stubsMain prog,crFnHandleMap=map snd ovMap, crCFGs=fst translatedLibs,crExterns=mempty, crGlobals=mempty,crFwdDecs=mempty}
 
 mkHandle :: forall arch args ret . (STC.StubsArch arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCF.HandleAllocator -> SA.StubsSignature args ret -> IO ( LCF.FnHandle (ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret))
 mkHandle hAlloc fn = do
