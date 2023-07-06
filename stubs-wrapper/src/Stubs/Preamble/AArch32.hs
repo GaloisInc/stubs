@@ -8,6 +8,7 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Stubs.Preamble.AArch32() where
 import qualified Stubs.AST as SA
 import qualified What4.Interface as WI
@@ -24,6 +25,7 @@ import qualified Data.Parameterized.NatRepr as PN
 import qualified Lang.Crucible.CFG.Expr as LCCE
 import qualified Lang.Crucible.CFG.Reg as LCCR
 import GHC.Natural (naturalToInteger)
+import qualified Data.Parameterized.Map as MapF
 
 instance STC.StubsArch SAA.AArch32 where 
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsInt = LCT.BVType (STC.ArchIntSize SAA.AArch32)
@@ -34,7 +36,7 @@ instance STC.StubsArch SAA.AArch32 where
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsUShort = LCT.BVType (STC.ArchShortSize SAA.AArch32)
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsBool = LCT.BoolType
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsUnit = LCT.UnitType
-    type instance ArchTypeMatch SAA.AArch32 ('SA.StubsAlias a b) = STC.ArchTypeMatch SAA.AArch32 b
+    type instance ArchTypeMatch SAA.AArch32 ('SA.StubsAlias s) = STC.ArchTypeMatch SAA.AArch32 (SA.ResolveAlias s)
 
     type instance ArchIntSize SAA.AArch32 = 32
     type instance ArchShortSize SAA.AArch32 =16
@@ -45,12 +47,17 @@ instance STC.StubsArch SAA.AArch32 where
             SA.StubsIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
             SA.StubsBoolRepr -> return LCT.BoolRepr
             SA.StubsUnitRepr -> return LCT.UnitRepr
-            SA.StubsAliasRepr _ t -> STC.toCrucibleTy $ STC.resolveAlias t
             SA.StubsUIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
             SA.StubsLongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
             SA.StubsShortRepr -> return $ LCT.BVRepr (PN.knownNat @16)
             SA.StubsULongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
             SA.StubsUShortRepr -> return $ LCT.BVRepr (PN.knownNat @16)
+            SA.StubsAliasRepr s -> do 
+                env <- STC.getStubEnv 
+                let tymap = STC.stTyMap env
+                case MapF.lookup  s tymap of 
+                    Just (STC.WrappedStubsTypeAliasRepr _ t) -> STC.toCrucibleTy t
+                    Nothing -> error $ "missing type alias: " ++ show s
 
     translateLit lit = do 
         let n = PN.knownNat @32

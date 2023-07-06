@@ -30,6 +30,8 @@ import Control.Monad.Reader (ReaderT)
 import qualified Lang.Crucible.FunctionHandle as LCF
 import qualified Stubs.AST as SA
 import GHC.TypeNats (Nat, KnownNat)
+import qualified Data.Parameterized as P
+import Unsafe.Coerce (unsafeCoerce)
 
 
 type family ArchTypeMatchCtx (arch :: *) (stubTy :: Ctx SA.StubsType) = (crucTy :: Ctx LCT.CrucibleType) where
@@ -70,20 +72,31 @@ withReturn f = do
     StubsState _ retrepr _ _ _ _ <- get
     f retrepr
 
-resolveAlias :: SA.StubsTypeRepr a -> SA.StubsTypeRepr a
-resolveAlias (SA.StubsAliasRepr _ a) = resolveAlias a
-resolveAlias x = x
+data WrappedStubsTypeAliasRepr (s :: P.Symbol) where
+    WrappedStubsTypeAliasRepr :: P.SymbolRepr s -> SA.StubsTypeRepr (SA.ResolveAlias s) -> WrappedStubsTypeAliasRepr s 
+    deriving Show 
+
+instance P.ShowF WrappedStubsTypeAliasRepr where 
+    showF (WrappedStubsTypeAliasRepr s t) = "WrappedAlias: " ++ show s ++ " " ++ show t
+
+coerceToAlias :: P.SymbolRepr s -> SA.StubsTypeRepr a -> WrappedStubsTypeAliasRepr s
+coerceToAlias s repr = WrappedStubsTypeAliasRepr s (unsafeCoerce repr)
+
 
 data StubsEnv arch = StubsEnv {
     stArchWidth::PN.NatRepr (DMC.ArchAddrWidth arch)
+    , stTyMap :: MapF.MapF P.SymbolRepr WrappedStubsTypeAliasRepr
 }
 
 type StubsM arch s args ret a= (DMS.SymArchConstraints arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCCG.Generator (DMS.MacawExt arch) s (StubsState arch ret args) ret IO a
 
-class Monad m => HasStubsEnv arch m | m -> arch where
+class (Monad m,MonadFail m) => HasStubsEnv arch m | m -> arch where
     getStubEnv :: m (StubsEnv arch)
 
 instance HasStubsEnv arch (ReaderT (StubsEnv arch) IO) where
+    getStubEnv = ask
+
+instance HasStubsEnv arch (ReaderT (StubsEnv arch) (LCCG.Generator (DMS.MacawExt arch) s (StubsState arch ret args) ret IO) ) where
     getStubEnv = ask
 
 data StubReg arch s (a::SA.StubsType) = forall tp. (tp ~ ArchTypeMatch arch a) => StubReg (LCCR.Reg s tp) (SA.StubsTypeRepr a)

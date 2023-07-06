@@ -37,8 +37,8 @@ import qualified Data.BitVector.Sized as BV
 import Lang.Crucible.Simulator.ExecutionTree
 import Lang.Crucible.Simulator.RegMap (RegEntry(regValue))
 import Control.Lens
-import Data.Macaw.Symbolic (GenArchVals (lookupReg), SymArchConstraints)
-import What4.Interface (asConcrete, IsExpr (asInteger))
+import Data.Macaw.Symbolic (GenArchVals (lookupReg))
+import What4.Interface (asConcrete)
 import What4.Concrete (fromConcreteBV)
 import Stubs.Wrapper
 import Infrastructure as SI
@@ -58,15 +58,15 @@ import qualified Lang.Crucible.Simulator as LCS
 import qualified Lang.Crucible.Types as LCT
 import qualified Data.Macaw.X86 as DMX
 import qualified Data.List as List
-import qualified Lang.Crucible.CFG.Core as LCSC
 import qualified Lang.Crucible.CFG.Reg as LCCR
 import qualified Lang.Crucible.CFG.SSAConversion as LCSSA
-import qualified Lang.Crucible.Simulator.RegMap as LCSR
 import qualified What4.Interface as WI
 import qualified Lang.Crucible.Simulator as LCSE
 import qualified Stubs.Preamble as SPR
 import Stubs.Preamble.X86 () --for instance
 import qualified Stubs.Translate.Core as STC
+import Data.Parameterized.SymbolRepr (someSymbol)
+import Control.Monad.IO.Class (liftIO)
 
 logShim:: SD.Diagnostic -> IO ()
 logShim _ = return ()
@@ -207,7 +207,8 @@ testProg =
         SA.stubsLibs=[SA.StubsLibrary{
             SA.fnDecls=[SA.SomeStubsFunction fn, SA.SomeStubsFunction int_fun],
             SA.externSigs=[],
-            SA.libName=""
+            SA.libName="",
+            SA.tyDecls=[]
         }]
     }
 
@@ -234,7 +235,8 @@ linkerTest = genTestCase ( SA.StubsProgram {
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "double" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) [SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) SA.StubsIntRepr)])
         ],
             SA.externSigs=[],
-            SA.libName=""
+            SA.libName="",
+            SA.tyDecls=[]
         }],
         SA.stubsMain = "main"
     }) check "Can link preamble into stub"
@@ -256,14 +258,15 @@ factorialTest :: TestTree
 factorialTest = genTestCase (SA.StubsProgram {
         SA.stubsLibs=[SA.StubsLibrary{
             SA.fnDecls = [
-            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "factorial" (Ctx.extend (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) (SA.LitExpr $SA.IntLit 1)) SA.StubsIntRepr)] ),
+            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "factorial" (Ctx.extend (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr)] ),
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "factorial" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr) 
             [SA.ITE (SA.AppExpr "gt" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.LitExpr $ SA.IntLit 0) ) SA.StubsBoolRepr) 
             [SA.Return (SA.AppExpr "factorial"  (Ctx.extend (Ctx.extend Ctx.empty (SA.AppExpr "minus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr ) ) (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty  (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)))  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) SA.StubsIntRepr   )  )  SA.StubsIntRepr)   ] 
             [(SA.Return (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)) )] ])
         ],
         SA.externSigs = [],
-        SA.libName=""
+        SA.libName="",
+        SA.tyDecls=[]
         }],
         SA.stubsMain = "main"
     }) check "calculates factorial of 5"
@@ -301,24 +304,15 @@ moduleTest :: TestTree
 moduleTest = genTestCase SA.StubsProgram{
     SA.stubsMain="f",
     SA.stubsLibs=[
-        SA.StubsLibrary{
-            SA.libName="core",
-            SA.fnDecls=[SA.SomeStubsFunction
+        SA.mkStubsLibrary "core" [SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
                     SA.sigFnName="f",
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsIntRepr
                     },
-                    SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.LitExpr $ SA.IntLit 20) SA.StubsIntRepr]
-            }],
-            SA.externSigs = [
-                SA.SomeStubsSignature $ SA.StubsSignature{SA.sigFnName="g",SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,SA.sigFnRetTy=SA.StubsIntRepr}]
-        },
-        SA.StubsLibrary{
-            SA.libName="internal",
-            SA.externSigs=[],
-            SA.fnDecls=[SA.SomeStubsFunction
+                    SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.LitExpr $ SA.IntLit 20) SA.StubsIntRepr]}] [],
+        SA.mkStubsLibrary "internal" [SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
                     SA.sigFnName="g",
@@ -326,9 +320,8 @@ moduleTest = genTestCase SA.StubsProgram{
                     SA.sigFnRetTy=SA.StubsIntRepr
                 },
             SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
-            }]
-        }
-    ]
+            }] []
+     ]
 } check "Module Test"
     where 
         check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
@@ -343,6 +336,84 @@ moduleTest = genTestCase SA.StubsProgram{
                                                 _ -> print "Unexpected return type" >> return False
                                         _ -> print "Failed to get complete result" >> return False
                 _ -> print "Failed to finish execution" >> return False
+
+opaqueTest :: TestTree 
+opaqueTest = genTestCaseIO ( do 
+        Some counter <- return $ someSymbol "Counter"
+        return SA.StubsProgram {
+        SA.stubsMain="main",
+        SA.stubsLibs=[
+            SA.mkStubsLibrary "counter" [
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="init",
+                    SA.sigFnArgTys=Ctx.empty,
+                    SA.sigFnRetTy=(SA.StubsAliasRepr counter)
+                    },
+                    SA.stubFnBody=[SA.Return $  SA.LitExpr $ SA.IntLit 0]},
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="inc",
+                    SA.sigFnArgTys=Ctx.extend Ctx.empty (SA.StubsAliasRepr counter),
+                    SA.sigFnRetTy=(SA.StubsAliasRepr counter)
+                    },
+                    SA.stubFnBody=[SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr )]},
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="as_int",
+                    SA.sigFnArgTys=Ctx.extend Ctx.empty (SA.StubsAliasRepr counter),
+                    SA.sigFnRetTy=(SA.StubsIntRepr)
+                    },
+                    SA.stubFnBody=[SA.Return $ SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)]}
+        ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)],
+            SA.mkStubsLibrary "core" [
+                SA.SomeStubsFunction 
+                    SA.StubsFunction {
+                        SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="main",
+                    SA.sigFnArgTys=Ctx.empty,
+                    SA.sigFnRetTy=SA.StubsIntRepr
+                    },
+                    SA.stubFnBody=[SA.Return (SA.AppExpr "as_int" (Ctx.extend Ctx.empty(SA.AppExpr "inc" (Ctx.extend Ctx.empty (SA.AppExpr "init" Ctx.empty (SA.StubsAliasRepr counter))) (SA.StubsAliasRepr counter))) SA.StubsIntRepr)]
+                    }
+            ] []
+        ]   }) check "Opaque Test"
+    where 
+        check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
+        check retRepr crucibleRes = case crucibleRes of
+                FinishedResult _ r -> case r of
+                                        TotalRes v -> do
+                                            let q = view gpValue v
+                                            case retRepr of
+                                                LCT.BVRepr _ -> case asConcrete $ regValue q of
+                                                    Just k -> if BV.asUnsigned (fromConcreteBV k) == 1 then return True else print "Unexpected value received" >> return False
+                                                    Nothing -> print "Failed to concretize return" >> return False
+                                                _ -> print "Unexpected return type" >> return False
+                                        _ -> print "Failed to get complete result" >> return False
+                AbortedResult _ (AbortedExec r _) -> print ("Aborted Execution:" ++ show r) >> return False
+                _ -> print "Failed to finish execution" >> return False
+
+genTestCaseIO :: IO StubsProgram -> (forall sym ret . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult () sym (DMS.MacawExt DMX.X86_64) (LCS.RegEntry sym ret) -> IO Bool) -> TestName -> TestTree
+genTestCaseIO iprog check tag = testCase tag $ do 
+    Some ng <- PN.newIONonceGenerator
+    hAlloc <- LCF.newHandleAllocator
+    sprog <- iprog
+    prog <- ST.translateProgram @DMX.X86_64 ng hAlloc sprog
+    print (ST.crCFGs prog)
+    case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
+        Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
+        Just (LCSC.ACFG _ ret icfg) -> do
+            res <- smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
+            if res then assertBool "" True else assertFailure "Test failed"
+    where 
+        lookupEntry e = List.find (\(LCSC.ACFG _ _ cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
+        f :: (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args))
+        f _ assign = case Ctx.viewAssign assign of
+            Ctx.AssignEmpty -> return Ctx.empty
+            _ -> error "Irrelevant to test"
 
 genTestCase :: StubsProgram ->  (forall sym ret . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult () sym (DMS.MacawExt DMX.X86_64) (LCS.RegEntry sym ret) -> IO Bool) -> TestName -> TestTree
 genTestCase sprog check tag = testCase tag $ do 
@@ -362,5 +433,5 @@ genTestCase sprog check tag = testCase tag $ do
             _ -> error "Irrelevant to test"
 
 main :: IO ()
-main = defaultMain $ do
-    testGroup "" [overrideTest,overrideWrapperTest,symExecTest, linkerTest,factorialTest,moduleTest]
+main = defaultMain $ do 
+    testGroup "" [overrideTest,overrideWrapperTest,symExecTest, linkerTest,factorialTest,moduleTest, opaqueTest]
