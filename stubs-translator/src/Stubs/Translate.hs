@@ -59,11 +59,9 @@ import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Stubs.Preamble as SPR
 import qualified Stubs.Translate.Core as STC
-import GHC.Natural (naturalToInteger)
 import Stubs.AST (stubsLibDefs)
 import qualified Data.List as List
 import qualified Data.Graph as Graph
-import qualified Stubs.Preamble as SPR
 import qualified Data.Set as Set
 
 data CrucibleProgram arch = CrucibleProgram {
@@ -111,7 +109,6 @@ translateExpr' e = do
             case Map.lookup f knownFns of
                 Just (SomeHandle(StubHandle argtys ret h)) -> do
                     -- type checking call
-                    env <- gets stStubsenv
                     -- Convert to crucible types in order to type check opaque types
                     knownRet <- runReaderT (STC.toCrucibleTy @arch ret) env
                     decRet <- runReaderT (STC.toCrucibleTy @arch retty) env
@@ -131,7 +128,6 @@ translateExpr' e = do
     where
         translateExpr'' :: forall ext. (b ~ ArchTypeMatch arch sret, ext ~ DMS.MacawExt arch, LCCE.IsSyntaxExtension ext) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s b)
         translateExpr'' e' = do
-            let n = DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)
             case e' of
                 SA.LitExpr l -> return $ STC.translateLit l
                 SA.VarLit _ -> error "internal translateExpr called on VarLit"
@@ -216,7 +212,7 @@ translateFn ng _ handles hdl aliasMap SA.StubsFunction{SA.stubFnSig=SA.StubsSign
     args <- runReaderT (toCrucibleTyCtx argtys) e
     cret <- runReaderT (toCrucibleTy retty) e
     let StubHandle _ _ handle = hdl
-    (LCCR.SomeCFG cfg, aux) <- liftIO $ LCCG.defineFunction WF.InternalPos (Some ng) handle $ \crucArgs -> (StubsState e retty MapF.empty MapF.empty (translateFnArgs crucArgs argtys) handles,
+    (LCCR.SomeCFG cfg, _) <- liftIO $ LCCG.defineFunction WF.InternalPos (Some ng) handle $ \crucArgs -> (StubsState e retty MapF.empty MapF.empty (translateFnArgs crucArgs argtys) handles,
                                                                                                      translateStmts @arch @_ @ret body >> LCCG.reportError (LCCR.App $ LCCE.StringEmpty UnicodeRepr))
     return $ LCSC.ACFG args cret cfg
 

@@ -45,8 +45,6 @@ import           Control.Monad.IO.Class
 import Data.Word
 import qualified Stubs.AST as SA
 import qualified Stubs.Translate as ST
-import Data.Macaw.Symbolic (SymArchConstraints)
-import Data.Macaw.CFG
 import qualified Stubs.Preamble as SPR
 import qualified Stubs.Translate.Core as STC
 
@@ -58,7 +56,7 @@ crucibleProgToParsedProg ST.CrucibleProgram{ST.crCFGs=cfgs, ST.crGlobals= glbls,
   LCSC.parsedProgGlobals=glbls
 }
 
-stubsProgramToOverride :: forall ext p sym arch w. (ext ~ DMS.MacawExt arch, STC.StubsArch arch, SPR.Preamble arch) => SA.StubsProgram -> IO (SF.SomeFunctionOverride p sym arch)
+stubsProgramToOverride :: forall ext p sym arch. (ext ~ DMS.MacawExt arch, STC.StubsArch arch, SPR.Preamble arch) => SA.StubsProgram -> IO (SF.SomeFunctionOverride p sym arch)
 stubsProgramToOverride prog = do 
   hAlloc <- LCF.newHandleAllocator
   Some ng <- PN.newIONonceGenerator

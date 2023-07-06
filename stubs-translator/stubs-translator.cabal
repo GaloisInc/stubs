@@ -1,5 +1,5 @@
 cabal-version:      2.4
-name:               stubs-wrapper
+name:               stubs-translator
 version:            0.1.0.0
 
 -- A short (one-line) description of the package.
@@ -21,6 +21,7 @@ maintainer:         cfontenot@galois.com
 -- category:
 extra-source-files: CHANGELOG.md
 
+
 common shared
     build-depends:
         async >= 2 && < 3,
@@ -32,28 +33,27 @@ common shared
         filepath,
         Glob,
         lens >= 4 && < 6,
-        lumberjack >= 1 && < 1.1,
-        megaparsec >= 7 && < 10,
         mtl >= 2 && < 3,
         panic >= 0.4 && < 0.5,
-        pe-parser,
         parameterized-utils >= 2 && < 3,
-        parser-combinators >= 1.2 && < 1.4,
         prettyprinter >= 1.7 && < 1.8,
         prettyprinter-ansi-terminal,
-        yaml >= 0.11 && < 0.12,
-        text,
-        template-haskell
+        text
 
 library 
-    import: shared 
-    exposed-modules: Stubs.Wrapper,
-                     Stubs.Wrapper.Exception
+    import: shared
+    exposed-modules: Stubs.AST,
+                     Stubs.Translate,
+                     Stubs.Translate.Core,
+                     Stubs.Translate.Type,
+                     Stubs.Preamble,
+                     Stubs.Preamble.X86,
+                     Stubs.Preamble.AArch32
+    other-modules:  Stubs.Preamble.Common
     hs-source-dirs: src
     default-language: Haskell2010 
     ghc-options: -Wall -Wcompat
     build-depends: stubs-common,
-                   stubs-translator,
                    what4,
                    crucible,
                    crucible-syntax,
@@ -71,3 +71,27 @@ library
                    macaw-aarch32,
                    macaw-aarch32-symbolic,
                    semmc-aarch32
+
+test-suite translator-tests
+  import: shared
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs: tests
+  build-depends: stubs-common,
+                 stubs-translator,
+                 crucible,
+                 crucible-syntax,
+                 macaw-base,
+                 macaw-symbolic,
+                 crucible-llvm,
+                 what4,
+                 directory,
+                 tasty,
+                 tasty-ant-xml,
+                 tasty-expected-failure,
+                 tasty-hunit,
+                 yaml >= 0.11 && < 0.12,
+                 macaw-x86,
+                 macaw-x86-symbolic
+  ghc-options: -Wextra -Wcompat
+  default-language: Haskell2010

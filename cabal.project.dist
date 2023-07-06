@@ -3,6 +3,7 @@ packages: .
           ./stubs-common
           ./stubs-wrapper
           ./stubs-loader
+          ./stubs-translator
           submodules/llvm-pretty
           submodules/parameterized-utils
           submodules/what4/what4

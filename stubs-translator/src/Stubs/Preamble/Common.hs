@@ -20,9 +20,7 @@ import qualified What4.Interface as WI
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
-import qualified Data.Macaw.CFG as DMC
 import qualified Lang.Crucible.Types as LCT
-import qualified Data.Macaw.Symbolic as DMS
 import qualified Data.Parameterized.Context as Ctx
 import Control.Monad.IO.Class
 import Data.Text

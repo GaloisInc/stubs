@@ -43,33 +43,12 @@ common shared
         yaml >= 0.11 && < 0.12,
         text
 
-library stubs-sym-exec 
-    import: shared 
-    exposed-modules: Stubs.SymbolicExecution,
-                     Stubs.Discovery,
-                     Stubs.Solver
-    hs-source-dirs: src/SymbolicExecutor 
-    default-language: Haskell2010 
-    ghc-options: -Wall -Wcompat
-    build-depends: stubs-common,
-                   what4,
-                   crucible,
-                   crucible-symio,
-                   crucible-syntax,
-                   macaw-base,
-                   macaw-symbolic,
-                   crucible-llvm,
-                   macaw-loader,
-                   binary-symbols,
-                   vector,
-                   nonempty-vector
-
 library 
     build-depends: stubs-common,
                    stubs-wrapper,
                    stubs-parser,
-                   stubs-sym-exec,
-                   stubs-loader
+                   stubs-loader,
+                   stubs-translator
     ghc-options: -Wall -Wcompat
     default-language: Haskell2010 
 
@@ -98,13 +77,20 @@ test-suite stubs-tests
   import: shared
   type: exitcode-stdio-1.0
   main-is: Main.hs
-  other-modules: Infrastructure
+  other-modules: Infrastructure,
+                 Stubs.Discovery,
+                 Stubs.Solver,
+                 Stubs.SymbolicExecution
   hs-source-dirs: tests
   build-depends: stubs-common,
                  stubs-wrapper,
                  stubs-parser,
-                 stubs-sym-exec,
                  stubs-loader,
+                 stubs-translator,
+                 binary-symbols,
+                 vector,
+                 nonempty-vector,
+                 crucible-symio,
                  crucible,
                  macaw-base,
                  macaw-symbolic,
