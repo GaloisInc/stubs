@@ -9,6 +9,10 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
+
+{-|
+Description: Preamble Instance for AArch32
+-}
 module Stubs.Preamble.AArch32() where
 import qualified Stubs.AST as SA
 import qualified What4.Interface as WI

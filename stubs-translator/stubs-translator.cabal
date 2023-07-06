@@ -3,10 +3,10 @@ name:               stubs-translator
 version:            0.1.0.0
 
 -- A short (one-line) description of the package.
--- synopsis:
+synopsis: Stubs Language and Crucible Translation
 
 -- A longer description of the package.
--- description:
+description: AST and translation into Crucible for the Stubs language
 
 -- A URL where users can report bugs.
 -- bug-reports:
@@ -45,7 +45,6 @@ library
     exposed-modules: Stubs.AST,
                      Stubs.Translate,
                      Stubs.Translate.Core,
-                     Stubs.Translate.Type,
                      Stubs.Preamble,
                      Stubs.Preamble.X86,
                      Stubs.Preamble.AArch32

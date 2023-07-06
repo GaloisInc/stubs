@@ -14,6 +14,13 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
 
+{-|
+Description: Core Translation from Stubs to Crucible
+
+This module contains the translation from the Stubs language into Crucible. Given a StubsProgram,  
+an equivalent CrucibleProgram is produced, which contains Crucible CFGs alongside information needed for linking,
+as well as for symbolic execution
+-}
 module Stubs.Translate (
  translateExpr,
  translateDecls,
@@ -27,7 +34,6 @@ module Stubs.Translate (
 ) where
 
 import Stubs.Translate.Core
-import Stubs.Translate.Type
 import qualified Data.Macaw.CFG as DMC
 import Data.Parameterized.Some
 import qualified Data.Parameterized.NatRepr as PN
@@ -64,18 +70,24 @@ import qualified Data.List as List
 import qualified Data.Graph as Graph
 import qualified Data.Set as Set
 
+-- | A translated Program. Several fields are taken from crucible-syntax's ParsedProgram, for easy conversion
 data CrucibleProgram arch = CrucibleProgram {
+  -- | The generated CFGs
   crCFGs :: [LCSC.ACFG (DMS.MacawExt arch)],
   crGlobals :: Map.Map LCSA.GlobalName (Some LCCC.GlobalVar),
   crExterns :: Map.Map LCSA.GlobalName (Some LCCC.GlobalVar),
   crFwdDecs :: Map.Map WF.FunctionName LCF.SomeHandle,
-  -- ^ From LCSC.ParsedProgram 
+  -- | Handle information for preamble, necessary for linking
   crFnHandleMap :: [SomeWrappedOverride arch],
-  crEntry :: String -- name of entry point
+  -- | Name of the entry point CFG
+  crEntry :: String
 }
 
+-- | A translated library / module. This is the result of translating a StubsLibrary
 data CrucibleLibrary arch = CrucibleLibrary {
+    -- | Generated CFGs
     crLibCFGs :: [LCSC.ACFG (DMS.MacawExt arch)],
+    -- | Signature and Handle information for defined CFGs, for linking
     crExportedHandles :: [(String,STC.SomeHandle arch)]
 }
 
@@ -83,7 +95,7 @@ data SomeWrappedOverride arch = forall args ret . SomeWrappedOverride(WrappedOve
 data WrappedOverride arch args ret = WrappedOverride (forall sym bak solver scope st fs p . (bak ~ LCBO.OnlineBackend solver scope st fs, LCB.HasSymInterface sym bak, WI.IsExprBuilder sym) =>
     bak -> LCS.Override p sym (DMS.MacawExt arch) (STC.ArchTypeMatchCtx arch args) (STC.ArchTypeMatch arch ret)) (StubHandle arch args ret)
 
--- Unexported Internal Function
+-- Unexported Internal Function. A mix of returing Atoms vs Expr causes this hierarchy to be necessary
 translateExpr' :: forall arch s ret b sret args . (b ~ ArchTypeMatch arch sret, LCCE.IsSyntaxExtension(DMS.MacawExt arch), STC.StubsArch arch) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Atom s b)
 translateExpr' e = do
     regMap <- gets stRegMap
@@ -91,15 +103,16 @@ translateExpr' e = do
     env <- gets stStubsenv
     case e of
         SA.VarLit v -> case MapF.lookup v regMap of
-            Just (StubReg reg _) -> do
+            Just (StubReg reg _) -> do 
                 t <- LCCG.readReg reg
                 LCCG.mkAtom t
-            Nothing -> error "Undefined VarLit encountered"
+            Nothing -> error "Undefined VarLit encountered" -- Occurs if an expression uses a variable not previously defined. Could be made unreachable by a parser. 
         SA.ArgLit (SA.StubsArg i ty) -> do
             case Ctx.intIndex i (Ctx.size argmap) of
                 Nothing -> fail $ "Argument index out of bounds" ++ show i
                 Just (Some idx) -> do
                     StubAtom a sty <- return $ argmap Ctx.! idx
+                    -- Crucible type equality: needed in presence of opaque types
                     cty <- runReaderT (toCrucibleTy ty) env 
                     csty <- runReaderT (toCrucibleTy sty) env
                     Just P.Refl <- return $ P.testEquality cty csty
@@ -121,7 +134,7 @@ translateExpr' e = do
                     let t = LCCR.App $ LCCE.HandleLit h
                     ccall <- LCCG.call t cex
                     LCCG.mkAtom ccall
-                Nothing -> fail $ "call to unknown function: " ++ f
+                Nothing -> fail $ "call to unknown function: " ++ f -- Top level translation prevents this, but invoking something more internal could cause this
         _ -> do
             ce <- translateExpr'' e
             LCCG.mkAtom ce
@@ -134,16 +147,18 @@ translateExpr' e = do
                 SA.ArgLit _ -> error "internal translateExpr called on ArgLit"
                 SA.AppExpr {} -> error "internal translateExpr called on AppExpr"
 
+-- | Translate a single StubsExpr
 translateExpr  :: forall arch s ret b sret ext args . (b ~ ArchTypeMatch arch sret, ext ~ DMS.MacawExt arch, LCCE.IsSyntaxExtension ext, STC.StubsArch arch) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s b)
 translateExpr e = do
     cache <- gets stAtomCache
-    case MapF.lookup e cache of
+    case MapF.lookup e cache of -- only translate exprs once, when possible
         Nothing -> do
             t <- translateExpr' e
             updateCache (MapF.insert e (StubAtom t (SA.stubsExprToTy e)))
             return $ LCCG.AtomExpr t
         Just (StubAtom t _) -> return $ LCCG.AtomExpr t
 
+-- | Translate an Assignment of StubExpr, mostly for use in function argument translation
 translateExprs :: (cctx ~ ArchTypeMatchCtx arch ctx, STC.StubsArch arch) => Ctx.Assignment SA.StubsExpr ctx -> StubsM arch s args ret (Ctx.Assignment (LCCR.Expr (DMS.MacawExt arch) s) cctx)
 translateExprs eAssign = case elist of
     Ctx.AssignEmpty -> return Ctx.empty
@@ -159,12 +174,14 @@ updateRegs f = modify $ \s -> s {stRegMap = f (stRegMap s)}
 updateCache :: (MapF.MapF SA.StubsExpr (StubAtom arch s) -> MapF.MapF SA.StubsExpr (StubAtom arch s)) -> StubsM arch s args ret ()
 updateCache f = modify $ \s -> s {stAtomCache = f (stAtomCache s)}
 
+-- | Translate a single StubsStmt
 translateStmt :: forall arch s ret args . (STC.StubsArch arch) => SA.StubsStmt  -> StubsM arch s args (ArchTypeMatch arch ret) ()
 translateStmt stmt = withReturn $ \retty -> do
     regMap <- gets stRegMap
     env <- gets stStubsenv
     case stmt of
         SA.Return e -> do
+            -- Crucible type check, due to opaques
             ecty <- runReaderT (toCrucibleTy (SA.stubsExprToTy e)) env
             rcty <- runReaderT (toCrucibleTy retty) env
             case PN.testEquality rcty ecty of
@@ -175,6 +192,7 @@ translateStmt stmt = withReturn $ \retty -> do
                     LCCG.reportError $  LCCR.App $ LCCE.StringEmpty UnicodeRepr
         SA.Assignment v e -> do
             SA.StubsVar _ vt <- return v
+            -- Crucible type check
             ecty <- runReaderT (toCrucibleTy (SA.stubsExprToTy e)) env
             vcty <- runReaderT (toCrucibleTy vt) env
             case PN.testEquality vcty ecty of 
@@ -194,12 +212,14 @@ translateStmt stmt = withReturn $ \retty -> do
         SA.Loop c body -> do
             LCCG.while (WF.InternalPos, translateExpr c ) (WF.InternalPos, translateStmts @_ @_ @ret body)
 
+-- | Translation of a list of statements, mostly for use in function bodies, loops, and conditionals
 translateStmts :: forall arch s ret args . (STC.StubsArch arch) => [SA.StubsStmt] -> StubsM arch s args (ArchTypeMatch arch ret) ()
 translateStmts [] = return ()
 translateStmts (s:stmts) = do
     _ <- translateStmt @_ @_ @ret s
     translateStmts @_ @_ @ret stmts
 
+-- | Function translation
 translateFn :: forall args ret s arch . (DMS.SymArchConstraints arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch),STC.StubsArch arch) =>
                 PN.NonceGenerator IO s ->
                 LCF.HandleAllocator ->
@@ -209,6 +229,7 @@ translateFn :: forall args ret s arch . (DMS.SymArchConstraints arch, LCCE.IsSyn
                 SA.StubsFunction args ret ->  IO (LCSC.ACFG (DMS.MacawExt arch))
 translateFn ng _ handles hdl aliasMap SA.StubsFunction{SA.stubFnSig=SA.StubsSignature{SA.sigFnArgTys=argtys, SA.sigFnRetTy=retty},SA.stubFnBody=body}= do
     let e = StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) aliasMap
+    -- CFG needs crucible type info
     args <- runReaderT (toCrucibleTyCtx argtys) e
     cret <- runReaderT (toCrucibleTy retty) e
     let StubHandle _ _ handle = hdl
@@ -216,24 +237,31 @@ translateFn ng _ handles hdl aliasMap SA.StubsFunction{SA.stubFnSig=SA.StubsSign
                                                                                                      translateStmts @arch @_ @ret body >> LCCG.reportError (LCCR.App $ LCCE.StringEmpty UnicodeRepr))
     return $ LCSC.ACFG args cret cfg
 
+-- | Translate all declarations from a StubsLibrary
 translateDecls :: forall arch s. (STC.StubsArch arch, SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) =>
         PN.NonceGenerator IO s ->
         LCF.HandleAllocator ->
-        [(String, SomeWrappedOverride arch)] -> -- Override mappings
+        [(String, SomeWrappedOverride arch)] -> -- Override mappings : needed so all modules use the same preamble handles
         [(String, SomeHandle arch)] -> -- Handles for previously translated functions (from modules already processed)
          MapF.MapF P.SymbolRepr STC.WrappedStubsTypeAliasRepr -> -- Alias Map
         [SA.SomeStubsFunction] -> -- Functions to translate 
         IO [(LCSC.ACFG (DMS.MacawExt arch), (String,SomeHandle arch))]
 translateDecls ng hAlloc ovMap prevHdls aliasMap fns = do
+
+    -- get handles for all functions before hand, for linking.
+    -- Handles contain an id nonce, so cannot translate signatures in situ
     hdls <- mapM (\(SA.SomeStubsFunction f) -> do
         let sig = SA.stubFnSig f
         h <- mkHandle @arch hAlloc sig aliasMap
         return (SA.sigFnName sig, SomeHandle @arch (StubHandle @arch (SA.sigFnArgTys sig) (SA.sigFnRetTy sig) h))
         ) fns
 
+    -- Build handle map for preamble linking.
     let preambleHdls = map (\(n,SomeWrappedOverride(WrappedOverride _ s)) -> (n,SomeHandle s)) ovMap
 
     let handles = Map.fromList (preambleHdls++prevHdls++hdls)
+
+    -- Generate CFG for each function
     mapM (\(SA.SomeStubsFunction f) -> do
         let sig = SA.stubFnSig f
         Just (SomeHandle hdl) <- return $ Map.lookup (SA.sigFnName sig) handles
@@ -245,6 +273,7 @@ translateDecls ng hAlloc ovMap prevHdls aliasMap fns = do
             _ -> fail "Should not occur: Translating undefined function"
         ) fns
 
+-- | Translate a single StubsLibrary
 translateLibrary :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) =>
             PN.NonceGenerator IO s ->
             LCF.HandleAllocator ->
@@ -259,7 +288,8 @@ translateLibrary ng halloc ovMap prevHdls aliasMap lib = do
         crExportedHandles=map snd cfghdls
     }
 
-
+-- | Translation of an entire StubsProgram. This is the core entry point for translation, and includes 
+-- module graph resolution, for externs in each library
 translateProgram :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> SA.StubsProgram -> IO (CrucibleProgram arch)
 translateProgram ng halloc prog = do
 

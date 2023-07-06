@@ -3,15 +3,19 @@
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
 
+{-|
+Description: Definition of Preamble requirements
+
+This module defines a typeclass enforcing that architectures must define a preambleMap, which 
+maps signatures into overrides. The Stubs level preamble signatures are also defined in this place. 
+An architecture is expected to define a mapping for these signatures.
+-}
 module Stubs.Preamble where
 
 import qualified Data.Macaw.Symbolic as DMS
@@ -23,11 +27,14 @@ import qualified Lang.Crucible.Simulator as LCS
 import qualified Stubs.AST as SA
 import qualified Stubs.Translate.Core as STC
 
+-- | Typeclass for Preamble mapping 
+-- An architecture must define a mapping from signatures into functions to construct an override given a solver backend.
 class (DMS.SymArchConstraints arch) => Preamble arch where 
     preambleMap :: (bak ~ LCBO.OnlineBackend solver scope st fs,WI.IsExprBuilder sym, LCB.HasSymInterface sym bak) => 
                SA.StubsSignature args ret -> 
                (bak -> LCS.Override p sym ext (STC.ArchTypeMatchCtx arch args) (STC.ArchTypeMatch arch ret)) 
 
+-- | Signatures expected to be defined by the Preamble instance
 stubsPreamble :: [SA.SomeStubsSignature]
 stubsPreamble = [
     SA.SomeStubsSignature(SA.StubsSignature "plus" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr),

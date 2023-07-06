@@ -8,7 +8,13 @@
 {-# LANGUAGE ImpredicativeTypes#-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE LambdaCase #-}
+{-|
+Description: Core definitions for the Stubs Language's AST
 
+This module contains core definitions for the Stubs Language's AST,
+notably the types, reprs, statements, expressions, function definitions, module/library structures, and overall program definition.
+Various instances and helper functions for manipulating these types are also present.
+-}
 module Stubs.AST (
     StubsType(..),
     StubsTypeRepr(..),
@@ -38,15 +44,19 @@ import Data.Parameterized.TH.GADT
 import GHC.TypeLits
 import qualified Data.Set as Set
 
+-- | The valid types in the Stubs Language 
 data StubsType where
-    StubsInt :: StubsType
+    -- | Basic Integer type
+    StubsInt :: StubsType 
     StubsUnit :: StubsType
     StubsBool :: StubsType
-    StubsUInt :: StubsType -- unsigned integer
+    -- | Unsigned Integer
+    StubsUInt :: StubsType  
     StubsLong :: StubsType
     StubsShort :: StubsType
     StubsUShort :: StubsType
     StubsULong :: StubsType
+    -- | Opaque type
     StubsAlias :: Symbol -> StubsType
 
 type StubsInt = 'StubsInt
@@ -58,6 +68,7 @@ type StubsShort = 'StubsShort
 type StubsULong = 'StubsULong
 type StubsUShort = 'StubsUShort
 
+-- | Value-level type representations of StubsType
 data StubsTypeRepr a where
     StubsIntRepr :: StubsTypeRepr StubsInt
     StubsUnitRepr :: StubsTypeRepr StubsUnit
@@ -109,12 +120,14 @@ instance TestEquality StubsTypeRepr where
         EQF -> Just Refl
         _ -> Nothing
 
+-- | Statement definitions, such as loops, returns, or variable assignment
 data StubsStmt where
     Assignment :: StubsVar a -> StubsExpr b -> StubsStmt
     Loop :: StubsExpr StubsBool -> [StubsStmt] -> StubsStmt
     ITE :: StubsExpr StubsBool -> [StubsStmt]-> [StubsStmt]  -> StubsStmt
     Return :: StubsExpr a -> StubsStmt
 
+-- | Stubs Function Signature
 data StubsSignature (args::Ctx.Ctx StubsType) (ret::StubsType) = StubsSignature {
     sigFnName :: String,
     sigFnArgTys :: Ctx.Assignment StubsTypeRepr args,
@@ -124,6 +137,7 @@ data StubsSignature (args::Ctx.Ctx StubsType) (ret::StubsType) = StubsSignature 
 instance Show (StubsSignature args ret) where 
     show (StubsSignature n a r) = n ++ show a ++":"++ show r
 
+-- | A Signature, with type parameters hidden, allowing a list of signatures with different type parameters
 data SomeStubsSignature = forall a b . SomeStubsSignature(StubsSignature a b) 
 
 instance Show SomeStubsSignature where 
@@ -149,12 +163,15 @@ instance Ord SomeStubsSignature where
             LTF -> LT 
             GTF -> GT
 
+-- | A Stubs function, consisting of a signature, and a list of statements comprising the body.
 data StubsFunction (args::Ctx.Ctx StubsType) (ret::StubsType) = StubsFunction {
     stubFnSig :: StubsSignature args ret,
     stubFnBody :: [StubsStmt]
 }
+
 data SomeStubsFunction = forall a b . SomeStubsFunction(StubsFunction a b)
 
+-- | A variable, which has a name, as well as its type, for typechecking.
 data StubsVar (a::StubsType) = StubsVar {
     varName::String,
     varType::StubsTypeRepr a
@@ -168,6 +185,7 @@ instance TestEquality StubsVar where
         EQF -> Just Refl
         _ -> Nothing
 
+-- | An argument. This includes its type for typechecking, and its index into the signature (checked during translation)
 data StubsArg (a::StubsType) = StubsArg {
     argIdx::Int,
     argType::StubsTypeRepr a
@@ -181,6 +199,7 @@ instance TestEquality StubsArg where
         EQF -> Just Refl
         _ -> Nothing
 
+-- | Literals in the Stubs Language. These are separate from the expression definition, as each architecture defines a translation for literals.
 data StubsLit (a::StubsType) where
     IntLit :: Integer -> StubsLit StubsInt
     UnitLit :: StubsLit StubsUnit
@@ -191,7 +210,8 @@ data StubsLit (a::StubsType) where
     UShortLit :: Natural -> StubsLit StubsUShort
     BoolLit :: Bool -> StubsLit StubsBool
 
-
+-- | Expression definition. Note that most interesting code is expressed through function calls, where primitive operations are defined as preamble functions.  
+-- See Stubs.Preamble for more on this.
 data StubsExpr (a::StubsType) where
     LitExpr :: StubsLit a -> StubsExpr a
     VarLit :: StubsVar a-> StubsExpr a
@@ -228,14 +248,21 @@ instance TestEquality StubsExpr where
         EQF -> Just Refl
         _ -> Nothing
 
+-- | A declaration of an opaque type. During translation this is erased, as a linked program has no concept of opaqueness
 data StubsTyDecl s a = StubsTyDecl (P.SymbolRepr s) (StubsTypeRepr a)
+-- | A wrapped type declaration. A compilation unit includes a list of these, representing opaque types defined in the module
 data SomeStubsTyDecl = forall s a . SomeStubsTyDecl (StubsTyDecl s a)
 
+-- | A StubsLibrary represents a single compilation unit in the Stubs language.
 data StubsLibrary = StubsLibrary {
     libName :: String,
+    -- ^ Name for the libary / module
     fnDecls :: [SomeStubsFunction],
+    -- ^ Function declarations
     externSigs :: [SomeStubsSignature],
+    -- ^ External functions required by the library, necessary for linking 
     tyDecls :: [SomeStubsTyDecl]
+    -- ^ Opaque type definitions
 }
 
 -- Note: These instances do not give complete equality checking, this is needed for Ord for using a map
@@ -250,11 +277,13 @@ instance Eq StubsLibrary where
 instance Ord StubsLibrary where
     compare a b = if a == b then EQ else compare (libName a) (libName b)
 
+-- | A complete Stubs program, consisting of several modules and an entry point
 data StubsProgram = StubsProgram {
     stubsLibs :: [StubsLibrary],
     stubsMain::String
 }
 
+-- | Retrieve the type of an expression
 stubsExprToTy :: StubsExpr a -> StubsTypeRepr a
 stubsExprToTy e = case e of
     LitExpr(IntLit _) ->StubsIntRepr
@@ -269,6 +298,7 @@ stubsExprToTy e = case e of
     ArgLit a -> argType a
     AppExpr _ _ r -> r
 
+-- | Retrieve types of a list of expressions
 stubsAssignmentToTys :: Ctx.Assignment StubsExpr ctx -> Ctx.Assignment StubsTypeRepr ctx
 stubsAssignmentToTys assign = case alist of
     Ctx.AssignEmpty -> Ctx.empty
@@ -277,6 +307,7 @@ stubsAssignmentToTys assign = case alist of
     where
         alist = Ctx.viewAssign assign
 
+-- | Extract signatures for all functions declared in a library
 stubsLibDefs :: StubsLibrary -> [SomeStubsSignature]
 stubsLibDefs lib = map (\(SomeStubsFunction f) -> SomeStubsSignature (stubFnSig f)) (fnDecls lib)
 
@@ -304,5 +335,6 @@ extractSigsStmts = concatMap (\case
             Ctx.AssignExtend a b -> (extractSigExpr b) ++ (extractSigExprs a)
             where alist = Ctx.viewAssign assign
 
+-- | Smart constructor for StubsLibrary, which generates the external signature list from the declarations
 mkStubsLibrary :: String -> [SomeStubsFunction] -> [SomeStubsTyDecl] -> StubsLibrary
 mkStubsLibrary name fns tys = StubsLibrary{libName=name,fnDecls=fns,externSigs=extractLibDeps fns,tyDecls=tys}

@@ -7,6 +7,8 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
+
+-- Reusable parameterized override definitions
 module Stubs.Preamble.Common (
     arithBinOverride,
     cmpBinOverride,

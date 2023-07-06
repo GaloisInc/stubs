@@ -9,6 +9,9 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-|
+Description: Preamble Instance for X86_64
+-}
 module Stubs.Preamble.X86() where
 import qualified Stubs.AST as SA
 import qualified Data.Macaw.X86 as DMX
