@@ -283,7 +283,6 @@ translateProgram ng halloc prog = do
 
     -- Collect aliases/opaques
     let tyMap = foldr (\(SA.SomeStubsTyDecl (SA.StubsTyDecl s t)) acc -> MapF.insert s (STC.coerceToAlias s t) acc) MapF.empty ( concatMap SA.tyDecls libs)
-    print tyMap
 
     -- Topological sort of module/lib graph
     let dependencyList = map (\ lib -> (lib,filter (\olib -> not $ List.null $ List.intersect (stubsLibDefs olib) (SA.externSigs lib))

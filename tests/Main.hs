@@ -402,7 +402,6 @@ genTestCaseIO iprog check tag = testCase tag $ do
     hAlloc <- LCF.newHandleAllocator
     sprog <- iprog
     prog <- ST.translateProgram @DMX.X86_64 ng hAlloc sprog
-    print (ST.crCFGs prog)
     case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
         Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
         Just (LCSC.ACFG _ ret icfg) -> do
