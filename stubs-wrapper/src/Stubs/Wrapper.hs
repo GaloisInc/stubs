@@ -56,12 +56,12 @@ crucibleProgToParsedProg ST.CrucibleProgram{ST.crCFGs=cfgs, ST.crGlobals= glbls,
   LCSC.parsedProgGlobals=glbls
 }
 
-stubsProgramToOverride :: forall ext p sym arch. (ext ~ DMS.MacawExt arch, STC.StubsArch arch, SPR.Preamble arch) => SA.StubsProgram -> IO (SF.SomeFunctionOverride p sym arch)
+stubsProgramToOverride :: forall ext p sym arch. (ext ~ DMS.MacawExt arch, STC.StubsArch arch, SPR.Preamble arch) => SA.StubsProgram -> IO [SF.SomeFunctionOverride p sym arch]
 stubsProgramToOverride prog = do 
   hAlloc <- LCF.newHandleAllocator
   Some ng <- PN.newIONonceGenerator
-  crucProg <- ST.translateProgram ng hAlloc prog
-  parsedProgToFunctionOverride (ST.crEntry crucProg) (crucibleProgToParsedProg crucProg)
+  crucProgs <- ST.translateProgram ng hAlloc prog
+  mapM (\crucProg -> parsedProgToFunctionOverride (ST.crEntry crucProg) (crucibleProgToParsedProg crucProg)) crucProgs
 
 loadStubsPrograms :: forall ext p sym arch w . (ext ~ DMS.MacawExt arch, STC.StubsArch arch,SPR.Preamble arch) => [SA.StubsProgram] -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
 loadStubsPrograms progs = do 
@@ -69,7 +69,7 @@ loadStubsPrograms progs = do
   return SFT.CrucibleSyntaxOverrides {
     SFT.csoAddressOverrides = Map.empty
     , SFT.csoStartupOverrides = []
-    , SFT.csoNamedOverrides = overrides
+    , SFT.csoNamedOverrides = concat overrides
   }
 
 

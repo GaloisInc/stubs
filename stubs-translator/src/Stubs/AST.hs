@@ -27,10 +27,13 @@ module Stubs.AST (
     StubsArg(..),
     StubsLit(..),
     StubsVar(..),
+    CrucibleVar(..),
     StubsLibrary(..),
     StubsProgram(..),
     SomeStubsTyDecl(..),
     StubsTyDecl(..),
+    StubsGlobalDecl(..),
+    SomeStubsGlobalDecl(..),
     ResolveAlias,
     stubsLibDefs,
     mkStubsLibrary,
@@ -43,6 +46,7 @@ import Data.Parameterized.Context as Ctx
 import Data.Parameterized.TH.GADT
 import GHC.TypeLits
 import qualified Data.Set as Set
+import qualified Lang.Crucible.Types as LCT
 
 -- | The valid types in the Stubs Language 
 data StubsType where
@@ -123,6 +127,8 @@ instance TestEquality StubsTypeRepr where
 -- | Statement definitions, such as loops, returns, or variable assignment
 data StubsStmt where
     Assignment :: StubsVar a -> StubsExpr b -> StubsStmt
+    -- GlobalAssignment translates differently, as global variables are stored differently
+    GlobalAssignment :: StubsVar a -> StubsExpr b -> StubsStmt 
     Loop :: StubsExpr StubsBool -> [StubsStmt] -> StubsStmt
     ITE :: StubsExpr StubsBool -> [StubsStmt]-> [StubsStmt]  -> StubsStmt
     Return :: StubsExpr a -> StubsStmt
@@ -185,6 +191,19 @@ instance TestEquality StubsVar where
         EQF -> Just Refl
         _ -> Nothing
 
+data CrucibleVar (tp::LCT.CrucibleType) = CrucibleVar {
+    cvarName::String,
+    cvarType::LCT.TypeRepr tp
+}
+
+instance OrdF CrucibleVar where
+    compareF v1 v2 = lexCompareF (cvarType v1) (cvarType v2) (fromOrdering (compare (cvarName v1) (cvarName v2)))
+
+instance TestEquality CrucibleVar where
+    testEquality v1 v2 = case compareF v1 v2 of
+        EQF -> Just Refl
+        _ -> Nothing
+
 -- | An argument. This includes its type for typechecking, and its index into the signature (checked during translation)
 data StubsArg (a::StubsType) = StubsArg {
     argIdx::Int,
@@ -215,6 +234,7 @@ data StubsLit (a::StubsType) where
 data StubsExpr (a::StubsType) where
     LitExpr :: StubsLit a -> StubsExpr a
     VarLit :: StubsVar a-> StubsExpr a
+    GlobalVarLit :: StubsVar a -> StubsExpr a
     ArgLit :: StubsArg a -> StubsExpr a
     --TupleExpr :: Ctx.Assignment StubsExpr ctx -> StubsExpr (StubsTuple ctx)
     AppExpr :: String -> Ctx.Assignment StubsExpr args -> StubsTypeRepr a -> StubsExpr a
@@ -253,6 +273,10 @@ data StubsTyDecl s a = StubsTyDecl (P.SymbolRepr s) (StubsTypeRepr a)
 -- | A wrapped type declaration. A compilation unit includes a list of these, representing opaque types defined in the module
 data SomeStubsTyDecl = forall s a . SomeStubsTyDecl (StubsTyDecl s a)
 
+data StubsGlobalDecl a = StubsGlobalDecl String (StubsTypeRepr a)
+
+data SomeStubsGlobalDecl = forall a . SomeStubsGlobalDecl (StubsGlobalDecl a)
+
 -- | A StubsLibrary represents a single compilation unit in the Stubs language.
 data StubsLibrary = StubsLibrary {
     libName :: String,
@@ -261,8 +285,10 @@ data StubsLibrary = StubsLibrary {
     -- ^ Function declarations
     externSigs :: [SomeStubsSignature],
     -- ^ External functions required by the library, necessary for linking 
-    tyDecls :: [SomeStubsTyDecl]
+    tyDecls :: [SomeStubsTyDecl],
     -- ^ Opaque type definitions
+    globalDecls :: [SomeStubsGlobalDecl]
+    -- ^ Declarations of global data
 }
 
 -- Note: These instances do not give complete equality checking, this is needed for Ord for using a map
@@ -280,7 +306,7 @@ instance Ord StubsLibrary where
 -- | A complete Stubs program, consisting of several modules and an entry point
 data StubsProgram = StubsProgram {
     stubsLibs :: [StubsLibrary],
-    stubsMain::String
+    stubsEntryPoints::[String]
 }
 
 -- | Retrieve the type of an expression
@@ -295,6 +321,7 @@ stubsExprToTy e = case e of
     LitExpr(ULongLit _) -> StubsULongRepr
     LitExpr(UShortLit _) -> StubsUShortRepr
     VarLit v -> varType v
+    GlobalVarLit v -> varType v
     ArgLit a -> argType a
     AppExpr _ _ r -> r
 
@@ -321,9 +348,11 @@ extractLibDeps fns =
 extractSigsStmts :: [StubsStmt] -> [SomeStubsSignature]
 extractSigsStmts = concatMap (\case
             Assignment _ e -> extractSigExpr e
+            GlobalAssignment _ e -> extractSigExpr e
             Loop cond body -> extractSigExpr cond ++ extractSigsStmts body
             Return e -> extractSigExpr e
             ITE cond t e -> extractSigExpr cond ++ extractSigsStmts t ++ extractSigsStmts e
+
     )
     where
         extractSigExpr (AppExpr f args ret) = SomeStubsSignature (StubsSignature f (stubsAssignmentToTys args) ret) : extractSigExprs args
@@ -336,5 +365,5 @@ extractSigsStmts = concatMap (\case
             where alist = Ctx.viewAssign assign
 
 -- | Smart constructor for StubsLibrary, which generates the external signature list from the declarations
-mkStubsLibrary :: String -> [SomeStubsFunction] -> [SomeStubsTyDecl] -> StubsLibrary
-mkStubsLibrary name fns tys = StubsLibrary{libName=name,fnDecls=fns,externSigs=extractLibDeps fns,tyDecls=tys}
+mkStubsLibrary :: String -> [SomeStubsFunction] -> [SomeStubsTyDecl] ->  [SomeStubsGlobalDecl] -> StubsLibrary
+mkStubsLibrary name fns tys globals = StubsLibrary{libName=name,fnDecls=fns,externSigs=extractLibDeps fns,tyDecls=tys, globalDecls=globals}

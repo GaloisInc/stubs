@@ -37,6 +37,8 @@ import qualified Stubs.AST as SA
 import GHC.TypeNats (Nat, KnownNat)
 import qualified Data.Parameterized as P
 import Unsafe.Coerce (unsafeCoerce)
+import qualified Lang.Crucible.FunctionHandle as LCCR
+import qualified Lang.Crucible.CFG.Common as LCCC
 
 -- | Type family to map a list of Stubs types to a corresponding list of Crucible types
 type family ArchTypeMatchCtx (arch :: *) (stubTy :: Ctx SA.StubsType) = (crucTy :: Ctx LCT.CrucibleType) where
@@ -72,13 +74,15 @@ data StubsState arch ret args s = forall ret2 . (ret ~ ArchTypeMatch arch ret2) 
     -- | Return type of the current function being translated
     stRetRepr::SA.StubsTypeRepr ret2,
     -- | Map of variables in scope to registers
-    stRegMap::MapF.MapF SA.StubsVar (StubReg arch s), --TODO: this will have dynamic scoping if left as is
+    stRegMap::MapF.MapF SA.CrucibleVar (CrucReg arch s), --TODO: this will have dynamic scoping if left as is
     -- | Cache of expressions already made into atoms
     stAtomCache::MapF.MapF SA.StubsExpr (StubAtom arch s),
     -- | Parameter Atoms 
     stParams :: Ctx.Assignment (StubAtom arch s) args,
     -- | Functions defined in program
-    stFns :: Map.Map String (SomeHandle arch)
+    stFns :: Map.Map String (SomeHandle arch),
+
+    stRefMap :: MapF.MapF SA.CrucibleVar (CrucibleGlobal arch)
 }
 
 -- | Map Assignment of StubsTypeRepr into matching Crucible reprs
@@ -94,7 +98,7 @@ toCrucibleTyCtx assign = case alist of
 
 withReturn :: (forall ret2 . ret ~ ArchTypeMatch arch ret2 =>  SA.StubsTypeRepr ret2 -> StubsM arch s args ret a ) -> StubsM arch s args ret a
 withReturn f = do
-    StubsState _ retrepr _ _ _ _ <- get
+    StubsState _ retrepr _ _ _ _ _ <- get
     f retrepr
 
 -- | A symbol (representing an opaque type), alongside a type repr that will be resolved during translation
@@ -131,10 +135,13 @@ instance HasStubsEnv arch (ReaderT (StubsEnv arch) (LCCG.Generator (DMS.MacawExt
 
 -- Common Pattern: Stub equivalent to Crucible type, so that type checking can be done at the stub level (arch-independent)
 
--- | A Crucible register with the corresponding StubsTypeRepr
-data StubReg arch s (a::SA.StubsType) = forall tp. (tp ~ ArchTypeMatch arch a) => StubReg (LCCR.Reg s tp) (SA.StubsTypeRepr a)
+-- | A Crucible register with the corresponding TypeRepr
+data CrucReg arch s (tp::LCT.CrucibleType) = CrucReg (LCCR.Reg s tp) (LCT.TypeRepr tp)
 -- | A Crucible atom with the corresponding StubsTypeRepr
 data StubAtom arch s (a::SA.StubsType) = forall tp . (tp ~ ArchTypeMatch arch a) => StubAtom (LCCR.Atom s tp) (SA.StubsTypeRepr a)
+
+-- | A Crucible GlobalVar with its corresponding TypeRepr
+data CrucibleGlobal arch (a::LCT.CrucibleType) = CrucibleGlobal (LCCC.GlobalVar a) (LCT.TypeRepr a)
 
 -- | A function handle, wrapped with the corresponding Stubs type information
 data StubHandle arch (a::Ctx SA.StubsType) (r::SA.StubsType) = forall args ret . (args ~ ArchTypeMatchCtx arch a, ret ~ ArchTypeMatch arch r) => StubHandle (Ctx.Assignment SA.StubsTypeRepr a) (SA.StubsTypeRepr r) (LCF.FnHandle args ret)

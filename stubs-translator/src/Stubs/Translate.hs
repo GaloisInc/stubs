@@ -101,19 +101,29 @@ translateExpr' e = do
     regMap <- gets stRegMap
     argmap <- gets stParams
     env <- gets stStubsenv
+    refMap <- gets stRefMap
     case e of
-        SA.VarLit v -> case MapF.lookup v regMap of
-            Just (StubReg reg _) -> do 
-                t <- LCCG.readReg reg
-                LCCG.mkAtom t
-            Nothing -> error "Undefined VarLit encountered" -- Occurs if an expression uses a variable not previously defined. Could be made unreachable by a parser. 
+        SA.VarLit (SA.StubsVar n vt) -> do 
+            vcty <- runReaderT (toCrucibleTy vt) env
+            case MapF.lookup (SA.CrucibleVar n vcty) regMap of
+                Just (CrucReg reg _) -> do
+                    t <- LCCG.readReg reg
+                    LCCG.mkAtom t
+                Nothing -> fail "Undefined VarLit encountered" -- Occurs if an expression uses a variable not previously defined. Could be made unreachable by a parser. 
+        SA.GlobalVarLit (SA.StubsVar n vt) -> do 
+            vcty <- runReaderT (toCrucibleTy vt) env
+            case MapF.lookup (SA.CrucibleVar n vcty) refMap of
+                Just (CrucibleGlobal globVar _) -> do
+                    t <- LCCG.readGlobal globVar
+                    LCCG.mkAtom t
+                Nothing -> fail "Undefined GlobalVarLit encountered"
         SA.ArgLit (SA.StubsArg i ty) -> do
             case Ctx.intIndex i (Ctx.size argmap) of
                 Nothing -> fail $ "Argument index out of bounds" ++ show i
                 Just (Some idx) -> do
                     StubAtom a sty <- return $ argmap Ctx.! idx
                     -- Crucible type equality: needed in presence of opaque types
-                    cty <- runReaderT (toCrucibleTy ty) env 
+                    cty <- runReaderT (toCrucibleTy ty) env
                     csty <- runReaderT (toCrucibleTy sty) env
                     Just P.Refl <- return $ P.testEquality cty csty
                     return a
@@ -143,9 +153,11 @@ translateExpr' e = do
         translateExpr'' e' = do
             case e' of
                 SA.LitExpr l -> return $ STC.translateLit l
-                SA.VarLit _ -> error "internal translateExpr called on VarLit"
-                SA.ArgLit _ -> error "internal translateExpr called on ArgLit"
-                SA.AppExpr {} -> error "internal translateExpr called on AppExpr"
+                -- These should never happen, exist to satisfy match warning
+                SA.VarLit _ -> fail "internal translateExpr called on VarLit"
+                SA.ArgLit _ -> fail "internal translateExpr called on ArgLit"
+                SA.AppExpr {} -> fail "internal translateExpr called on AppExpr"
+                SA.GlobalVarLit _ -> fail "internal translateExpr called on GlobalVarLit"
 
 -- | Translate a single StubsExpr
 translateExpr  :: forall arch s ret b sret ext args . (b ~ ArchTypeMatch arch sret, ext ~ DMS.MacawExt arch, LCCE.IsSyntaxExtension ext, STC.StubsArch arch) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s b)
@@ -154,7 +166,7 @@ translateExpr e = do
     case MapF.lookup e cache of -- only translate exprs once, when possible
         Nothing -> do
             t <- translateExpr' e
-            updateCache (MapF.insert e (StubAtom t (SA.stubsExprToTy e)))
+            --updateCache (MapF.insert e (StubAtom t (SA.stubsExprToTy e)))
             return $ LCCG.AtomExpr t
         Just (StubAtom t _) -> return $ LCCG.AtomExpr t
 
@@ -168,7 +180,7 @@ translateExprs eAssign = case elist of
         return $ Ctx.extend er' e'
     where elist = Ctx.viewAssign eAssign
 
-updateRegs :: (MapF.MapF SA.StubsVar (StubReg arch s) -> MapF.MapF SA.StubsVar (StubReg arch s)) -> StubsM arch s args ret ()
+updateRegs :: (MapF.MapF SA.CrucibleVar (CrucReg arch s) -> MapF.MapF SA.CrucibleVar (CrucReg arch s)) -> StubsM arch s args ret ()
 updateRegs f = modify $ \s -> s {stRegMap = f (stRegMap s)}
 
 updateCache :: (MapF.MapF SA.StubsExpr (StubAtom arch s) -> MapF.MapF SA.StubsExpr (StubAtom arch s)) -> StubsM arch s args ret ()
@@ -179,6 +191,7 @@ translateStmt :: forall arch s ret args . (STC.StubsArch arch) => SA.StubsStmt  
 translateStmt stmt = withReturn $ \retty -> do
     regMap <- gets stRegMap
     env <- gets stStubsenv
+    refMap <- gets stRefMap
     case stmt of
         SA.Return e -> do
             -- Crucible type check, due to opaques
@@ -191,19 +204,33 @@ translateStmt stmt = withReturn $ \retty -> do
                 Nothing -> do
                     LCCG.reportError $  LCCR.App $ LCCE.StringEmpty UnicodeRepr
         SA.Assignment v e -> do
-            SA.StubsVar _ vt <- return v
+            SA.StubsVar n vt <- return v
             -- Crucible type check
             ecty <- runReaderT (toCrucibleTy (SA.stubsExprToTy e)) env
             vcty <- runReaderT (toCrucibleTy vt) env
-            case PN.testEquality vcty ecty of 
-                Just PN.Refl -> do  
+            case PN.testEquality vcty ecty of
+                Just PN.Refl -> do
                             ce <- translateExpr e
-                            case MapF.lookup v regMap of -- Is v in scope already?
+                            let cvar= SA.CrucibleVar n vcty
+                            case MapF.lookup cvar regMap of -- Is v in scope already?
                                 Nothing -> do
                                     reg <- LCCG.newReg ce
-                                    updateRegs (MapF.insert v (StubReg reg (SA.varType v)))
-                                Just (StubReg reg _) -> do
+                                    updateRegs (MapF.insert cvar (CrucReg reg (SA.cvarType cvar)))
+                                Just (CrucReg reg _) -> do
                                     _ <- LCCG.assignReg reg ce
+                                    return ()
+                _ -> fail $ "Type mismatch - Expected: " ++ show vt ++ " Actual: " ++ show (SA.stubsExprToTy e)
+        SA.GlobalAssignment v e -> do 
+            SA.StubsVar n vt <- return v
+            ecty <- runReaderT (toCrucibleTy (SA.stubsExprToTy e)) env
+            vcty <- runReaderT (toCrucibleTy vt) env
+            case PN.testEquality vcty ecty of
+                Just PN.Refl -> do
+                            ce <- translateExpr e
+                            case MapF.lookup (SA.CrucibleVar n vcty) refMap of -- Is v defined?
+                                Nothing -> fail ("Assignment to nonexistent global: " ++ n)
+                                Just (CrucibleGlobal globVar _) -> do
+                                    _ <- LCCG.writeGlobal globVar ce
                                     return ()
                 _ -> fail $ "Type mismatch - Expected: " ++ show vt ++ " Actual: " ++ show (SA.stubsExprToTy e)
         SA.ITE c t e -> do
@@ -226,14 +253,15 @@ translateFn :: forall args ret s arch . (DMS.SymArchConstraints arch, LCCE.IsSyn
                 Map.Map String (SomeHandle arch )->
                 StubHandle arch args ret ->
                 MapF.MapF P.SymbolRepr STC.WrappedStubsTypeAliasRepr ->
+                MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
                 SA.StubsFunction args ret ->  IO (LCSC.ACFG (DMS.MacawExt arch))
-translateFn ng _ handles hdl aliasMap SA.StubsFunction{SA.stubFnSig=SA.StubsSignature{SA.sigFnArgTys=argtys, SA.sigFnRetTy=retty},SA.stubFnBody=body}= do
+translateFn ng _ handles hdl aliasMap gmap SA.StubsFunction{SA.stubFnSig=SA.StubsSignature{SA.sigFnArgTys=argtys, SA.sigFnRetTy=retty},SA.stubFnBody=body}= do
     let e = StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) aliasMap
     -- CFG needs crucible type info
     args <- runReaderT (toCrucibleTyCtx argtys) e
     cret <- runReaderT (toCrucibleTy retty) e
     let StubHandle _ _ handle = hdl
-    (LCCR.SomeCFG cfg, _) <- liftIO $ LCCG.defineFunction WF.InternalPos (Some ng) handle $ \crucArgs -> (StubsState e retty MapF.empty MapF.empty (translateFnArgs crucArgs argtys) handles,
+    (LCCR.SomeCFG cfg, _) <- liftIO $ LCCG.defineFunction WF.InternalPos (Some ng) handle $ \crucArgs -> (StubsState e retty MapF.empty MapF.empty (translateFnArgs crucArgs argtys) handles gmap,
                                                                                                      translateStmts @arch @_ @ret body >> LCCG.reportError (LCCR.App $ LCCE.StringEmpty UnicodeRepr))
     return $ LCSC.ACFG args cret cfg
 
@@ -244,9 +272,10 @@ translateDecls :: forall arch s. (STC.StubsArch arch, SPR.Preamble arch, LCCE.Is
         [(String, SomeWrappedOverride arch)] -> -- Override mappings : needed so all modules use the same preamble handles
         [(String, SomeHandle arch)] -> -- Handles for previously translated functions (from modules already processed)
          MapF.MapF P.SymbolRepr STC.WrappedStubsTypeAliasRepr -> -- Alias Map
+        MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
         [SA.SomeStubsFunction] -> -- Functions to translate 
         IO [(LCSC.ACFG (DMS.MacawExt arch), (String,SomeHandle arch))]
-translateDecls ng hAlloc ovMap prevHdls aliasMap fns = do
+translateDecls ng hAlloc ovMap prevHdls aliasMap gmap fns = do
 
     -- get handles for all functions before hand, for linking.
     -- Handles contain an id nonce, so cannot translate signatures in situ
@@ -268,7 +297,7 @@ translateDecls ng hAlloc ovMap prevHdls aliasMap fns = do
         StubHandle args ret _ <- return hdl
         case (P.testEquality ret (SA.sigFnRetTy sig), P.testEquality args $ SA.sigFnArgTys sig) of
             (Just P.Refl, Just P.Refl) -> do
-                t <- translateFn @_ @_ @s @arch ng hAlloc handles hdl aliasMap f
+                t <- translateFn @_ @_ @s @arch ng hAlloc handles hdl aliasMap gmap f
                 return (t,(SA.sigFnName sig,SomeHandle hdl))
             _ -> fail "Should not occur: Translating undefined function"
         ) fns
@@ -280,9 +309,10 @@ translateLibrary :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.
             [(String, SomeWrappedOverride arch)] ->
             [(String, SomeHandle arch)] ->
             MapF.MapF P.SymbolRepr STC.WrappedStubsTypeAliasRepr ->
+            MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
             SA.StubsLibrary -> IO (CrucibleLibrary arch)
-translateLibrary ng halloc ovMap prevHdls aliasMap lib = do
-    cfghdls <- translateDecls ng halloc ovMap prevHdls aliasMap (SA.fnDecls lib)
+translateLibrary ng halloc ovMap prevHdls aliasMap gmap lib = do
+    cfghdls <- translateDecls ng halloc ovMap prevHdls aliasMap gmap (SA.fnDecls lib)
     return CrucibleLibrary {
         crLibCFGs=map fst cfghdls,
         crExportedHandles=map snd cfghdls
@@ -290,7 +320,7 @@ translateLibrary ng halloc ovMap prevHdls aliasMap lib = do
 
 -- | Translation of an entire StubsProgram. This is the core entry point for translation, and includes 
 -- module graph resolution, for externs in each library
-translateProgram :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> SA.StubsProgram -> IO (CrucibleProgram arch)
+translateProgram :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> SA.StubsProgram -> IO [CrucibleProgram arch]
 translateProgram ng halloc prog = do
 
     --Every lib shares the same preamble handles
@@ -328,15 +358,20 @@ translateProgram ng halloc prog = do
     let orderedLibs = map (\v -> case vl v of
             (l,_,_)-> l
             ) $ Graph.topSort $ Graph.transposeG g'
+    --Global variable initialization
+    globalMap <- translateGlobals @arch halloc (STC.StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) tyMap) (concatMap SA.globalDecls libs)
 
+
+    -- Translate libraries
     translatedLibs <- foldM (\ (tlibs,acc) lib -> do
-                translated <- translateLibrary ng halloc ovMap acc tyMap lib
+                translated <- translateLibrary ng halloc ovMap acc tyMap globalMap lib
                 let cfgs = crLibCFGs translated
                 let accHdls = crExportedHandles translated
                 return (cfgs++tlibs,accHdls++acc)
             ) ([],[]) orderedLibs
 
-    return CrucibleProgram{crEntry=SA.stubsMain prog,crFnHandleMap=map snd ovMap, crCFGs=fst translatedLibs,crExterns=mempty, crGlobals=mempty,crFwdDecs=mempty}
+    let crucProgs = map (\s -> CrucibleProgram{crEntry=s,crFnHandleMap=map snd ovMap, crCFGs=fst translatedLibs,crExterns=mempty, crGlobals=mempty,crFwdDecs=mempty }) (SA.stubsEntryPoints prog)
+    return crucProgs
 
 mkHandle :: forall arch args ret . (STC.StubsArch arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCF.HandleAllocator -> SA.StubsSignature args ret -> MapF.MapF P.SymbolRepr STC.WrappedStubsTypeAliasRepr-> IO ( LCF.FnHandle (ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret))
 mkHandle hAlloc fn tyMap = do
@@ -352,3 +387,13 @@ translateFnArgs catoms tys = case (alist,tlist) of
     where
         alist = Ctx.viewAssign catoms
         tlist = Ctx.viewAssign tys
+
+-- Generate global variable ref cells 
+translateGlobals ::forall arch . (STC.StubsArch arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCF.HandleAllocator -> STC.StubsEnv arch -> [SA.SomeStubsGlobalDecl] -> IO (MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch))
+translateGlobals halloc env globals = do
+    foldM (\acc (SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl g ty)) -> do
+            cty <- runReaderT (toCrucibleTy @arch ty) env
+            let v = SA.CrucibleVar g cty
+            gvar <- LCCC.freshGlobalVar halloc (T.pack g) cty
+            return $ MapF.insert v (STC.CrucibleGlobal gvar cty) acc
+            ) MapF.empty globals
