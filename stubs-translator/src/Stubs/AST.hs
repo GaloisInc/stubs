@@ -164,8 +164,10 @@ instance Eq SomeStubsSignature where
 
 instance Ord SomeStubsSignature where
     compare s1 s2 = if s1 == s2 then EQ else case (s1,s2) of
-        ((SomeStubsSignature (StubsSignature _ args1 ret1)),(SomeStubsSignature (StubsSignature _ args2 ret2))) -> case compareF args1 args2 of 
-            EQF -> toOrdering (compareF ret1 ret2)
+        ((SomeStubsSignature (StubsSignature n1 args1 ret1)),(SomeStubsSignature (StubsSignature n2 args2 ret2))) -> case compareF args1 args2 of 
+            EQF -> case toOrdering (compareF ret1 ret2) of 
+                EQ -> compare n1 n2 
+                e -> e
             LTF -> LT 
             GTF -> GT
 

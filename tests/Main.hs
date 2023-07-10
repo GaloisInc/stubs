@@ -15,40 +15,22 @@ module Main ( main ) where
 import Test.Tasty
 import Test.Tasty.HUnit
 
-import qualified Stubs.Loader as SL
 import qualified Stubs.Solver as S
 import Stubs.EntryPoint as SE
 import qualified Stubs.Memory as SM
-import qualified Data.ByteString as B
 import qualified Lang.Crucible.FunctionHandle as LCF
 import qualified Data.Parameterized.Nonce as PN
 import Data.Parameterized.Some
 import qualified Lang.Crucible.Backend as LCB
-import qualified Data.Macaw.Architecture.Info as DMA
 import qualified Data.Macaw.Symbolic as DMS
-import qualified Stubs.FunctionOverride.Extension as SFE
-import qualified Stubs.SymbolicExecution as SVS
-import qualified Stubs.EnvVar as SEnv
-import qualified Lang.Crucible.LLVM.MemModel as LCLM
-import qualified Lumberjack as LJ
-import qualified Stubs.EntryPoint as SEp
-import qualified Stubs.Diagnostic as SD
 import qualified Data.BitVector.Sized as BV
 import Lang.Crucible.Simulator.ExecutionTree
 import Lang.Crucible.Simulator.RegMap (RegEntry(regValue))
 import Control.Lens
-import Data.Macaw.Symbolic (GenArchVals (lookupReg))
 import What4.Interface (asConcrete)
 import What4.Concrete (fromConcreteBV)
-import Stubs.Wrapper
 import Infrastructure as SI
-import qualified Stubs.Parser as SP
 import qualified Data.Parameterized.Context.Unsafe as Ctx
-import qualified Lang.Crucible.CFG.Expr as LCCE
-import Data.Parameterized.Nonce (NonceGenerator)
-import Lang.Crucible.FunctionHandle (HandleAllocator)
-import Data.Macaw.CFG as DMC
-import Stubs.FunctionOverride.Extension.Types as SFT
 import Stubs.AST as SA
 import qualified Stubs.Translate as ST
 
@@ -64,77 +46,7 @@ import qualified What4.Interface as WI
 import qualified Lang.Crucible.Simulator as LCSE
 import qualified Stubs.Preamble as SPR
 import Stubs.Preamble.X86 () --for instance
-import qualified Stubs.Translate.Core as STC
 import Data.Parameterized.SymbolRepr (someSymbol)
-
-logShim:: SD.Diagnostic -> IO ()
-logShim _ = return ()
---Should refactor so as to remove flag later
-pipelineTest :: FilePath -> Bool -> IO (Maybe Integer)
-pipelineTest path parserFlag = do
-    contents <- B.readFile path
-    hAlloc <- LCF.newHandleAllocator
-    let pinst = ProgramInstance{ piPath=path,
-                                 piBinary=contents,
-                                 piFsRoot=Nothing,
-                                 piCommandLineArguments=[],
-                                 piConcreteEnvVars=[],
-                                 piConcreteEnvVarsFromBytes=[],
-                                 piSymbolicEnvVars=[],
-                                 piSolver=S.Z3,
-                                 piFloatMode=S.IEEE,
-                                 piEntryPoint=SE.DefaultEntryPoint,
-                                 piMemoryModel=SM.DefaultMemoryModel,
-                                 piOverrideDir=Just "./tests/test-data/libc-overrides",
-                                 piIterationBound=Nothing,
-                                 piRecursionBound=Nothing,
-                                 piSolverInteractionFile=Nothing,
-                                 piSharedObjectDir=Nothing,
-                                 piLogSymbolicBranches=Nothing,
-                                 piLogFunctionCalls=Nothing
-                                 }
-    let logAction= LJ.LogAction logShim
-    Some ng <- PN.newIONonceGenerator
-    S.withOnlineSolver (piSolver pinst) (piFloatMode pinst) ng $ \bak -> do
-        let sym = LCB.backendGetSym bak
-        (recordFn, _) <- buildRecordLLVMAnnotation
-        let ?recordLLVMAnnotation = recordFn
-        SL.withBinary path contents Nothing hAlloc sym $ \archInfo _ archVals buildSyscallABI buildFunctionABI parserHooks buildGlobals _ binConf funAbiExt -> DMA.withArchConstraints archInfo $  do
-            Just (SL.FunABIExt reg) <- return funAbiExt
-            -- why is this necessary?
-            let ?memOpts = LCLM.defaultMemOptions
-            -- load the overrides
-            csOverrides <-
-                (if parserFlag then loadStubsCFG ng hAlloc else loadParsedOverride (piOverrideDir pinst) ng hAlloc parserHooks)
-            -- setup environment to execute
-            let execFeatures = []
-            let seConf = SVS.SymbolicExecutionConfig
-                     { SVS.secSolver = piSolver pinst
-                     , SVS.secLogBranches = False
-                     }
-            let fnConf = SVS.FunctionConfig {
-                SVS.fcBuildSyscallABI = buildSyscallABI
-                , SVS.fcBuildFunctionABI = buildFunctionABI
-                , SVS.fcCrucibleSyntaxOverrides = csOverrides
-            }
-            envVarMap <- SEnv.mkEnvVarMap bak (piConcreteEnvVars pinst) (piConcreteEnvVarsFromBytes pinst) (piSymbolicEnvVars pinst)
-
-            -- execute symbolically
-            entryPointAddr <- SEp.resolveEntryPointAddrOff binConf $ piEntryPoint pinst
-            ambientExecResult <- SVS.symbolicallyExecute logAction bak hAlloc archInfo archVals seConf execFeatures entryPointAddr (piMemoryModel pinst) buildGlobals (piFsRoot pinst) (piLogFunctionCalls pinst) binConf fnConf (piCommandLineArguments pinst) envVarMap
-            let crucibleRes = SVS.serCrucibleExecResult ambientExecResult
-            case crucibleRes of
-                FinishedResult _ r -> case r of
-                                        TotalRes v -> do
-                                            let q = view gpValue v
-                                            let g = lookupReg archVals q reg
-                                            let LCLM.LLVMPointer _ bv = regValue g
-                                            let t = asConcrete bv
-                                            case t of
-                                                Nothing -> return Nothing
-                                                Just cv -> return $ Just (BV.asUnsigned $ fromConcreteBV cv)
-                                        _ -> return Nothing
-                _ -> return Nothing
 
 smallPipeline :: forall arch args ret ext p. (DMS.SymArchConstraints arch, ext ~ DMS.MacawExt arch, p ~ (), SPR.Preamble arch) =>
                                         ST.CrucibleProgram arch ->
@@ -173,18 +85,6 @@ smallPipeline prog cfg argsf ret check = do
 
         SI.symexec bak hAlloc prog cfg args ret check
 
-loadStubsCFG :: forall ext s w p sym arch. (LCCE.IsSyntaxExtension ext, ext ~ DMS.MacawExt arch, MemWidth w,STC.StubsArch arch, SPR.Preamble arch) => NonceGenerator IO s -> HandleAllocator -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
-loadStubsCFG _ _ = do -- need args to match scope parameter
-    loadStubsPrograms [testProg]
-
-loadParsedOverride dir ng hAlloc parserHooks = do
-    case dir of
-        Just dir -> do
-            -- SFE.loadCrucibleSyntaxOverrides abi dir (piCCompiler pinst) ng hAlloc parserHooks --original pipeline
-            (overrides, startupOverrides, funAddrOverrides) <- SP.parseCrucibleOverrides dir ng hAlloc parserHooks
-            loadParsedPrograms overrides startupOverrides funAddrOverrides
-        Nothing -> return SFE.emptyCrucibleSyntaxOverrides
-
 testProg :: StubsProgram
 testProg =
     let fn = SA.StubsFunction {
@@ -212,22 +112,7 @@ testProg =
         }]
     }
 
-overrideTest :: TestTree
-overrideTest = testCase "Main Pipeline Test: Using Parser" $ do
-    res <- pipelineTest "./tests/test-data/a.out" False
-    case res of
-        Nothing -> assertFailure "Failed to get value"
-        Just x -> assertEqual "Values not equal: Parser-Based Test" x 20
-
-overrideWrapperTest :: TestTree
-overrideWrapperTest = testCase "Main Pipeline Test: Parserless" $ do
-    res <- pipelineTest "./tests/test-data/a.out" True
-    case res of
-        Nothing -> assertFailure "Failed to get value"
-        Just x -> assertEqual "Values not equal: Parser-less Test" x 20
-
-
-linkerTest :: TestTree 
+linkerTest :: TestTree
 linkerTest = genTestCase ( SA.StubsProgram {
         SA.stubsLibs=[SA.StubsLibrary{
             SA.fnDecls = [
@@ -241,7 +126,7 @@ linkerTest = genTestCase ( SA.StubsProgram {
         }],
         SA.stubsEntryPoints = ["main"]
     }) check "Can link preamble into stub"
-    where 
+    where
         check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
         check retRepr crucibleRes = case crucibleRes of
                 FinishedResult _ r -> case r of
@@ -260,9 +145,9 @@ factorialTest = genTestCase (SA.StubsProgram {
         SA.stubsLibs=[SA.StubsLibrary{
             SA.fnDecls = [
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "factorial" (Ctx.extend (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr)] ),
-            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "factorial" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr) 
-            [SA.ITE (SA.AppExpr "gt" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.LitExpr $ SA.IntLit 0) ) SA.StubsBoolRepr) 
-            [SA.Return (SA.AppExpr "factorial"  (Ctx.extend (Ctx.extend Ctx.empty (SA.AppExpr "minus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr ) ) (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty  (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)))  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) SA.StubsIntRepr   )  )  SA.StubsIntRepr)   ] 
+            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "factorial" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr)
+            [SA.ITE (SA.AppExpr "gt" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.LitExpr $ SA.IntLit 0) ) SA.StubsBoolRepr)
+            [SA.Return (SA.AppExpr "factorial"  (Ctx.extend (Ctx.extend Ctx.empty (SA.AppExpr "minus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr ) ) (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty  (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)))  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) SA.StubsIntRepr   )  )  SA.StubsIntRepr)   ]
             [(SA.Return (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)) )] ])
         ],
         SA.externSigs = [],
@@ -272,7 +157,7 @@ factorialTest = genTestCase (SA.StubsProgram {
         }],
         SA.stubsEntryPoints = ["main"]
     }) check "calculates factorial of 5"
-    where 
+    where
         check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
         check retRepr crucibleRes = case crucibleRes of
                 FinishedResult _ r -> case r of
@@ -302,7 +187,7 @@ symExecTest = genTestCase testProg check "Symbolic Execution smoke test"
                                         _ -> print "Failed to get complete result" >> return False
                 _ -> print "Failed to finish execution" >> return False
 
-moduleTest :: TestTree 
+moduleTest :: TestTree
 moduleTest = genTestCase SA.StubsProgram{
     SA.stubsEntryPoints=["f"],
     SA.stubsLibs=[
@@ -325,7 +210,7 @@ moduleTest = genTestCase SA.StubsProgram{
             }] [] []
      ]
 } check "Module Test"
-    where 
+    where
         check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
         check retRepr crucibleRes = case crucibleRes of
                 FinishedResult _ r -> case r of
@@ -339,8 +224,8 @@ moduleTest = genTestCase SA.StubsProgram{
                                         _ -> print "Failed to get complete result" >> return False
                 _ -> print "Failed to finish execution" >> return False
 
-opaqueTest :: TestTree 
-opaqueTest = genTestCaseIO ( do 
+opaqueTest :: TestTree
+opaqueTest = genTestCaseIO ( do
         Some counter <- return $ someSymbol "Counter"
         return SA.StubsProgram {
         SA.stubsEntryPoints=["main"],
@@ -372,18 +257,18 @@ opaqueTest = genTestCaseIO ( do
                     SA.stubFnBody=[SA.Return $ SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)]}
         ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [],
             SA.mkStubsLibrary "core" [
-                SA.SomeStubsFunction 
+                SA.SomeStubsFunction
                     SA.StubsFunction {
                         SA.stubFnSig=SA.StubsSignature{
                     SA.sigFnName="main",
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsIntRepr
                     },
-                    SA.stubFnBody=[SA.Return (SA.AppExpr "as_int" (Ctx.extend Ctx.empty(SA.AppExpr "inc" (Ctx.extend Ctx.empty (SA.AppExpr "init" Ctx.empty (SA.StubsAliasRepr counter))) (SA.StubsAliasRepr counter))) SA.StubsIntRepr)]
+                    SA.stubFnBody=[SA.Return (SA.AppExpr "as_int" (Ctx.extend Ctx.empty (SA.AppExpr "inc" (Ctx.extend Ctx.empty (SA.AppExpr "init" Ctx.empty (SA.StubsAliasRepr counter))) (SA.StubsAliasRepr counter))) SA.StubsIntRepr)]
                     }
             ] [] []
         ]   }) check "Opaque Test"
-    where 
+    where
         check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
         check retRepr crucibleRes = case crucibleRes of
                 FinishedResult _ r -> case r of
@@ -398,7 +283,7 @@ opaqueTest = genTestCaseIO ( do
                 AbortedResult _ (AbortedExec r _) -> print ("Aborted Execution:" ++ show r) >> return False
                 _ -> print "Failed to finish execution" >> return False
 
-globalVarTest :: TestTree 
+globalVarTest :: TestTree
 globalVarTest = genTestCase SA.StubsProgram{
         SA.stubsEntryPoints= ["main"],
         SA.stubsLibs = [
@@ -429,7 +314,7 @@ globalVarTest = genTestCase SA.StubsProgram{
             ] [] []
         ]
     } check "Basic Global Variable functionality"
-    where 
+    where
         check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
         check retRepr crucibleRes = case crucibleRes of
                 FinishedResult _ r -> case r of
@@ -445,8 +330,8 @@ globalVarTest = genTestCase SA.StubsProgram{
                 _ -> print "Failed to finish execution" >> return False
 
 
-opaqueGlobalTest :: TestTree 
-opaqueGlobalTest = genTestCaseIO (do 
+opaqueGlobalTest :: TestTree
+opaqueGlobalTest = genTestCaseIO (do
         Some counter <- return $ someSymbol "Counter"
         return SA.StubsProgram {
             SA.stubsEntryPoints=["main"],
@@ -495,7 +380,7 @@ opaqueGlobalTest = genTestCaseIO (do
             ]
             }
             ) check "Opaque Global Variable Functionality"
-     where 
+     where
         check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
         check retRepr crucibleRes = case crucibleRes of
                 FinishedResult _ r -> case r of
@@ -512,7 +397,7 @@ opaqueGlobalTest = genTestCaseIO (do
 
 
 genTestCaseIO :: IO StubsProgram -> (forall sym ret . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult () sym (DMS.MacawExt DMX.X86_64) (LCS.RegEntry sym ret) -> IO Bool) -> TestName -> TestTree
-genTestCaseIO iprog check tag = testCase tag $ do 
+genTestCaseIO iprog check tag = testCase tag $ do
     Some ng <- PN.newIONonceGenerator
     hAlloc <- LCF.newHandleAllocator
     sprog <- iprog
@@ -523,7 +408,7 @@ genTestCaseIO iprog check tag = testCase tag $ do
         Just (LCSC.ACFG _ ret icfg) -> do
             res <- smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
             if res then assertBool "" True else assertFailure "Test failed"
-    where 
+    where
         lookupEntry e = List.find (\(LCSC.ACFG _ _ cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
         f :: (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args))
         f _ assign = case Ctx.viewAssign assign of
@@ -531,7 +416,7 @@ genTestCaseIO iprog check tag = testCase tag $ do
             _ -> error "Irrelevant to test"
 
 genTestCase :: StubsProgram ->  (forall sym ret . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult () sym (DMS.MacawExt DMX.X86_64) (LCS.RegEntry sym ret) -> IO Bool) -> TestName -> TestTree
-genTestCase sprog check tag = testCase tag $ do 
+genTestCase sprog check tag = testCase tag $ do
     Some ng <- PN.newIONonceGenerator
     hAlloc <- LCF.newHandleAllocator
     cprog <- ST.translateProgram @DMX.X86_64 ng hAlloc sprog
@@ -541,13 +426,187 @@ genTestCase sprog check tag = testCase tag $ do
         Just (LCSC.ACFG _ ret icfg) -> do
             res <- smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
             if res then assertBool "" True else assertFailure "Test failed"
-    where 
+    where
         lookupEntry e = List.find (\(LCSC.ACFG _ _ cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
         f :: (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args))
         f _ assign = case Ctx.viewAssign assign of
             Ctx.AssignEmpty -> return Ctx.empty
             _ -> error "Irrelevant to test"
 
+corePipelinePreambleTest :: TestTree 
+corePipelinePreambleTest = testCase "Core Pipeline Preamble Check" $ do 
+    i <- corePipeline "./tests/test-data/a.out" sProgs
+    case i of 
+        Just n -> assertEqual "Unexpected value returned" n 20
+        Nothing -> assertFailure "Failed to get return value"
+    where 
+        sProgs =  [SA.StubsProgram {
+    SA.stubsEntryPoints=["f"],
+    SA.stubsLibs=[SA.mkStubsLibrary "core" [
+        SA.SomeStubsFunction SA.StubsFunction{
+            SA.stubFnSig= SA.StubsSignature{
+                SA.sigFnName="f",
+                SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+                SA.sigFnRetTy=SA.StubsIntRepr
+            },
+            SA.stubFnBody=[SA.Return (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.LitExpr $ SA.IntLit 4))  SA.StubsIntRepr)]
+        }
+    ] [] []]
+}]
+
+corePipelineModuleTest :: TestTree 
+corePipelineModuleTest = testCase "Core Pipeline Module Check" $ do 
+    i <- corePipeline "./tests/test-data/a.out" sProgs
+    case i of 
+        Just n -> assertEqual "Unexpected value returned" n 20
+        Nothing -> assertFailure "Failed to get return value"
+    where 
+        sProgs =  [SA.StubsProgram {
+    SA.stubsEntryPoints=["f"],
+    SA.stubsLibs=[SA.mkStubsLibrary "core" [
+        SA.SomeStubsFunction SA.StubsFunction{
+            SA.stubFnSig= SA.StubsSignature{
+                SA.sigFnName="f",
+                SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+                SA.sigFnRetTy=SA.StubsIntRepr
+            },
+            SA.stubFnBody=[SA.Return (SA.AppExpr "g" (Ctx.extend  Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)))  SA.StubsIntRepr)]
+        }
+    ] [] [],
+    SA.mkStubsLibrary "internal" [
+        SA.SomeStubsFunction SA.StubsFunction{
+            SA.stubFnSig= SA.StubsSignature{
+                SA.sigFnName="g",
+                SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+                SA.sigFnRetTy=SA.StubsIntRepr
+            },
+            SA.stubFnBody=[SA.Return (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.LitExpr $ SA.IntLit 4))  SA.StubsIntRepr)]
+        }
+    ] [] []
+    ]
+}]
+    
+corePipelineOpaqueTest :: TestTree 
+corePipelineOpaqueTest = genCoreTestIO (do 
+        Some counter <- return $ someSymbol "Counter"
+        return [SA.StubsProgram {
+        SA.stubsEntryPoints=["f"],
+        SA.stubsLibs=[
+            SA.mkStubsLibrary "counter" [
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="init",
+                    SA.sigFnArgTys=Ctx.empty,
+                    SA.sigFnRetTy=(SA.StubsAliasRepr counter)
+                    },
+                    SA.stubFnBody=[SA.Return $  SA.LitExpr $ SA.IntLit 0]},
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="inc",
+                    SA.sigFnArgTys=Ctx.extend Ctx.empty (SA.StubsAliasRepr counter),
+                    SA.sigFnRetTy=(SA.StubsAliasRepr counter)
+                    },
+                    SA.stubFnBody=[SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr )]},
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="as_int",
+                    SA.sigFnArgTys=Ctx.extend Ctx.empty (SA.StubsAliasRepr counter),
+                    SA.sigFnRetTy=SA.StubsIntRepr
+                    },
+                    SA.stubFnBody=[SA.Return $ SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)]}
+        ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [],
+            SA.mkStubsLibrary "core" [
+                SA.SomeStubsFunction
+                    SA.StubsFunction {
+                        SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="f",
+                    SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+                    SA.sigFnRetTy=SA.StubsIntRepr
+                    },
+                    SA.stubFnBody=[SA.Return (SA.AppExpr "as_int" (Ctx.extend Ctx.empty (SA.AppExpr "inc" (Ctx.extend Ctx.empty (SA.AppExpr "init" Ctx.empty (SA.StubsAliasRepr counter))) (SA.StubsAliasRepr counter))) SA.StubsIntRepr)]
+                    }
+            ] [] []
+        ]   }]
+    ) "./tests/test-data/a.out" "Core Pipeline Opaque Check" 1
+
+genCoreTestIO :: IO [StubsProgram] -> FilePath -> TestName -> Integer -> TestTree 
+genCoreTestIO iprog path tag exp = testCase tag $ do 
+    sprog <- iprog 
+    i <- corePipeline path sprog
+    case i of 
+        Just n -> assertEqual "Unexpected value returned" n exp
+        Nothing -> assertFailure "Failed to get return value"
+
+
+corePipelineGlobalTest :: TestTree 
+corePipelineGlobalTest = genCoreTestIO (do 
+        Some counter <- return $ someSymbol "Counter"
+        return [
+            SA.StubsProgram{
+                SA.stubsEntryPoints=["f","g","j"],
+                SA.stubsLibs=[
+                    SA.mkStubsLibrary "counter" [
+                    SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="init",
+                    SA.sigFnArgTys=Ctx.empty,
+                    SA.sigFnRetTy=SA.StubsUnitRepr
+                    },
+                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 0),SA.Return $  SA.LitExpr $ SA.UnitLit]},
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="inc",
+                    SA.sigFnArgTys=Ctx.empty,
+                    SA.sigFnRetTy=SA.StubsUnitRepr
+                    },
+                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr),SA.Return $  SA.LitExpr SA.UnitLit]},
+
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="get",
+                    SA.sigFnArgTys=Ctx.empty,
+                    SA.sigFnRetTy=SA.StubsIntRepr
+                    },
+                    SA.stubFnBody=[SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr]}
+
+                ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl "i" (SA.StubsAliasRepr counter))],
+                SA.mkStubsLibrary "core" [
+                        SA.SomeStubsFunction SA.StubsFunction {
+                            SA.stubFnSig=SA.StubsSignature {
+                                SA.sigFnName="j",
+                                SA.sigFnArgTys=Ctx.empty,
+                                SA.sigFnRetTy=SA.StubsUnitRepr 
+                            },
+                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "init" Ctx.empty SA.StubsUnitRepr ), SA.Return $ SA.LitExpr SA.UnitLit]
+                        },
+                        SA.SomeStubsFunction SA.StubsFunction {
+                            SA.stubFnSig=SA.StubsSignature {
+                                SA.sigFnName="g",
+                                SA.sigFnArgTys=Ctx.empty,
+                                SA.sigFnRetTy=SA.StubsIntRepr 
+                            },
+                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return $ SA.LitExpr $ SA.IntLit 9] 
+                        },
+                        SA.SomeStubsFunction SA.StubsFunction {
+                            SA.stubFnSig=SA.StubsSignature {
+                                SA.sigFnName="f",
+                                SA.sigFnArgTys=Ctx.empty,
+                                SA.sigFnRetTy=SA.StubsIntRepr 
+                            },
+                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return (SA.AppExpr "get" Ctx.empty SA.StubsIntRepr )] 
+                        }
+                ] [] []
+                ]
+            }
+            ]
+    ) "./tests/test-data/mult.out" "Core Pipeline Global Data" 2
+
 main :: IO ()
-main = defaultMain $ do 
-    testGroup "" [overrideTest,overrideWrapperTest,symExecTest, linkerTest,factorialTest,moduleTest, opaqueTest, globalVarTest, opaqueGlobalTest]
+main = defaultMain $ do
+    testGroup "" [symExecTest, linkerTest,factorialTest,moduleTest, opaqueTest, globalVarTest, opaqueGlobalTest, corePipelinePreambleTest, corePipelineModuleTest,corePipelineOpaqueTest,corePipelineGlobalTest]

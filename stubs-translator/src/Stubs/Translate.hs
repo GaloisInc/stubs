@@ -369,7 +369,7 @@ translateProgram ng halloc prog = do
                 let accHdls = crExportedHandles translated
                 return (cfgs++tlibs,accHdls++acc)
             ) ([],[]) orderedLibs
-
+    
     let crucProgs = map (\s -> CrucibleProgram{crEntry=s,crFnHandleMap=map snd ovMap, crCFGs=fst translatedLibs,crExterns=mempty, crGlobals=mempty,crFwdDecs=mempty }) (SA.stubsEntryPoints prog)
     return crucProgs
 
