@@ -12,7 +12,6 @@ module Stubs.SymbolicExecution (
     SymbolicExecutionConfig(..)
   , SymbolicExecutionResult(..)
   , symbolicallyExecute
-  , symbolicallyExecute'
   , insertFreshGlobals
   , initializeMemory
   , FunctionConfig(..)
@@ -1474,229 +1473,6 @@ simulateFunction
      , WPO.OnlineSolver solver
      , ?memOpts :: LCLM.MemOptions
      , p ~ AExt.AmbientSimulatorState sym arch
-     )
-  => LJ.LogAction IO AD.Diagnostic
-  -> bak
-  -> [LCS.GenericExecutionFeature sym]
-  -> LCF.HandleAllocator
-  -> DMA.ArchitectureInfo arch
-  -> DMS.GenArchVals DMS.LLVMMemory arch
-  -> SymbolicExecutionConfig arch sym
-  -> AM.InitialMemory sym w
-  -> DMC.ArchSegmentOff arch
-  -- ^ The address of the entry point function
-  -> Maybe FilePath
-  -- ^ Path to the symbolic filesystem.  If this is 'Nothing', the file system
-  -- will be empty
-  -> Maybe FilePath
-  -- ^ Optional path to the file to log function calls to
-  -> ALB.BinaryConfig arch binFmt
-  -- ^ Information about the loaded binaries
-  -> FunctionConfig arch sym p
-  -- ^ Configuration parameters concerning functions and overrides
-  -> [BS.ByteString]
-  -- ^ The user-supplied command-line arguments
-  -> Map.Map BS.ByteString [WI.SymBV sym 8]
-  -- ^ The user-supplied environment variables
-  -> m (SymbolicExecutionResult arch sym)
-simulateFunction logAction bak execFeatures halloc archInfo archVals seConf initialMem entryPointAddr mFsRoot mFnCallLog binConf fnConf cliArgs envVars = do
-  let sym = LCB.backendGetSym bak
-  let symArchFns = DMS.archFunctions archVals
-  let crucRegTypes = DMS.crucArchRegTypes symArchFns
-  let regsRepr = LCT.StructRepr crucRegTypes
-
-  -- Set up an initial register state (mostly symbolic, with an initial stack)
-  --
-  -- Put the stack pointer in the middle of our allocated stack so that both sides can be addressed
-  initialRegs <- liftIO $ DMS.macawAssignToCrucM (mkInitialRegVal symArchFns sym) (DMS.crucGenRegAssignment symArchFns)
-  stackInitialOffset <- liftIO $ WI.bvLit sym WI.knownRepr (BVS.mkBV WI.knownRepr stackOffset)
-  sp <- liftIO $ LCLM.ptrAdd sym WI.knownRepr (AM.imStackBasePtr initialMem) stackInitialOffset
-  let initialRegsEntry = LCS.RegEntry regsRepr initialRegs
-  let regsWithStack = DMS.updateReg archVals initialRegsEntry DMC.sp_reg sp
-
-  -- Initialize the file system
-  fileContents <- liftIO $
-    case mFsRoot of
-      Nothing -> return LCSy.emptyInitialFileSystemContents
-      Just fsRoot -> LCSL.loadInitialFiles sym fsRoot
-  let ?ptrWidth = WI.knownRepr
-  (fs, globals0, LCLS.SomeOverrideSim initFSOverride) <- liftIO $
-    LCLS.initialLLVMFileSystem halloc sym WI.knownRepr fileContents [] (AM.imGlobals initialMem)
-
-  environGlob <- liftIO $
-    LCCC.freshGlobalVar halloc
-                        (DT.pack "AMBIENT_environ")
-                        LCLM.PtrRepr
-
-  let csOverrides = fcCrucibleSyntaxOverrides fnConf
-  let ASy.BuildSyscallABI buildSyscallABI = fcBuildSyscallABI fnConf
-  let syscallABI = buildSyscallABI fs initialMem (ALB.bcUnsuportedRelocations binConf)
-  let AF.BuildFunctionABI buildFunctionABI = fcBuildFunctionABI fnConf
-  let functionABI = buildFunctionABI AF.TestContext fs initialMem archVals
-                                     (ALB.bcUnsuportedRelocations binConf)
-                                     (AFET.csoAddressOverrides csOverrides)
-                                     (AFET.csoNamedOverrides csOverrides)
-                                     [Some environGlob]
-
-  let mem0 = case LCSG.lookupGlobal (AM.imMemVar initialMem) globals0 of
-               Just mem -> mem
-               Nothing  -> AP.panic AP.FunctionOverride "simulateFunction"
-                             [ "Failed to find global variable for memory: "
-                               ++ show (LCCC.globalName (AM.imMemVar initialMem)) ]
-  (mainReg0, mainReg1, mainReg2) <-
-    case AF.functionIntegerArgumentRegisters functionABI of
-      (reg0:reg1:reg2:_) -> pure (reg0, reg1, reg2)
-      _ -> AP.panic AP.SymbolicExecution "simulateFunction"
-             [ "Not enough registers for the main() function" ]
-  (mainArgVals, regsWithMainArgs, mem1) <- liftIO $
-    initMainArguments bak mem0 archVals mainReg0 mainReg1 mainReg2 cliArgs envVars regsWithStack
-  let globals2 = LCSG.insertGlobal (AM.imMemVar initialMem) mem1 $
-                 LCSG.insertGlobal environGlob (envpVal mainArgVals) globals0
-  let arguments = LCS.RegMap (Ctx.singleton regsWithMainArgs)
-
-  let mainBinaryPath = ALB.mainLoadedBinaryPath binConf
-  Some discoveredEntry <- ADi.discoverFunction logAction archInfo mainBinaryPath entryPointAddr
-  LCCC.SomeCFG cfg <- ALi.liftDiscoveredFunction halloc (ALB.lbpPath mainBinaryPath)
-                                                 (DMS.archFunctions archVals) discoveredEntry
-  let simAction = LCS.runOverrideSim regsRepr $ do
-                    -- First, initialize the symbolic file system...
-                    initFSOverride
-                    -- ...then simulate any startup overrides...
-                    F.traverse_ (\ov -> AF.functionOverride ov
-                                                            bak
-                                                            Ctx.Empty
-                                                            dummyGetVarArg
-                                                            -- NOTE: Startup
-                                                            -- overrides cannot
-                                                            -- currently call
-                                                            -- into parent
-                                                            -- overrides
-                                                            [])
-                                (AFET.csoStartupOverrides csOverrides)
-                    -- ...and finally, run the entrypoint function.
-                    LCS.regValue <$> LCS.callCFG cfg arguments
-
-  DMS.withArchEval archVals sym $ \archEvalFn -> do
-    let extImpl = AExt.ambientExtensions bak archEvalFn initialMem (symExLookupFunction logAction bak initialMem archVals binConf functionABI halloc archInfo mFnCallLog) (symExLookupSyscall bak syscallABI halloc) (ALB.bcUnsuportedRelocations binConf)
-    -- Register any externs, auxiliary functions, forward declarations used in
-    -- the startup overrides.
-    (startupBindings, globals4) <-
-      F.foldlM (\(bindings, globals) functionOv ->
-                 liftIO $ insertFunctionOverrideReferences
-                            bak functionABI functionOv bindings globals)
-               (LCF.emptyHandleMap, globals2)
-               (AFET.csoStartupOverrides csOverrides)
-    -- Also register the entry point function, as we will not be able to start
-    -- simulation without it.
-    let bindings = LCF.insertHandleMap (LCCC.cfgHandle cfg)
-                                       (LCS.UseCFG cfg (LCAP.postdomInfo cfg))
-                                       startupBindings
-    let ambientSimState = set AExt.discoveredFunctionHandles
-                          (Map.singleton entryPointAddr (LCCC.cfgHandle cfg))
-                          AExt.emptyAmbientSimulatorState
-    -- Note: the 'Handle' here is the target of any print statements in the
-    -- Crucible CFG; we shouldn't have any, but if we did it would be better to
-    -- capture the output over a pipe.
-    let ctx = LCS.initSimContext bak (MapF.union LCLI.llvmIntrinsicTypes LCLS.llvmSymIOIntrinsicTypes) halloc IO.stdout (LCS.FnBindings bindings) extImpl ambientSimState
-    let s0 = LCS.InitialState ctx globals4 LCS.defaultAbortHandler regsRepr simAction
-    let sbsRecorder = sbsFeature logAction
-    let executionFeatures = [sbsRecorder | secLogBranches seConf] ++ fmap LCS.genericToExecutionFeature execFeatures
-
-    res <- liftIO $ LCS.executeCrucible executionFeatures s0
-    return $ SymbolicExecutionResult (AM.imMemVar initialMem)
-                                     res
-  where
-    -- Syntax overrides cannot make use of variadic arguments, so if this
-    -- callback is ever used, something has gone awry.
-    dummyGetVarArg :: AF.GetVarArg sym
-    dummyGetVarArg = AF.GetVarArg $ \_ ->
-      AP.panic AP.SymbolicExecution "simulateFunction"
-        ["A startup override cannot use variadic arguments"]
-
--- | Symbolically execute a function
---
--- Note that this function currently discards the results of symbolic execution
---
--- NOTE: This currently fixes the memory model as 'DMS.LLVMMemory' (i.e., the
--- default memory model for machine code); we will almost certainly need a
--- modified memory model.
-symbolicallyExecute
-  :: forall m sym bak arch binFmt w solver scope st fs ext p
-   . ( CMC.MonadThrow m
-     , MonadIO m
-     , LCB.IsSymBackend sym bak
-     , LCCE.IsSyntaxExtension (DMS.MacawExt arch)
-     , ext ~ DMS.MacawExt arch
-     , LCCE.IsSyntaxExtension ext
-     , DMB.BinaryLoader arch binFmt
-     , DMS.SymArchConstraints arch
-     , w ~ DMC.ArchAddrWidth arch
-     , DMM.MemWidth w
-     , 16 <= w
-     , KnownNat w
-     , sym ~ WE.ExprBuilder scope st fs
-     , bak ~ LCBO.OnlineBackend solver scope st fs
-     , WPO.OnlineSolver solver
-     , ?memOpts :: LCLM.MemOptions
-     , p ~ AExt.AmbientSimulatorState sym arch
-     , LCLM.HasLLVMAnn sym
-     )
-  => LJ.LogAction IO AD.Diagnostic
-  -> bak
-  -> LCF.HandleAllocator
-  -> DMA.ArchitectureInfo arch
-  -> DMS.GenArchVals DMS.LLVMMemory arch
-  -> SymbolicExecutionConfig arch sym
-  -> [LCS.GenericExecutionFeature sym]
-  -> DMC.ArchSegmentOff arch
-  -- ^ The address of the entry point function
-  -> AM.MemoryModel ()
-  -- ^ Which memory model configuration to use
-  -> AM.InitArchSpecificGlobals arch
-  -- ^ Function to initialize special global variables needed for 'arch'
-  -> Maybe FilePath
-  -- ^ Path to the symbolic filesystem.  If this is 'Nothing', the file system
-  -- will be empty
-  -> Maybe FilePath
-  -- ^ Optional path to the file to log function calls to
-  -> ALB.BinaryConfig arch binFmt
-  -- ^ Information about the loaded binaries
-  -> FunctionConfig arch sym p
-  -- ^ Configuration parameters concerning functions and overrides
-  -> [BS.ByteString]
-  -- ^ The user-supplied command-line arguments
-  -> Map.Map BS.ByteString [WI.SymBV sym 8]
-  -- ^ The user-supplied environment variables
-  -> m (SymbolicExecutionResult arch sym)
-symbolicallyExecute logAction bak halloc archInfo archVals seConf execFeatures entryPointAddr memModel initGlobals mFsRoot mFnCallLog binConf fnConf cliArgs envVars = do
-  let mems = fmap (DMB.memoryImage . ALB.lbpBinary) (ALB.bcBinaries binConf)
-  initialMem <- initializeMemory bak
-                                 halloc
-                                 archInfo
-                                 mems
-                                 initGlobals
-                                 memModel
-                                 (AFET.csoNamedOverrides (fcCrucibleSyntaxOverrides fnConf))
-                                 (ALB.bcDynamicGlobalVarAddrs binConf)
-                                 (ALB.bcSupportedRelocations binConf)
-  simulateFunction logAction bak execFeatures halloc archInfo archVals seConf initialMem entryPointAddr mFsRoot mFnCallLog binConf fnConf cliArgs envVars
-
-simulateFunction'
-  :: ( CMC.MonadThrow m
-     , MonadIO m
-     , ext ~ DMS.MacawExt arch
-     , LCCE.IsSyntaxExtension ext
-     , LCB.IsSymBackend sym bak
-     , LCLM.HasLLVMAnn sym
-     , DMB.BinaryLoader arch binFmt
-     , DMS.SymArchConstraints arch
-     , w ~ DMC.ArchAddrWidth arch
-     , 16 <= w
-     , sym ~ WE.ExprBuilder scope st fs
-     , bak ~ LCBO.OnlineBackend solver scope st fs
-     , WPO.OnlineSolver solver
-     , ?memOpts :: LCLM.MemOptions
-     , p ~ AExt.AmbientSimulatorState sym arch
      , STC.StubsArch arch
      , SPR.Preamble arch
      )
@@ -1725,7 +1501,7 @@ simulateFunction'
   -- ^ The user-supplied environment variables
   -> [ST.CrucibleProgram arch]
   -> m (SymbolicExecutionResult arch sym)
-simulateFunction' logAction bak execFeatures halloc archInfo archVals seConf initialMem entryPointAddr mFsRoot mFnCallLog binConf fnConf cliArgs envVars crProgs = do
+simulateFunction logAction bak execFeatures halloc archInfo archVals seConf initialMem entryPointAddr mFsRoot mFnCallLog binConf fnConf cliArgs envVars crProgs = do
   let sym = LCB.backendGetSym bak
   let symArchFns = DMS.archFunctions archVals
   let crucRegTypes = DMS.crucArchRegTypes symArchFns
@@ -1844,7 +1620,7 @@ simulateFunction' logAction bak execFeatures halloc archInfo archVals seConf ini
         ["A startup override cannot use variadic arguments"]
 
 
-symbolicallyExecute'
+symbolicallyExecute
   :: forall m sym bak arch binFmt w solver scope st fs ext p
    . ( CMC.MonadThrow m
      , MonadIO m
@@ -1895,7 +1671,7 @@ symbolicallyExecute'
   -- ^ The user-supplied environment variables
   -> [ST.CrucibleProgram arch]
   -> m (SymbolicExecutionResult arch sym)
-symbolicallyExecute' logAction bak halloc archInfo archVals seConf execFeatures entryPointAddr memModel initGlobals mFsRoot mFnCallLog binConf fnConf cliArgs envVars crucProgs= do
+symbolicallyExecute logAction bak halloc archInfo archVals seConf execFeatures entryPointAddr memModel initGlobals mFsRoot mFnCallLog binConf fnConf cliArgs envVars crucProgs= do
   let mems = fmap (DMB.memoryImage . ALB.lbpBinary) (ALB.bcBinaries binConf)
   initialMem <- initializeMemory bak
                                  halloc
@@ -1906,4 +1682,4 @@ symbolicallyExecute' logAction bak halloc archInfo archVals seConf execFeatures 
                                  []
                                  (ALB.bcDynamicGlobalVarAddrs binConf)
                                  (ALB.bcSupportedRelocations binConf)
-  simulateFunction' logAction bak execFeatures halloc archInfo archVals seConf initialMem entryPointAddr mFsRoot mFnCallLog binConf fnConf cliArgs envVars crucProgs
+  simulateFunction logAction bak execFeatures halloc archInfo archVals seConf initialMem entryPointAddr mFsRoot mFnCallLog binConf fnConf cliArgs envVars crucProgs

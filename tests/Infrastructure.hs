@@ -270,7 +270,7 @@ corePipeline path stubProgs = do
 
             -- execute symbolically
             entryPointAddr <- AEp.resolveEntryPointAddrOff binConf $ piEntryPoint pinst
-            ambientExecResult <- SVS.symbolicallyExecute' logAction bak hAlloc archInfo archVals seConf execFeatures entryPointAddr (piMemoryModel pinst) buildGlobals (piFsRoot pinst) (piLogFunctionCalls pinst) binConf abiConf (piCommandLineArguments pinst) envVarMap crucProgs
+            ambientExecResult <- SVS.symbolicallyExecute logAction bak hAlloc archInfo archVals seConf execFeatures entryPointAddr (piMemoryModel pinst) buildGlobals (piFsRoot pinst) (piLogFunctionCalls pinst) binConf abiConf (piCommandLineArguments pinst) envVarMap crucProgs
             let crucibleRes = SVS.serCrucibleExecResult ambientExecResult
 
             --TODO: parameterize: like check in smallPipeline
