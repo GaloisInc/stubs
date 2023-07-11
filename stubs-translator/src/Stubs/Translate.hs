@@ -69,6 +69,7 @@ import Stubs.AST (stubsLibDefs)
 import qualified Data.List as List
 import qualified Data.Graph as Graph
 import qualified Data.Set as Set
+import qualified Stubs.Opaque as SO
 
 -- | A translated Program. Several fields are taken from crucible-syntax's ParsedProgram, for easy conversion
 data CrucibleProgram arch = CrucibleProgram {
@@ -103,14 +104,14 @@ translateExpr' e = do
     env <- gets stStubsenv
     refMap <- gets stRefMap
     case e of
-        SA.VarLit (SA.StubsVar n vt) -> do 
+        SA.VarLit (SA.StubsVar n vt) -> do
             vcty <- runReaderT (toCrucibleTy vt) env
             case MapF.lookup (SA.CrucibleVar n vcty) regMap of
                 Just (CrucReg reg _) -> do
                     t <- LCCG.readReg reg
                     LCCG.mkAtom t
                 Nothing -> fail "Undefined VarLit encountered" -- Occurs if an expression uses a variable not previously defined. Could be made unreachable by a parser. 
-        SA.GlobalVarLit (SA.StubsVar n vt) -> do 
+        SA.GlobalVarLit (SA.StubsVar n vt) -> do
             vcty <- runReaderT (toCrucibleTy vt) env
             case MapF.lookup (SA.CrucibleVar n vcty) refMap of
                 Just (CrucibleGlobal globVar _) -> do
@@ -220,7 +221,7 @@ translateStmt stmt = withReturn $ \retty -> do
                                     _ <- LCCG.assignReg reg ce
                                     return ()
                 _ -> fail $ "Type mismatch - Expected: " ++ show vt ++ " Actual: " ++ show (SA.stubsExprToTy e)
-        SA.GlobalAssignment v e -> do 
+        SA.GlobalAssignment v e -> do
             SA.StubsVar n vt <- return v
             ecty <- runReaderT (toCrucibleTy (SA.stubsExprToTy e)) env
             vcty <- runReaderT (toCrucibleTy vt) env
@@ -330,6 +331,8 @@ translateProgram ng halloc prog = do
             return q) SPR.stubsPreamble
 
     let libs = SA.stubsLibs prog
+    -- Enforce Opaque Types
+    foldM_ (\_ lib -> unless (SO.satOpaque lib) $ fail ("Opaqueness check failed for library: " ++ show (SA.libName lib))) () libs
 
     -- Verify Signatures (enforces opacity for calls as well)
     let expectedSigs = Set.difference (Set.fromList $ concatMap SA.externSigs libs) (Set.fromList SPR.stubsPreamble)
@@ -369,7 +372,7 @@ translateProgram ng halloc prog = do
                 let accHdls = crExportedHandles translated
                 return (cfgs++tlibs,accHdls++acc)
             ) ([],[]) orderedLibs
-    
+
     let crucProgs = map (\s -> CrucibleProgram{crEntry=s,crFnHandleMap=map snd ovMap, crCFGs=fst translatedLibs,crExterns=mempty, crGlobals=mempty,crFwdDecs=mempty }) (SA.stubsEntryPoints prog)
     return crucProgs
 

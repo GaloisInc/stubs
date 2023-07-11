@@ -18,6 +18,7 @@ Various instances and helper functions for manipulating these types are also pre
 module Stubs.AST (
     StubsType(..),
     StubsTypeRepr(..),
+    SomeStubsTypeRepr(..),
     StubsStmt(..),
     StubsExpr(..),
     StubsSignature(..),
@@ -108,6 +109,8 @@ instance Show (StubsTypeRepr a) where
 
 type family ResolveAlias (s :: Symbol) :: StubsType
 
+data SomeStubsTypeRepr = forall a . SomeStubsTypeRepr (StubsTypeRepr a)
+
 $(return [])
 instance OrdF StubsTypeRepr where
     compareF = $(structuralTypeOrd [t|StubsTypeRepr|]
@@ -123,6 +126,11 @@ instance TestEquality StubsTypeRepr where
     testEquality r1 r2 = case  compareF r1 r2 of
         EQF -> Just Refl
         _ -> Nothing
+
+instance Eq SomeStubsTypeRepr where 
+    (==) (SomeStubsTypeRepr t1) (SomeStubsTypeRepr t2) = case testEquality t1 t2 of 
+        Just Refl -> True 
+        _ -> False
 
 -- | Statement definitions, such as loops, returns, or variable assignment
 data StubsStmt where

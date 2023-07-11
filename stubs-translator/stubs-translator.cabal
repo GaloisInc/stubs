@@ -47,7 +47,8 @@ library
                      Stubs.Translate.Core,
                      Stubs.Preamble,
                      Stubs.Preamble.X86,
-                     Stubs.Preamble.AArch32
+                     Stubs.Preamble.AArch32,
+                     Stubs.Opaque
     other-modules:  Stubs.Preamble.Common
     hs-source-dirs: src
     default-language: Haskell2010 

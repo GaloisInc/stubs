@@ -24,6 +24,7 @@ import qualified Data.Parameterized.NatRepr as PN
 import Lang.Crucible.CFG.Reg as LCCR
 import qualified Data.Parameterized.Map as MapF
 import Stubs.Preamble.X86 ()
+import qualified Stubs.Opaque as SO
 
 testFnTranslationBasic :: TestTree
 testFnTranslationBasic = testCase "Basic Translation" $ do 
@@ -92,6 +93,74 @@ testFnTranslationLoop = testCase "Loop Translation" $ do
     let blocks = LCCR.cfgBlocks m
     assertEqual "Unexpected Block count" 4 (length blocks) -- While this could be only 3, due to the Generator's implementation 4 blocks are made total
 
+testOpaquenessCheckRet :: TestTree 
+testOpaquenessCheckRet = testCase "Catch Opaqueness Violation in return" $ do 
+    Some counter <- return $ LCCC.someSymbol "Counter"
+    let lib = SA.mkStubsLibrary "counter" [
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="init",
+                    SA.sigFnArgTys=Ctx.empty,
+                    SA.sigFnRetTy=SA.StubsAliasRepr counter
+                    },
+                    SA.stubFnBody=[SA.Return $  SA.LitExpr $ SA.IntLit 0]}
+            ] [] []
+    assertBool "Failed to catch opaqueness violation in return stmt" (not (SO.satOpaque lib))
+
+testOpaquenessCheckArg :: TestTree 
+testOpaquenessCheckArg = testCase "Catch Opaqueness Violation in argument" $ do 
+    Some counter <- return $ LCCC.someSymbol "Counter"
+    let lib = SA.mkStubsLibrary "counter" [
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="inc",
+                    SA.sigFnArgTys=Ctx.extend Ctx.empty (SA.StubsAliasRepr counter),
+                    SA.sigFnRetTy=SA.StubsAliasRepr counter
+                    },
+                    SA.stubFnBody=[SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr )]},
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="as_int",
+                    SA.sigFnArgTys=Ctx.extend Ctx.empty (SA.StubsAliasRepr counter),
+                    SA.sigFnRetTy=SA.StubsIntRepr
+                    },
+                    SA.stubFnBody=[SA.Return $ SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)]}
+            ] [] []
+    assertBool "Failed to catch opaqueness violation in argument" (not (SO.satOpaque lib))
+
+testOpaquenessCheckAssignmentBad :: TestTree 
+testOpaquenessCheckAssignmentBad = testCase "Catch Opaqueness Violation in variable assignment" $ do 
+    Some counter <- return $ LCCC.someSymbol "Counter"
+    let lib = SA.mkStubsLibrary "counter" [
+            SA.SomeStubsFunction SA.StubsFunction {
+                SA.stubFnSig = SA.StubsSignature {
+                    SA.sigFnName ="inc",
+                    SA.sigFnArgTys=Ctx.extend Ctx.empty (SA.StubsAliasRepr counter),
+                    SA.sigFnRetTy=SA.StubsIntRepr
+                },
+                SA.stubFnBody = [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.ArgLit (SA.StubsArg 0 (SA.StubsAliasRepr counter) )), SA.Return $ SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr) ]
+        }
+         ] [] []
+    assertBool "Failed to catch opaqueness violation in variable assignment" (not (SO.satOpaque lib))
+
+testOpaquenessCheckAssignmentOK :: TestTree 
+testOpaquenessCheckAssignmentOK = testCase "Allow type changing with decl" $ do 
+    Some counter <- return $ LCCC.someSymbol "Counter"
+    let lib = SA.mkStubsLibrary "counter" [
+            SA.SomeStubsFunction SA.StubsFunction {
+                SA.stubFnSig = SA.StubsSignature {
+                    SA.sigFnName ="inc",
+                    SA.sigFnArgTys=Ctx.extend Ctx.empty (SA.StubsAliasRepr counter),
+                    SA.sigFnRetTy=SA.StubsIntRepr
+                },
+                SA.stubFnBody = [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.ArgLit (SA.StubsArg 0 (SA.StubsAliasRepr counter) )), SA.Return $ SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr) ]
+        }
+         ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] []
+    assertBool "False positive in variable assignment" (SO.satOpaque lib)
+
 main :: IO ()
 main = defaultMain $ do
-    testGroup "" [testFnTranslationBasic, testFnTranslationITE, testFnTranslationLoop]
+    testGroup "" [testFnTranslationBasic, testFnTranslationITE, testFnTranslationLoop, testOpaquenessCheckRet, testOpaquenessCheckArg, testOpaquenessCheckAssignmentBad, testOpaquenessCheckAssignmentOK]
