@@ -29,7 +29,7 @@ module Stubs.AST (
     StubsLit(..),
     StubsVar(..),
     CrucibleVar(..),
-    StubsLibrary(..),
+    StubsModule(..),
     StubsProgram(..),
     SomeStubsTyDecl(..),
     StubsTyDecl(..),
@@ -37,7 +37,7 @@ module Stubs.AST (
     SomeStubsGlobalDecl(..),
     ResolveAlias,
     stubsLibDefs,
-    mkStubsLibrary,
+    mkStubsModule,
     stubsAssignmentToTys,
     stubsExprToTy
     ) where
@@ -288,8 +288,8 @@ data StubsGlobalDecl a = StubsGlobalDecl String (StubsTypeRepr a)
 data SomeStubsGlobalDecl = forall a . SomeStubsGlobalDecl (StubsGlobalDecl a)
 
 -- | A StubsLibrary represents a single compilation unit in the Stubs language.
-data StubsLibrary = StubsLibrary {
-    libName :: String,
+data StubsModule = StubsModule {
+    moduleName :: String,
     -- ^ Name for the libary / module
     fnDecls :: [SomeStubsFunction],
     -- ^ Function declarations
@@ -305,17 +305,17 @@ data StubsLibrary = StubsLibrary {
 instance Eq SomeStubsFunction where
     (==) (SomeStubsFunction (StubsFunction sig1 _)) (SomeStubsFunction (StubsFunction sig2 _)) = (SomeStubsSignature sig1) == (SomeStubsSignature sig2)
 
-instance Eq StubsLibrary where
-    (==) a b = case ((fnDecls a) == (fnDecls b), (libName a)== (libName b)) of
+instance Eq StubsModule where
+    (==) a b = case ((fnDecls a) == (fnDecls b), (moduleName a)== (moduleName b)) of
         (True,True) -> True
         _ -> False
 
-instance Ord StubsLibrary where
-    compare a b = if a == b then EQ else compare (libName a) (libName b)
+instance Ord StubsModule where
+    compare a b = if a == b then EQ else compare (moduleName a) (moduleName b)
 
 -- | A complete Stubs program, consisting of several modules and an entry point
 data StubsProgram = StubsProgram {
-    stubsLibs :: [StubsLibrary],
+    stubsModules :: [StubsModule],
     stubsEntryPoints::[String]
 }
 
@@ -345,7 +345,7 @@ stubsAssignmentToTys assign = case alist of
         alist = Ctx.viewAssign assign
 
 -- | Extract signatures for all functions declared in a library
-stubsLibDefs :: StubsLibrary -> [SomeStubsSignature]
+stubsLibDefs :: StubsModule -> [SomeStubsSignature]
 stubsLibDefs lib = map (\(SomeStubsFunction f) -> SomeStubsSignature (stubFnSig f)) (fnDecls lib)
 
 -- Given a list of functions, generate its external dependencies, for easier library construction
@@ -375,5 +375,5 @@ extractSigsStmts = concatMap (\case
             where alist = Ctx.viewAssign assign
 
 -- | Smart constructor for StubsLibrary, which generates the external signature list from the declarations
-mkStubsLibrary :: String -> [SomeStubsFunction] -> [SomeStubsTyDecl] ->  [SomeStubsGlobalDecl] -> StubsLibrary
-mkStubsLibrary name fns tys globals = StubsLibrary{libName=name,fnDecls=fns,externSigs=extractLibDeps fns,tyDecls=tys, globalDecls=globals}
+mkStubsModule :: String -> [SomeStubsFunction] -> [SomeStubsTyDecl] ->  [SomeStubsGlobalDecl] -> StubsModule
+mkStubsModule name fns tys globals = StubsModule{moduleName=name,fnDecls=fns,externSigs=extractLibDeps fns,tyDecls=tys, globalDecls=globals}

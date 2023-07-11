@@ -15,7 +15,7 @@ import qualified Data.Parameterized as P
 import qualified Data.Parameterized.Context as Ctx
 
 -- | Check if module satisifies the opaqueness requirement
-satOpaque :: SA.StubsLibrary -> Bool
+satOpaque :: SA.StubsModule -> Bool
 satOpaque lib = all (opaqueFn (SA.tyDecls lib)) (SA.fnDecls lib)
 
 opaqueFn :: [SA.SomeStubsTyDecl] -> SA.SomeStubsFunction -> Bool

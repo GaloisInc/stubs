@@ -47,6 +47,8 @@ import qualified Lang.Crucible.Simulator as LCSE
 import qualified Stubs.Preamble as SPR
 import Stubs.Preamble.X86 () --for instance
 import Data.Parameterized.SymbolRepr (someSymbol)
+import qualified Stubs.AST as SA
+import qualified Stubs.AST as SA
 
 smallPipeline :: forall arch args ret ext p. (DMS.SymArchConstraints arch, ext ~ DMS.MacawExt arch, p ~ (), SPR.Preamble arch) =>
                                         ST.CrucibleProgram arch ->
@@ -103,10 +105,10 @@ testProg =
         SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
     } in SA.StubsProgram {
         SA.stubsEntryPoints=["f"],
-        SA.stubsLibs=[SA.StubsLibrary{
+        SA.stubsModules=[SA.StubsModule{
             SA.fnDecls=[SA.SomeStubsFunction fn, SA.SomeStubsFunction int_fun],
             SA.externSigs=[],
-            SA.libName="",
+            SA.moduleName="",
             SA.tyDecls=[],
             SA.globalDecls=[]
         }]
@@ -114,13 +116,13 @@ testProg =
 
 linkerTest :: TestTree
 linkerTest = genTestCase ( SA.StubsProgram {
-        SA.stubsLibs=[SA.StubsLibrary{
+        SA.stubsModules=[SA.StubsModule{
             SA.fnDecls = [
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "double" (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) SA.StubsIntRepr)] ),
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "double" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) [SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) SA.StubsIntRepr)])
         ],
             SA.externSigs=[],
-            SA.libName="",
+            SA.moduleName="",
             SA.tyDecls=[],
             SA.globalDecls=[]
         }],
@@ -142,7 +144,7 @@ linkerTest = genTestCase ( SA.StubsProgram {
 
 factorialTest :: TestTree
 factorialTest = genTestCase (SA.StubsProgram {
-        SA.stubsLibs=[SA.StubsLibrary{
+        SA.stubsModules=[SA.StubsModule{
             SA.fnDecls = [
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "factorial" (Ctx.extend (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr)] ),
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "factorial" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr)
@@ -151,7 +153,7 @@ factorialTest = genTestCase (SA.StubsProgram {
             [(SA.Return (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)) )] ])
         ],
         SA.externSigs = [],
-        SA.libName="",
+        SA.moduleName="",
         SA.tyDecls=[],
         SA.globalDecls=[]
         }],
@@ -190,8 +192,8 @@ symExecTest = genTestCase testProg check "Symbolic Execution smoke test"
 moduleTest :: TestTree
 moduleTest = genTestCase SA.StubsProgram{
     SA.stubsEntryPoints=["f"],
-    SA.stubsLibs=[
-        SA.mkStubsLibrary "core" [SA.SomeStubsFunction
+    SA.stubsModules=[
+        SA.mkStubsModule "core" [SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
                     SA.sigFnName="f",
@@ -199,7 +201,7 @@ moduleTest = genTestCase SA.StubsProgram{
                     SA.sigFnRetTy=SA.StubsIntRepr
                     },
                     SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.LitExpr $ SA.IntLit 20) SA.StubsIntRepr]}] [] [],
-        SA.mkStubsLibrary "internal" [SA.SomeStubsFunction
+        SA.mkStubsModule "internal" [SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
                     SA.sigFnName="g",
@@ -229,8 +231,8 @@ opaqueTest = genTestCaseIO ( do
         Some counter <- return $ someSymbol "Counter"
         return SA.StubsProgram {
         SA.stubsEntryPoints=["main"],
-        SA.stubsLibs=[
-            SA.mkStubsLibrary "counter" [
+        SA.stubsModules=[
+            SA.mkStubsModule "counter" [
             SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -256,7 +258,7 @@ opaqueTest = genTestCaseIO ( do
                     },
                     SA.stubFnBody=[SA.Return $ SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)]}
         ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [],
-            SA.mkStubsLibrary "core" [
+            SA.mkStubsModule "core" [
                 SA.SomeStubsFunction
                     SA.StubsFunction {
                         SA.stubFnSig=SA.StubsSignature{
@@ -286,8 +288,8 @@ opaqueTest = genTestCaseIO ( do
 globalVarTest :: TestTree
 globalVarTest = genTestCase SA.StubsProgram{
         SA.stubsEntryPoints= ["main"],
-        SA.stubsLibs = [
-            SA.mkStubsLibrary "internal" [
+        SA.stubsModules = [
+            SA.mkStubsModule "internal" [
                 SA.SomeStubsFunction (
                     SA.StubsFunction{
                         SA.stubFnSig=SA.StubsSignature{
@@ -300,7 +302,7 @@ globalVarTest = genTestCase SA.StubsProgram{
                 )
 
             ] [] [SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl "i" SA.StubsIntRepr)],
-            SA.mkStubsLibrary "core" [
+            SA.mkStubsModule "core" [
                 SA.SomeStubsFunction (
                     SA.StubsFunction{
                         SA.stubFnSig=SA.StubsSignature{
@@ -335,8 +337,8 @@ opaqueGlobalTest = genTestCaseIO (do
         Some counter <- return $ someSymbol "Counter"
         return SA.StubsProgram {
             SA.stubsEntryPoints=["main"],
-            SA.stubsLibs=[
-                SA.mkStubsLibrary "counter" [
+            SA.stubsModules=[
+                SA.mkStubsModule "counter" [
                     SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -364,7 +366,7 @@ opaqueGlobalTest = genTestCaseIO (do
                     SA.stubFnBody=[SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr]}
 
                 ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl "i" (SA.StubsAliasRepr counter))],
-                SA.mkStubsLibrary "core"  [
+                SA.mkStubsModule "core"  [
                     SA.SomeStubsFunction (
                     SA.StubsFunction{
                         SA.stubFnSig=SA.StubsSignature{
@@ -442,7 +444,7 @@ corePipelinePreambleTest = testCase "Core Pipeline Preamble Check" $ do
     where 
         sProgs =  [SA.StubsProgram {
     SA.stubsEntryPoints=["f"],
-    SA.stubsLibs=[SA.mkStubsLibrary "core" [
+    SA.stubsModules=[SA.mkStubsModule "core" [
         SA.SomeStubsFunction SA.StubsFunction{
             SA.stubFnSig= SA.StubsSignature{
                 SA.sigFnName="f",
@@ -463,7 +465,7 @@ corePipelineModuleTest = testCase "Core Pipeline Module Check" $ do
     where 
         sProgs =  [SA.StubsProgram {
     SA.stubsEntryPoints=["f"],
-    SA.stubsLibs=[SA.mkStubsLibrary "core" [
+    SA.stubsModules=[SA.mkStubsModule "core" [
         SA.SomeStubsFunction SA.StubsFunction{
             SA.stubFnSig= SA.StubsSignature{
                 SA.sigFnName="f",
@@ -473,7 +475,7 @@ corePipelineModuleTest = testCase "Core Pipeline Module Check" $ do
             SA.stubFnBody=[SA.Return (SA.AppExpr "g" (Ctx.extend  Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)))  SA.StubsIntRepr)]
         }
     ] [] [],
-    SA.mkStubsLibrary "internal" [
+    SA.mkStubsModule "internal" [
         SA.SomeStubsFunction SA.StubsFunction{
             SA.stubFnSig= SA.StubsSignature{
                 SA.sigFnName="g",
@@ -491,8 +493,8 @@ corePipelineOpaqueTest = genCoreTestIO (do
         Some counter <- return $ someSymbol "Counter"
         return [SA.StubsProgram {
         SA.stubsEntryPoints=["f"],
-        SA.stubsLibs=[
-            SA.mkStubsLibrary "counter" [
+        SA.stubsModules=[
+            SA.mkStubsModule "counter" [
             SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -518,7 +520,7 @@ corePipelineOpaqueTest = genCoreTestIO (do
                     },
                     SA.stubFnBody=[SA.Return $ SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)]}
         ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [],
-            SA.mkStubsLibrary "core" [
+            SA.mkStubsModule "core" [
                 SA.SomeStubsFunction
                     SA.StubsFunction {
                         SA.stubFnSig=SA.StubsSignature{
@@ -547,8 +549,8 @@ corePipelineGlobalTest = genCoreTestIO (do
         return [
             SA.StubsProgram{
                 SA.stubsEntryPoints=["f","g","j"],
-                SA.stubsLibs=[
-                    SA.mkStubsLibrary "counter" [
+                SA.stubsModules=[
+                    SA.mkStubsModule "counter" [
                     SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -576,7 +578,7 @@ corePipelineGlobalTest = genCoreTestIO (do
                     SA.stubFnBody=[SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr]}
 
                 ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl "i" (SA.StubsAliasRepr counter))],
-                SA.mkStubsLibrary "core" [
+                SA.mkStubsModule "core" [
                         SA.SomeStubsFunction SA.StubsFunction {
                             SA.stubFnSig=SA.StubsSignature {
                                 SA.sigFnName="j",

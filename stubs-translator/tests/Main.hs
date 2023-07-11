@@ -96,7 +96,7 @@ testFnTranslationLoop = testCase "Loop Translation" $ do
 testOpaquenessCheckRet :: TestTree 
 testOpaquenessCheckRet = testCase "Catch Opaqueness Violation in return" $ do 
     Some counter <- return $ LCCC.someSymbol "Counter"
-    let lib = SA.mkStubsLibrary "counter" [
+    let lib = SA.mkStubsModule "counter" [
             SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -111,7 +111,7 @@ testOpaquenessCheckRet = testCase "Catch Opaqueness Violation in return" $ do
 testOpaquenessCheckArg :: TestTree 
 testOpaquenessCheckArg = testCase "Catch Opaqueness Violation in argument" $ do 
     Some counter <- return $ LCCC.someSymbol "Counter"
-    let lib = SA.mkStubsLibrary "counter" [
+    let lib = SA.mkStubsModule "counter" [
             SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -134,7 +134,7 @@ testOpaquenessCheckArg = testCase "Catch Opaqueness Violation in argument" $ do
 testOpaquenessCheckAssignmentBad :: TestTree 
 testOpaquenessCheckAssignmentBad = testCase "Catch Opaqueness Violation in variable assignment" $ do 
     Some counter <- return $ LCCC.someSymbol "Counter"
-    let lib = SA.mkStubsLibrary "counter" [
+    let lib = SA.mkStubsModule "counter" [
             SA.SomeStubsFunction SA.StubsFunction {
                 SA.stubFnSig = SA.StubsSignature {
                     SA.sigFnName ="inc",
@@ -149,7 +149,7 @@ testOpaquenessCheckAssignmentBad = testCase "Catch Opaqueness Violation in varia
 testOpaquenessCheckAssignmentOK :: TestTree 
 testOpaquenessCheckAssignmentOK = testCase "Allow type changing with decl" $ do 
     Some counter <- return $ LCCC.someSymbol "Counter"
-    let lib = SA.mkStubsLibrary "counter" [
+    let lib = SA.mkStubsModule "counter" [
             SA.SomeStubsFunction SA.StubsFunction {
                 SA.stubFnSig = SA.StubsSignature {
                     SA.sigFnName ="inc",

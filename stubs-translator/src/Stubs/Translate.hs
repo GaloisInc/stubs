@@ -311,7 +311,7 @@ translateLibrary :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.
             [(String, SomeHandle arch)] ->
             MapF.MapF P.SymbolRepr STC.WrappedStubsTypeAliasRepr ->
             MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
-            SA.StubsLibrary -> IO (CrucibleLibrary arch)
+            SA.StubsModule -> IO (CrucibleLibrary arch)
 translateLibrary ng halloc ovMap prevHdls aliasMap gmap lib = do
     cfghdls <- translateDecls ng halloc ovMap prevHdls aliasMap gmap (SA.fnDecls lib)
     return CrucibleLibrary {
@@ -330,9 +330,9 @@ translateProgram ng halloc prog = do
             let q = (SA.sigFnName sig, SomeWrappedOverride $ WrappedOverride (SPR.preambleMap @arch sig ) (StubHandle @arch (SA.sigFnArgTys sig) (SA.sigFnRetTy sig) hdl))
             return q) SPR.stubsPreamble
 
-    let libs = SA.stubsLibs prog
+    let libs = SA.stubsModules prog
     -- Enforce Opaque Types
-    foldM_ (\_ lib -> unless (SO.satOpaque lib) $ fail ("Opaqueness check failed for library: " ++ show (SA.libName lib))) () libs
+    foldM_ (\_ lib -> unless (SO.satOpaque lib) $ fail ("Opaqueness check failed for library: " ++ show (SA.moduleName lib))) () libs
 
     -- Verify Signatures (enforces opacity for calls as well)
     let expectedSigs = Set.difference (Set.fromList $ concatMap SA.externSigs libs) (Set.fromList SPR.stubsPreamble)
