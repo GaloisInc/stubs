@@ -41,6 +41,7 @@ instance STC.StubsArch SAA.AArch32 where
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsBool = LCT.BoolType
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsUnit = LCT.UnitType
     type instance ArchTypeMatch SAA.AArch32 ('SA.StubsAlias s) = STC.ArchTypeMatch SAA.AArch32 (SA.ResolveAlias s)
+    type instance ArchTypeMatch SAA.AArch32 ('SA.StubsIntrinsic s) = SA.ResolveIntrinsic s
 
     type instance ArchIntSize SAA.AArch32 = 32
     type instance ArchShortSize SAA.AArch32 =16
@@ -62,6 +63,12 @@ instance STC.StubsArch SAA.AArch32 where
                 case MapF.lookup  s tymap of 
                     Just (STC.WrappedStubsTypeAliasRepr _ t) -> STC.toCrucibleTy t
                     Nothing -> error $ "missing type alias: " ++ show s
+            SA.StubsIntrinsicRepr s -> do 
+                env <- STC.getStubEnv 
+                let intrinsicMap = STC.stIntrinsicMap env 
+                case MapF.lookup s intrinsicMap of 
+                    Just (STC.WrappedIntrinsicRepr _ t) -> return t 
+                    Nothing -> error $ "Missing intrinsic: " ++ show s
 
     translateLit lit = do 
         let n = PN.knownNat @32

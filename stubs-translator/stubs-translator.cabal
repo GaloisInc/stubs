@@ -45,6 +45,7 @@ library
     exposed-modules: Stubs.AST,
                      Stubs.Translate,
                      Stubs.Translate.Core,
+                     Stubs.Translate.Intrinsic,
                      Stubs.Preamble,
                      Stubs.Preamble.X86,
                      Stubs.Preamble.AArch32,

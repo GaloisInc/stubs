@@ -2,6 +2,8 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Stubs.Wrapper (
     loadParsedPrograms,
@@ -47,8 +49,11 @@ import qualified Stubs.Translate.Core as STC
 import qualified Data.Text as DT
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified What4.Expr.Builder
+import qualified Stubs.Translate.Intrinsic as STI
+import qualified Lang.Crucible.Backend as LCB
+import qualified What4.Protocol.Online as WPO
 
-loadParsedPrograms :: forall ext p sym arch w . (ext ~ DMS.MacawExt arch, DMM.MemWidth w) => [(FilePath,LCSC.ParsedProgram ext)] -> [WF.FunctionName] -> [(FilePath, Word64,WF.FunctionName)] -> IO (SFT.CrucibleSyntaxOverrides w p sym arch)
+loadParsedPrograms :: forall ext sym arch w . (ext ~ DMS.MacawExt arch, DMM.MemWidth w) => [(FilePath,LCSC.ParsedProgram ext)] -> [WF.FunctionName] -> [(FilePath, Word64,WF.FunctionName)] -> IO (SFT.CrucibleSyntaxOverrides w () sym arch)
 loadParsedPrograms pathProgs startupOverrides funAddrOverrides = do
   overrides <- traverse (uncurry parsedProgToFunctionOverride) pathProgs
   let ovmap = Map.fromList $ map (\sov@(SF.SomeFunctionOverride ov) -> (SF.functionName ov, sov)) overrides
@@ -84,11 +89,15 @@ loadParsedPrograms pathProgs startupOverrides funAddrOverrides = do
       | otherwise
       = CMC.throwM $ SWE.StartupOverrideUnexpectedType $ SF.functionName ov
 
-crucibleProgramToFunctionOverride :: (bak ~ LCBO.OnlineBackend solver scope t fs,sym ~ What4.Expr.Builder.ExprBuilder scope t fs) => (STC.StubsArch arch, SPR.Preamble arch) =>bak -> ST.CrucibleProgram arch -> IO (SF.SomeFunctionOverride p sym arch)
-crucibleProgramToFunctionOverride bak prog = do
+crucibleProgramToFunctionOverride ::  (STC.StubsArch arch, SPR.Preamble arch) =>STC.Sym sym -> ST.CrucibleProgram arch -> IO (SF.SomeFunctionOverride p sym arch)
+crucibleProgramToFunctionOverride sym prog = do
     -- Translate preambles into bindings
-    let wrappedOvs = ST.crFnHandleMap prog
-    let preambleBindings = map (wrappedOverrideToBinding bak) wrappedOvs
+    let wrappedPre = ST.crFnHandleMap prog
+    let preambleBindings = map (wrappedPreambleToBinding sym) wrappedPre
+    -- Haskell Overrides to bindings 
+    let wrappedHovs = ST.crOvHandleMap prog
+    let ovBindings = map (wrappedOverrideToBinding sym) wrappedHovs
+
     -- Get entry point of override
     case List.partition (isEntryPoint (ST.crEntry prog)) (ST.crCFGs prog) of
       ([LCSC.ACFG argTypes retType cfg], aux) -> do
@@ -106,7 +115,7 @@ crucibleProgramToFunctionOverride bak prog = do
                     SF.functionExterns=mempty,
                     SF.functionArgTypes=ptrTypes,
                     SF.functionReturnType=retRepr,
-                    SF.functionAuxiliaryFnBindings=preambleBindings++auxBindings, --Should have preamble + aux fns here
+                    SF.functionAuxiliaryFnBindings=preambleBindings++ovBindings++auxBindings, --Should have preamble + aux fns here
                     SF.functionForwardDeclarations=mempty,
                     SF.functionOverride= \bak args _ _ -> do --will bak as an arg be an issue? this needs to be the same bak
                         pointerArgs <- liftIO $ SFA.buildFunctionOverrideArgs bak argMap ptrTypeMapping args
@@ -121,7 +130,7 @@ parsedProgToFunctionOverride ::
   ( ext ~ DMS.MacawExt arch ) =>
   String ->
   LCSC.ParsedProgram ext ->
-  IO (SF.SomeFunctionOverride p sym arch)
+  IO (SF.SomeFunctionOverride () sym arch)
 parsedProgToFunctionOverride path parsedProg = do
   let fnName = DS.fromString $ FP.takeBaseName path
   let globals = LCSC.parsedProgGlobals parsedProg
@@ -161,7 +170,7 @@ acfgToFunctionOverride
   -> [LCSC.ACFG ext]
   -- ^ The ACFGs for auxiliary functions
   -> LCSC.ACFG ext
-  -> SF.SomeFunctionOverride p sym arch
+  -> SF.SomeFunctionOverride () sym arch
 acfgToFunctionOverride name globals externs fwdDecs auxCFGs (LCSC.ACFG argTypes retType cfg) =
   let argMap = SFA.bitvectorArgumentMapping argTypes
       (ptrTypes, ptrTypeMapping) = SFA.pointerArgumentMappping argMap
@@ -190,12 +199,15 @@ acfgToFunctionOverride name globals externs fwdDecs auxCFGs (LCSC.ACFG argTypes 
          }
 
 -- | Convert an 'LCSC.ACFG' to a 'LCS.FnBinding'.
-acfgToFnBinding :: forall p sym ext. LCSC.ACFG ext -> LCS.FnBinding p sym ext
+acfgToFnBinding :: forall sym ext p. LCSC.ACFG ext -> LCS.FnBinding p sym ext
 acfgToFnBinding (LCSC.ACFG _ _ g) =
   case LCCS.toSSA g of
     LCCC.SomeCFG ssa ->
       LCS.FnBinding (LCCR.cfgHandle g)
                     (LCS.UseCFG ssa (LCAP.postdomInfo ssa))
 
-wrappedOverrideToBinding :: (bak ~ LCBO.OnlineBackend solver scope t fs,sym ~ What4.Expr.Builder.ExprBuilder scope t fs) => bak -> ST.SomeWrappedOverride arch -> LCS.FnBinding p sym (DMS.MacawExt arch) 
-wrappedOverrideToBinding bak (ST.SomeWrappedOverride (ST.WrappedOverride ovf (STC.StubHandle _ _ hdl) )) = LCS.FnBinding hdl (LCS.UseOverride (ovf bak))
+wrappedPreambleToBinding :: STC.Sym sym -> ST.SomePreambleOverride arch -> LCS.FnBinding p sym (DMS.MacawExt arch) 
+wrappedPreambleToBinding (STC.Sym _ bak) (ST.SomePreambleOverride (ST.PreambleOverride ovf (STC.StubHandle _ _ hdl) )) = LCS.FnBinding hdl (LCS.UseOverride (ovf bak))
+
+wrappedOverrideToBinding :: STC.Sym sym -> ST.SomeWrappedOverride arch -> LCS.FnBinding p sym (DMS.MacawExt arch) 
+wrappedOverrideToBinding sym (ST.SomeWrappedOverride (ST.WrappedOverride ovf (STC.StubHandle _ _ hdl))) = LCS.FnBinding hdl (LCS.UseOverride (ovf sym))

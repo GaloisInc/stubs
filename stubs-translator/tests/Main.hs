@@ -25,7 +25,11 @@ import Lang.Crucible.CFG.Reg as LCCR
 import qualified Data.Parameterized.Map as MapF
 import Stubs.Preamble.X86 ()
 import qualified Stubs.Opaque as SO
+import qualified Stubs.Translate.Core as STC
+import qualified Data.Macaw.CFG as DMC
 
+
+testEnv = STC.StubsEnv @DMX.X86_64 (DMC.memWidthNatRepr @(DMC.ArchAddrWidth DMX.X86_64)) MapF.empty MapF.empty
 testFnTranslationBasic :: TestTree
 testFnTranslationBasic = testCase "Basic Translation" $ do 
     hAlloc <- LCF.newHandleAllocator
@@ -38,7 +42,7 @@ testFnTranslationBasic = testCase "Basic Translation" $ do
         },
         SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 20),SA.Return (SA.LitExpr $ SA.IntLit 20)]
     }
-    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [] [] MapF.empty MapF.empty [SA.SomeStubsFunction fn]
+    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [] [] testEnv MapF.empty [] [SA.SomeStubsFunction fn]
     let cfgs = map fst p 
 
     -- Expect single CFG
@@ -61,7 +65,7 @@ testFnTranslationITE = testCase "ITE Translation" $ do
         },
         SA.stubFnBody=[SA.ITE (SA.LitExpr $ SA.BoolLit True) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 20)] [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 40)],SA.Return (SA.LitExpr $ SA.IntLit 20)]
     }
-    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [] [] MapF.empty MapF.empty [SA.SomeStubsFunction fn]
+    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [] [] testEnv MapF.empty [] [SA.SomeStubsFunction fn]
     let cfgs = map fst p 
 
     -- Expect single CFG
@@ -83,7 +87,7 @@ testFnTranslationLoop = testCase "Loop Translation" $ do
         },
         SA.stubFnBody=[SA.Loop (SA.LitExpr $ SA.BoolLit False) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 40)] ,SA.Return (SA.LitExpr $ SA.IntLit 20)]
     }
-    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [] [] MapF.empty MapF.empty [SA.SomeStubsFunction fn]
+    p <- ST.translateDecls @DMX.X86_64 ng hAlloc [] [] testEnv MapF.empty [] [SA.SomeStubsFunction fn]
     let cfgs = map fst p
 
     -- Expect single CFG

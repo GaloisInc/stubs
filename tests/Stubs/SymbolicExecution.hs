@@ -33,7 +33,6 @@ import qualified Data.ByteString as BS
 import           Data.Char as C
 import qualified Data.Foldable as F
 import qualified Data.IntMap as IM
-import           Data.IORef ( readIORef )
 import qualified Data.List as List
 import qualified Data.List.NonEmpty as NEL
 import qualified Data.Map.Strict as Map
@@ -109,8 +108,6 @@ import qualified Stubs.Solver as AS
 import qualified Stubs.Syscall as ASy
 import qualified Stubs.Verifier.Concretize as AVC
 import qualified Stubs.Translate as ST
-import qualified Lang.Crucible.Syntax.Concrete as LCSC
-import qualified Lang.Crucible.CFG.Reg as LCCR
 import qualified Stubs.Wrapper as SW
 import qualified Stubs.Translate.Core as STC
 import qualified Stubs.Preamble as SPR
@@ -1529,12 +1526,9 @@ simulateFunction logAction bak execFeatures halloc archInfo archVals seConf init
     LCCC.freshGlobalVar halloc
                         (DT.pack "AMBIENT_environ")
                         LCLM.PtrRepr
-  --TODO: Rewrite from here
-  -- 1. Preamble code -> bindings, used as auxillaries in all stubs -> avoids preamble being called outside stubs
-  -- 2. CruciblePrograms into Overrides : entry point is the override, others become auxilaries like preamble 
-  -- 3. Put the overrides into the functionabi. Nothing else should need to change?
 
-  ovs <- liftIO $ mapM (SW.crucibleProgramToFunctionOverride bak ) crProgs
+  let tsym = STC.Sym (LCB.backendGetSym bak) bak
+  ovs <- liftIO $ mapM (SW.crucibleProgramToFunctionOverride tsym ) crProgs
   let ASy.BuildSyscallABI buildSyscallABI = abiBuildSyscallABI fnConf
   let syscallABI = buildSyscallABI fs initialMem (ALB.bcUnsuportedRelocations binConf)
   let AF.BuildFunctionABI buildFunctionABI = abiBuildFunctionABI fnConf

@@ -39,6 +39,11 @@ import qualified Data.Parameterized as P
 import Unsafe.Coerce (unsafeCoerce)
 import qualified Lang.Crucible.FunctionHandle as LCCR
 import qualified Lang.Crucible.CFG.Common as LCCC
+import qualified What4.Protocol.Online as WPO
+import qualified Lang.Crucible.Backend.Online as LCBO
+import qualified What4.Expr as WE
+import qualified Lang.Crucible.Backend as LCB
+import qualified What4.Interface as WI
 
 -- | Type family to map a list of Stubs types to a corresponding list of Crucible types
 type family ArchTypeMatchCtx (arch :: *) (stubTy :: Ctx SA.StubsType) = (crucTy :: Ctx LCT.CrucibleType) where
@@ -47,7 +52,13 @@ type family ArchTypeMatchCtx (arch :: *) (stubTy :: Ctx SA.StubsType) = (crucTy 
 
 -- | Type class for defining a valid architecture for translation
 class (DMS.SymArchConstraints arch, 
-        ArchTypeMatch arch SA.StubsBool ~ LCT.BoolType, -- Bool must translate to bool, for loops and conditionals (enforced by crucible's Generator)
+        ArchTypeMatch arch 'SA.StubsBool ~ LCT.BoolType, -- Bool must translate to bool, for loops and conditionals (enforced by crucible's Generator)
+        ArchTypeMatch arch 'SA.StubsInt ~ LCT.BVType (ArchIntSize arch),
+        ArchTypeMatch arch 'SA.StubsUInt ~ LCT.BVType (ArchIntSize arch),
+        ArchTypeMatch arch 'SA.StubsShort ~ LCT.BVType (ArchShortSize arch),
+        ArchTypeMatch arch 'SA.StubsUShort ~ LCT.BVType (ArchShortSize arch),
+        ArchTypeMatch arch 'SA.StubsLong ~ LCT.BVType (ArchLongSize arch),
+        ArchTypeMatch arch 'SA.StubsULong ~ LCT.BVType (ArchLongSize arch),
         -- 16 taken from previous constraints imposed on arch
         16 PN.<= ArchIntSize arch, 1 PN.<= ArchIntSize arch, KnownNat (ArchIntSize arch),
         16 PN.<= ArchShortSize arch, 1 PN.<= ArchShortSize arch, KnownNat (ArchShortSize arch),
@@ -101,6 +112,8 @@ withReturn f = do
     StubsState _ retrepr _ _ _ _ _ <- get
     f retrepr
 
+data Sym sym = forall scope st fs solver . (sym ~ WE.ExprBuilder scope st fs,WI.IsExprBuilder sym,WPO.OnlineSolver solver, LCB.IsSymBackend sym (LCBO.OnlineBackend solver scope st fs)) => Sym sym ( LCBO.OnlineBackend solver scope st fs)
+
 -- | A symbol (representing an opaque type), alongside a type repr that will be resolved during translation
 data WrappedStubsTypeAliasRepr (s :: P.Symbol) where
     WrappedStubsTypeAliasRepr :: P.SymbolRepr s -> SA.StubsTypeRepr (SA.ResolveAlias s) -> WrappedStubsTypeAliasRepr s 
@@ -109,15 +122,26 @@ data WrappedStubsTypeAliasRepr (s :: P.Symbol) where
 instance P.ShowF WrappedStubsTypeAliasRepr where 
     showF (WrappedStubsTypeAliasRepr s t) = "WrappedAlias: " ++ show s ++ " " ++ show t
 
+data WrappedIntrinsicRepr (s:: P.Symbol) where 
+    WrappedIntrinsicRepr :: P.SymbolRepr s -> LCT.TypeRepr (SA.ResolveIntrinsic s) -> WrappedIntrinsicRepr s 
+    deriving Show 
+
+instance P.ShowF WrappedIntrinsicRepr where 
+    showF (WrappedIntrinsicRepr s t) = "WrappedIntrinsic: " ++ show s ++ " " ++ show t
 
 -- | Wrap symbol and type together, to use in translation of opaque types
 coerceToAlias :: P.SymbolRepr s -> SA.StubsTypeRepr a -> WrappedStubsTypeAliasRepr s
 coerceToAlias s repr = WrappedStubsTypeAliasRepr s (unsafeCoerce repr)
 
+-- | Wrap symbol and CrucibleType, to translate intrinsic types
+coerceToIntrinsic :: P.SymbolRepr s -> LCT.TypeRepr tp -> WrappedIntrinsicRepr s 
+coerceToIntrinsic s repr = WrappedIntrinsicRepr s (unsafeCoerce repr)
+
 -- | Architecture information and a mapping of symbols to their corresponding types
 data StubsEnv arch = StubsEnv {
     stArchWidth::PN.NatRepr (DMC.ArchAddrWidth arch)
     , stTyMap :: MapF.MapF P.SymbolRepr WrappedStubsTypeAliasRepr
+    , stIntrinsicMap :: MapF.MapF P.SymbolRepr WrappedIntrinsicRepr
 }
 
 -- | Translation monad, which is a Crucible generator with a StubsState

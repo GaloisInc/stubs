@@ -29,8 +29,10 @@ module Stubs.Translate (
  translateStmts,
  translateProgram,
  CrucibleProgram(..),
+ SomePreambleOverride(..),
+ PreambleOverride(..),
  SomeWrappedOverride(..),
- WrappedOverride(..)
+ WrappedOverride(..),
 ) where
 
 import Stubs.Translate.Core
@@ -70,6 +72,7 @@ import qualified Data.List as List
 import qualified Data.Graph as Graph
 import qualified Data.Set as Set
 import qualified Stubs.Opaque as SO
+import qualified Stubs.Translate.Intrinsic as STI
 
 -- | A translated Program. Several fields are taken from crucible-syntax's ParsedProgram, for easy conversion
 data CrucibleProgram arch = CrucibleProgram {
@@ -79,9 +82,10 @@ data CrucibleProgram arch = CrucibleProgram {
   crExterns :: Map.Map LCSA.GlobalName (Some LCCC.GlobalVar),
   crFwdDecs :: Map.Map WF.FunctionName LCF.SomeHandle,
   -- | Handle information for preamble, necessary for linking
-  crFnHandleMap :: [SomeWrappedOverride arch],
+  crFnHandleMap :: [SomePreambleOverride arch],
   -- | Name of the entry point CFG
-  crEntry :: String
+  crEntry :: String,
+  crOvHandleMap :: [SomeWrappedOverride arch]
 }
 
 -- | A translated library / module. This is the result of translating a StubsLibrary
@@ -92,9 +96,13 @@ data CrucibleLibrary arch = CrucibleLibrary {
     crExportedHandles :: [(String,STC.SomeHandle arch)]
 }
 
-data SomeWrappedOverride arch = forall args ret . SomeWrappedOverride(WrappedOverride arch args ret)
-data WrappedOverride arch args ret = WrappedOverride (forall sym bak solver scope st fs p . (bak ~ LCBO.OnlineBackend solver scope st fs, LCB.HasSymInterface sym bak, WI.IsExprBuilder sym) =>
+data SomePreambleOverride arch = forall args ret . SomePreambleOverride(PreambleOverride arch args ret)
+
+data PreambleOverride arch args ret = PreambleOverride (forall sym bak solver scope st fs p . (bak ~ LCBO.OnlineBackend solver scope st fs, LCB.HasSymInterface sym bak, WI.IsExprBuilder sym) =>
     bak -> LCS.Override p sym (DMS.MacawExt arch) (STC.ArchTypeMatchCtx arch args) (STC.ArchTypeMatch arch ret)) (StubHandle arch args ret)
+
+data SomeWrappedOverride arch = forall args ret. SomeWrappedOverride(WrappedOverride arch args ret) 
+data WrappedOverride arch args ret = WrappedOverride (forall sym p . STC.Sym sym -> LCS.Override p sym (DMS.MacawExt arch) (STC.ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret)) (StubHandle arch args ret)
 
 -- Unexported Internal Function. A mix of returing Atoms vs Expr causes this hierarchy to be necessary
 translateExpr' :: forall arch s ret b sret args . (b ~ ArchTypeMatch arch sret, LCCE.IsSyntaxExtension(DMS.MacawExt arch), STC.StubsArch arch) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Atom s b)
@@ -253,43 +261,46 @@ translateFn :: forall args ret s arch . (DMS.SymArchConstraints arch, LCCE.IsSyn
                 LCF.HandleAllocator ->
                 Map.Map String (SomeHandle arch )->
                 StubHandle arch args ret ->
-                MapF.MapF P.SymbolRepr STC.WrappedStubsTypeAliasRepr ->
+                STC.StubsEnv arch ->
                 MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
                 SA.StubsFunction args ret ->  IO (LCSC.ACFG (DMS.MacawExt arch))
-translateFn ng _ handles hdl aliasMap gmap SA.StubsFunction{SA.stubFnSig=SA.StubsSignature{SA.sigFnArgTys=argtys, SA.sigFnRetTy=retty},SA.stubFnBody=body}= do
-    let e = StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) aliasMap
+translateFn ng _ handles hdl env gmap SA.StubsFunction{SA.stubFnSig=SA.StubsSignature{SA.sigFnArgTys=argtys, SA.sigFnRetTy=retty},SA.stubFnBody=body}= do
     -- CFG needs crucible type info
-    args <- runReaderT (toCrucibleTyCtx argtys) e
-    cret <- runReaderT (toCrucibleTy retty) e
+    args <- runReaderT (toCrucibleTyCtx argtys) env
+    cret <- runReaderT (toCrucibleTy retty) env
     let StubHandle _ _ handle = hdl
-    (LCCR.SomeCFG cfg, _) <- liftIO $ LCCG.defineFunction WF.InternalPos (Some ng) handle $ \crucArgs -> (StubsState e retty MapF.empty MapF.empty (translateFnArgs crucArgs argtys) handles gmap,
+    (LCCR.SomeCFG cfg, _) <- liftIO $ LCCG.defineFunction WF.InternalPos (Some ng) handle $ \crucArgs -> (StubsState env retty MapF.empty MapF.empty (translateFnArgs crucArgs argtys) handles gmap,
                                                                                                      translateStmts @arch @_ @ret body >> LCCG.reportError (LCCR.App $ LCCE.StringEmpty UnicodeRepr))
     return $ LCSC.ACFG args cret cfg
 
 -- | Translate all declarations from a StubsLibrary
-translateDecls :: forall arch s. (STC.StubsArch arch, SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) =>
+translateDecls :: forall arch s bak. (STC.StubsArch arch, SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) =>
         PN.NonceGenerator IO s ->
         LCF.HandleAllocator ->
-        [(String, SomeWrappedOverride arch)] -> -- Override mappings : needed so all modules use the same preamble handles
+        [(String, SomePreambleOverride arch)] -> -- Override mappings : needed so all modules use the same preamble handles
         [(String, SomeHandle arch)] -> -- Handles for previously translated functions (from modules already processed)
-         MapF.MapF P.SymbolRepr STC.WrappedStubsTypeAliasRepr -> -- Alias Map
+        STC.StubsEnv arch -> 
         MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
+        [(String, SomeWrappedOverride arch)] ->
         [SA.SomeStubsFunction] -> -- Functions to translate 
         IO [(LCSC.ACFG (DMS.MacawExt arch), (String,SomeHandle arch))]
-translateDecls ng hAlloc ovMap prevHdls aliasMap gmap fns = do
+translateDecls ng hAlloc preMap prevHdls env gmap ovMap fns = do
 
     -- get handles for all functions before hand, for linking.
     -- Handles contain an id nonce, so cannot translate signatures in situ
     hdls <- mapM (\(SA.SomeStubsFunction f) -> do
         let sig = SA.stubFnSig f
-        h <- mkHandle @arch hAlloc sig aliasMap
+        h <- mkHandle @arch hAlloc sig env
         return (SA.sigFnName sig, SomeHandle @arch (StubHandle @arch (SA.sigFnArgTys sig) (SA.sigFnRetTy sig) h))
         ) fns
 
     -- Build handle map for preamble linking.
-    let preambleHdls = map (\(n,SomeWrappedOverride(WrappedOverride _ s)) -> (n,SomeHandle s)) ovMap
+    let preambleHdls = map (\(n,SomePreambleOverride(PreambleOverride _ s)) -> (n,SomeHandle s)) preMap
 
-    let handles = Map.fromList (preambleHdls++prevHdls++hdls)
+    -- TODO: override handles
+    let ovHdls = map (\(n, SomeWrappedOverride(WrappedOverride _ s)) -> (n,SomeHandle s)) ovMap
+
+    let handles = Map.fromList (preambleHdls++ovHdls++prevHdls++hdls)
 
     -- Generate CFG for each function
     mapM (\(SA.SomeStubsFunction f) -> do
@@ -298,7 +309,7 @@ translateDecls ng hAlloc ovMap prevHdls aliasMap gmap fns = do
         StubHandle args ret _ <- return hdl
         case (P.testEquality ret (SA.sigFnRetTy sig), P.testEquality args $ SA.sigFnArgTys sig) of
             (Just P.Refl, Just P.Refl) -> do
-                t <- translateFn @_ @_ @s @arch ng hAlloc handles hdl aliasMap gmap f
+                t <- translateFn @_ @_ @s @arch ng hAlloc handles hdl env gmap f
                 return (t,(SA.sigFnName sig,SomeHandle hdl))
             _ -> fail "Should not occur: Translating undefined function"
         ) fns
@@ -307,13 +318,14 @@ translateDecls ng hAlloc ovMap prevHdls aliasMap gmap fns = do
 translateLibrary :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) =>
             PN.NonceGenerator IO s ->
             LCF.HandleAllocator ->
-            [(String, SomeWrappedOverride arch)] ->
+            [(String, SomePreambleOverride arch)] ->
             [(String, SomeHandle arch)] ->
-            MapF.MapF P.SymbolRepr STC.WrappedStubsTypeAliasRepr ->
+            STC.StubsEnv arch ->
             MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
+                [(String, SomeWrappedOverride arch)] ->
             SA.StubsModule -> IO (CrucibleLibrary arch)
-translateLibrary ng halloc ovMap prevHdls aliasMap gmap lib = do
-    cfghdls <- translateDecls ng halloc ovMap prevHdls aliasMap gmap (SA.fnDecls lib)
+translateLibrary ng halloc preMap prevHdls env gmap ovMap lib = do
+    cfghdls <- translateDecls ng halloc preMap prevHdls env gmap ovMap (SA.fnDecls lib)
     return CrucibleLibrary {
         crLibCFGs=map fst cfghdls,
         crExportedHandles=map snd cfghdls
@@ -321,13 +333,33 @@ translateLibrary ng halloc ovMap prevHdls aliasMap gmap lib = do
 
 -- | Translation of an entire StubsProgram. This is the core entry point for translation, and includes 
 -- module graph resolution, for externs in each library
-translateProgram :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> SA.StubsProgram -> IO [CrucibleProgram arch]
-translateProgram ng halloc prog = do
+translateProgram :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> [STI.OverrideModule arch]-> SA.StubsProgram -> IO [CrucibleProgram arch]
+translateProgram ng halloc ovs prog = do
 
+    -- 1. Translate Haskell Overrides
+    -- 1.1 Collect Intrinsic Definitions, to put into environment
+    let intrinsicMap = foldr (\(STI.SomeIntrinsicTyDecl (STI.IntrinsicTyDecl s ct)) acc -> MapF.insert s (STC.coerceToIntrinsic s ct) acc) MapF.empty (concatMap (\(STI.OverrideModule _ _ decls)-> decls)  ovs)
+    -- 1.2 Wrap up override definitions like preamble (Will put this information into CrucibleProgram, as it needs to be linked specially)
+    ovMapTpl <- concat <$> mapM (\(STI.OverrideModule _ decls _) -> mapM (\(STI.SomeStubsOverride (STI.StubsOverride ovf cargs cret) sig) -> do 
+                SA.StubsSignature n argtys ret <- return sig
+                hdl <-  mkHandle @arch halloc sig (STC.StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) MapF.empty intrinsicMap)
+                --Type Check
+                --declared
+                argsd <- runReaderT (toCrucibleTyCtx argtys) (STC.StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) MapF.empty intrinsicMap)
+                retd <- runReaderT (toCrucibleTy ret) (STC.StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) MapF.empty intrinsicMap)
+
+                Just P.Refl <- return $ P.testEquality cargs argsd
+                Just P.Refl <- return $ P.testEquality cret retd
+
+                let wrappedOv = WrappedOverride ovf (StubHandle @arch argtys ret hdl)
+                return ((n,SomeWrappedOverride wrappedOv),SA.SomeStubsSignature sig)) decls) ovs
+
+    let ovMap = map fst ovMapTpl
+    let ovSigs = map snd ovMapTpl
     --Every lib shares the same preamble handles
-    ovMap <- mapM (\(SA.SomeStubsSignature sig) -> do
-            hdl <-  mkHandle @arch halloc sig MapF.empty
-            let q = (SA.sigFnName sig, SomeWrappedOverride $ WrappedOverride (SPR.preambleMap @arch sig ) (StubHandle @arch (SA.sigFnArgTys sig) (SA.sigFnRetTy sig) hdl))
+    preMap <- mapM (\(SA.SomeStubsSignature sig) -> do
+            hdl <-  mkHandle @arch halloc sig (STC.StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) MapF.empty intrinsicMap)
+            let q = (SA.sigFnName sig, SomePreambleOverride $ PreambleOverride (SPR.preambleMap @arch sig ) (StubHandle @arch (SA.sigFnArgTys sig) (SA.sigFnRetTy sig) hdl))
             return q) SPR.stubsPreamble
 
     let libs = SA.stubsModules prog
@@ -335,7 +367,7 @@ translateProgram ng halloc prog = do
     foldM_ (\_ lib -> unless (SO.satOpaque lib) $ fail ("Opaqueness check failed for library: " ++ show (SA.moduleName lib))) () libs
 
     -- Verify Signatures (enforces opacity for calls as well)
-    let expectedSigs = Set.difference (Set.fromList $ concatMap SA.externSigs libs) (Set.fromList SPR.stubsPreamble)
+    let expectedSigs = Set.difference (Set.fromList $ concatMap SA.externSigs libs) (Set.union (Set.fromList SPR.stubsPreamble) (Set.fromList ovSigs))
     let definedSigs = Set.fromList $ concatMap SA.stubsLibDefs libs
     let undefinedSigs = Set.toList $ Set.difference expectedSigs definedSigs
     Control.Monad.RWS.when (not (null undefinedSigs)) $ fail ("Missing signatures: " ++ show undefinedSigs)
@@ -343,6 +375,7 @@ translateProgram ng halloc prog = do
     -- Collect aliases/opaques
     let tyMap = foldr (\(SA.SomeStubsTyDecl (SA.StubsTyDecl s t)) acc -> MapF.insert s (STC.coerceToAlias s t) acc) MapF.empty ( concatMap SA.tyDecls libs)
 
+    let env = STC.StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) tyMap intrinsicMap
     -- Topological sort of module/lib graph
     let dependencyList = map (\ lib -> (lib,filter (\olib -> not $ List.null $ List.intersect (stubsLibDefs olib) (SA.externSigs lib))
                  libs)) libs
@@ -362,25 +395,24 @@ translateProgram ng halloc prog = do
             (l,_,_)-> l
             ) $ Graph.topSort $ Graph.transposeG g'
     --Global variable initialization
-    globalMap <- translateGlobals @arch halloc (STC.StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) tyMap) (concatMap SA.globalDecls libs)
+    globalMap <- translateGlobals @arch halloc env (concatMap SA.globalDecls libs)
 
 
     -- Translate libraries
     translatedLibs <- foldM (\ (tlibs,acc) lib -> do
-                translated <- translateLibrary ng halloc ovMap acc tyMap globalMap lib
+                translated <- translateLibrary ng halloc preMap acc env globalMap ovMap lib
                 let cfgs = crLibCFGs translated
                 let accHdls = crExportedHandles translated
                 return (cfgs++tlibs,accHdls++acc)
             ) ([],[]) orderedLibs
 
-    let crucProgs = map (\s -> CrucibleProgram{crEntry=s,crFnHandleMap=map snd ovMap, crCFGs=fst translatedLibs,crExterns=mempty, crGlobals=mempty,crFwdDecs=mempty }) (SA.stubsEntryPoints prog)
+    let crucProgs = map (\s -> CrucibleProgram{crEntry=s,crFnHandleMap=map snd preMap, crCFGs=fst translatedLibs,crExterns=mempty, crGlobals=mempty,crFwdDecs=mempty, crOvHandleMap = map snd ovMap}) (SA.stubsEntryPoints prog)
     return crucProgs
 
-mkHandle :: forall arch args ret . (STC.StubsArch arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCF.HandleAllocator -> SA.StubsSignature args ret -> MapF.MapF P.SymbolRepr STC.WrappedStubsTypeAliasRepr-> IO ( LCF.FnHandle (ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret))
-mkHandle hAlloc fn tyMap = do
-    let e = StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) tyMap
-    args <- runReaderT (toCrucibleTyCtx (SA.sigFnArgTys fn)) e
-    cret <- runReaderT (toCrucibleTy (SA.sigFnRetTy fn)) e
+mkHandle :: forall arch args ret . (STC.StubsArch arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCF.HandleAllocator -> SA.StubsSignature args ret -> STC.StubsEnv arch-> IO ( LCF.FnHandle (ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret))
+mkHandle hAlloc fn env = do
+    args <- runReaderT (toCrucibleTyCtx (SA.sigFnArgTys fn)) env
+    cret <- runReaderT (toCrucibleTy (SA.sigFnRetTy fn)) env
     LCF.mkHandle' hAlloc (WF.functionNameFromText (T.pack (SA.sigFnName fn))) args cret
 
 translateFnArgs :: forall arch s args . Ctx.Assignment (LCCR.Atom s) (ArchTypeMatchCtx arch args) -> Ctx.Assignment SA.StubsTypeRepr args -> Ctx.Assignment (StubAtom arch s) args

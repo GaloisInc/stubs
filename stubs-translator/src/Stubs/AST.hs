@@ -36,6 +36,7 @@ module Stubs.AST (
     StubsGlobalDecl(..),
     SomeStubsGlobalDecl(..),
     ResolveAlias,
+    ResolveIntrinsic,
     stubsLibDefs,
     mkStubsModule,
     stubsAssignmentToTys,
@@ -63,6 +64,8 @@ data StubsType where
     StubsULong :: StubsType
     -- | Opaque type
     StubsAlias :: Symbol -> StubsType
+    -- | Like Crucible Intrinsics: These are known to Override Modules only, and map directly to crucible types
+    StubsIntrinsic :: Symbol -> StubsType
 
 type StubsInt = 'StubsInt
 type StubsUnit = 'StubsUnit
@@ -72,6 +75,7 @@ type StubsLong = 'StubsLong
 type StubsShort = 'StubsShort
 type StubsULong = 'StubsULong
 type StubsUShort = 'StubsUShort
+type StubsIntrinsic = 'StubsIntrinsic
 
 -- | Value-level type representations of StubsType
 data StubsTypeRepr a where
@@ -84,6 +88,7 @@ data StubsTypeRepr a where
     StubsULongRepr :: StubsTypeRepr StubsULong
     StubsUShortRepr :: StubsTypeRepr StubsUShort
     StubsAliasRepr :: P.SymbolRepr s -> StubsTypeRepr (ResolveAlias s)
+    StubsIntrinsicRepr :: P.SymbolRepr s -> StubsTypeRepr (StubsIntrinsic s)
 
 instance ShowF StubsTypeRepr where 
     showF StubsIntRepr = "Int"
@@ -95,6 +100,7 @@ instance ShowF StubsTypeRepr where
     showF StubsULongRepr = "ULong"
     showF StubsUShortRepr = "UShort"
     showF (StubsAliasRepr s) = "Opaque:" ++ show s 
+    showF (StubsIntrinsicRepr s) = "Intrinsic:" ++ show s 
 
 instance Show (StubsTypeRepr a) where 
     show StubsIntRepr = "Int"
@@ -106,8 +112,11 @@ instance Show (StubsTypeRepr a) where
     show StubsULongRepr = "ULong"
     show StubsUShortRepr = "UShort"
     show (StubsAliasRepr s) = "Opaque:" ++ show s 
+    show (StubsIntrinsicRepr s) = "Intrinsic:" ++ show s 
 
 type family ResolveAlias (s :: Symbol) :: StubsType
+
+type family ResolveIntrinsic (s :: Symbol) :: LCT.CrucibleType
 
 data SomeStubsTypeRepr = forall a . SomeStubsTypeRepr (StubsTypeRepr a)
 
@@ -287,14 +296,14 @@ data StubsGlobalDecl a = StubsGlobalDecl String (StubsTypeRepr a)
 
 data SomeStubsGlobalDecl = forall a . SomeStubsGlobalDecl (StubsGlobalDecl a)
 
--- | A StubsLibrary represents a single compilation unit in the Stubs language.
+-- | A StubsModule represents a single compilation unit in the Stubs language.
 data StubsModule = StubsModule {
     moduleName :: String,
-    -- ^ Name for the libary / module
+    -- ^ Name for the module
     fnDecls :: [SomeStubsFunction],
     -- ^ Function declarations
     externSigs :: [SomeStubsSignature],
-    -- ^ External functions required by the library, necessary for linking 
+    -- ^ External functions required by the module, necessary for linking 
     tyDecls :: [SomeStubsTyDecl],
     -- ^ Opaque type definitions
     globalDecls :: [SomeStubsGlobalDecl]

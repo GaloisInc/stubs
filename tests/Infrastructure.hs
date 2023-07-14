@@ -10,14 +10,14 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE ImpredicativeTypes #-}
 module Infrastructure
     (
         buildRecordLLVMAnnotation,
         ProgramInstance(..),
         symexec,
         SomeRegEntry(..),
-        corePipeline,
-        logShim
+        logShim, mallocOv
     )
 where
 
@@ -70,21 +70,11 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Macaw.CFG as DMC
 import qualified Stubs.Translate as ST
 import qualified Stubs.Translate.Core as STC
-import qualified Lumberjack as LJ
-import qualified Data.Parameterized.Nonce as PN
-import Data.Parameterized (Some(..))
-import qualified Stubs.EntryPoint as SE
-import qualified Stubs.Loader as SL
-import qualified Data.Macaw.Architecture.Info as DMA
-import qualified Stubs.SymbolicExecution as SVS
-import qualified Data.BitVector.Sized as BV
-import qualified Data.ByteString as B
 import qualified Stubs.AST as SA
-import What4.Interface (asConcrete)
-import What4.Concrete (fromConcreteBV)
-import Data.Macaw.Symbolic (lookupReg)
-import Control.Lens (view)
 import qualified Stubs.Diagnostic as SD
+import qualified Stubs.Translate.Intrinsic as STI
+import qualified Data.Parameterized as P
+import qualified Data.Macaw.Architecture.Info as DMX
 
 -- | Build an LLVM annotation tracker to record instances of bad behavior
 -- checks.  Bad behavior encompasses both undefined behavior, and memory
@@ -188,8 +178,9 @@ symexec
   -> Ctx.Assignment (LCS.RegEntry sym) args
   -> LCT.TypeRepr ret
   -> (WI.IsExprBuilder sym => (LCSE.ExecResult p sym ext (LCS.RegEntry sym ret)) -> m a)
+  -> [STI.SomeStubsOverride arch]
   -> m a
-symexec bak halloc prog cfg args retRepr check = do
+symexec bak halloc prog cfg args retRepr check ovs = do
   LCCC.SomeCFG cfg <- return cfg
 
   let simAction = LCS.runOverrideSim retRepr $ do
@@ -212,7 +203,7 @@ symexec bak halloc prog cfg args retRepr check = do
 
   -- Link preamble
   let wrappedovs = ST.crFnHandleMap prog
-  let linkedMap = foldr (\(ST.SomeWrappedOverride (ST.WrappedOverride ovf (STC.StubHandle _ _ h))) acc -> LCF.insertHandleMap h (LCS.UseOverride (ovf bak)) acc) bindings wrappedovs
+  let linkedMap = foldr (\(ST.SomePreambleOverride (ST.PreambleOverride ovf (STC.StubHandle _ _ h))) acc -> LCF.insertHandleMap h (LCS.UseOverride (ovf bak)) acc) bindings wrappedovs
 
   let emptyExt = LCSE.ExtensionImpl
           { LCSE.extensionEval = \_sym _iTypes _log _f _state -> \case
@@ -224,65 +215,13 @@ symexec bak halloc prog cfg args retRepr check = do
   res <- liftIO $ LCS.executeCrucible [] s0
   check res
 
-corePipeline :: FilePath -> [SA.StubsProgram] ->  IO (Maybe Integer)
-corePipeline path stubProgs = do
-    contents <- B.readFile path
-    hAlloc <- LCF.newHandleAllocator
-    let pinst = ProgramInstance{ piPath=path,
-                                 piBinary=contents,
-                                 piFsRoot=Nothing,
-                                 piCommandLineArguments=[],
-                                 piConcreteEnvVars=[],
-                                 piConcreteEnvVarsFromBytes=[],
-                                 piSymbolicEnvVars=[],
-                                 piSolver=AS.Z3,
-                                 piFloatMode=AS.IEEE,
-                                 piEntryPoint=SE.DefaultEntryPoint,
-                                 piMemoryModel=AM.DefaultMemoryModel,
-                                 piOverrideDir=Just "./tests/test-data/libc-overrides",
-                                 piIterationBound=Nothing,
-                                 piRecursionBound=Nothing,
-                                 piSolverInteractionFile=Nothing,
-                                 piSharedObjectDir=Nothing,
-                                 piLogSymbolicBranches=Nothing,
-                                 piLogFunctionCalls=Nothing
-                                 }
-    let logAction= LJ.LogAction logShim
-    Some ng <- PN.newIONonceGenerator
-    AS.withOnlineSolver (piSolver pinst) (piFloatMode pinst) ng $ \bak -> do
-        let sym = LCB.backendGetSym bak
-        (recordFn, _) <- buildRecordLLVMAnnotation
-        let ?recordLLVMAnnotation = recordFn
-        SL.withBinary path contents Nothing hAlloc sym $ \archInfo _ archVals buildSyscallABI buildFunctionABI _ buildGlobals _ binConf funAbiExt -> DMA.withArchConstraints archInfo $  do
-            Just (SL.FunABIExt reg) <- return funAbiExt
-            let ?memOpts = LCLM.defaultMemOptions
-            let execFeatures = []
-            let seConf = SVS.SymbolicExecutionConfig
-                     { SVS.secSolver = piSolver pinst
-                     , SVS.secLogBranches = False
-                     }
-            let abiConf = SVS.ABIConfig {
-                SVS.abiBuildFunctionABI = buildFunctionABI,
-                SVS.abiBuildSyscallABI=buildSyscallABI
-            }
-            crucProgs <- fmap concat (mapM (ST.translateProgram ng hAlloc) stubProgs) 
-            envVarMap <- AEnv.mkEnvVarMap bak (piConcreteEnvVars pinst) (piConcreteEnvVarsFromBytes pinst) (piSymbolicEnvVars pinst)
+mallocStub :: (STC.StubsArch arch) =>P.SymbolRepr s ->  STI.SomeStubsOverride arch
+mallocStub ptr = STI.SomeStubsOverride (STI.StubsOverride (\(STC.Sym sym _)-> do 
+          LCS.mkOverride' "malloc" LCT.BoolRepr (do 
+              LCS.RegMap (Ctx.Empty Ctx.:> _) <-  LCS.getOverrideArgs
+              return $ WI.truePred sym
+            )) ((Ctx.extend Ctx.empty (LCT.BVRepr @32 WI.knownRepr))) (LCT.BoolRepr)) (SA.StubsSignature "malloc" (Ctx.extend Ctx.empty SA.StubsIntRepr) (SA.StubsIntrinsicRepr ptr))
 
-            -- execute symbolically
-            entryPointAddr <- AEp.resolveEntryPointAddrOff binConf $ piEntryPoint pinst
-            ambientExecResult <- SVS.symbolicallyExecute logAction bak hAlloc archInfo archVals seConf execFeatures entryPointAddr (piMemoryModel pinst) buildGlobals (piFsRoot pinst) (piLogFunctionCalls pinst) binConf abiConf (piCommandLineArguments pinst) envVarMap crucProgs
-            let crucibleRes = SVS.serCrucibleExecResult ambientExecResult
+mallocOv :: (STC.StubsArch arch) => P.SymbolRepr s ->  STI.OverrideModule arch
+mallocOv ptr = STI.OverrideModule "alloc" [mallocStub ptr] [STI.SomeIntrinsicTyDecl (STI.IntrinsicTyDecl ptr LCT.BoolRepr)]
 
-            --TODO: parameterize: like check in smallPipeline
-            case crucibleRes of
-                LCSE.FinishedResult _ r -> case r of
-                                        LCSE.TotalRes v -> do
-                                            let q = view gpValue v
-                                            let g = lookupReg archVals q reg
-                                            let LCLM.LLVMPointer _ bv = regValue g
-                                            let t = asConcrete bv
-                                            case t of
-                                                Nothing -> return Nothing
-                                                Just cv -> return $ Just (BV.asUnsigned $ fromConcreteBV cv)
-                                        _ -> return Nothing
-                _ -> return Nothing
