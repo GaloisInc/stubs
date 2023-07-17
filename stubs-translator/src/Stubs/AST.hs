@@ -322,10 +322,11 @@ instance Eq StubsModule where
 instance Ord StubsModule where
     compare a b = if a == b then EQ else compare (moduleName a) (moduleName b)
 
--- | A complete Stubs program, consisting of several modules and an entry point
+-- | A complete Stubs program, consisting of several modules,entry points, and initial hook functions
 data StubsProgram = StubsProgram {
     stubsModules :: [StubsModule],
-    stubsEntryPoints::[String]
+    stubsEntryPoints::[String],
+    stubsInitFns::[String]
 }
 
 -- | Retrieve the type of an expression

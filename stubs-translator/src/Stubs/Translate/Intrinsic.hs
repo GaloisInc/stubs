@@ -28,7 +28,8 @@ data SomeIntrinsicTyDecl = forall s tp . SomeIntrinsicTyDecl (IntrinsicTyDecl s 
 data OverrideModule arch = OverrideModule {
     ovModuleName :: String, 
     ovDecls :: [SomeStubsOverride arch],
-    ovTyDecls :: [SomeIntrinsicTyDecl]
+    ovTyDecls :: [SomeIntrinsicTyDecl],
+    ovInits :: [String] --init fns
 }
 
 data StubsOverride arch (args:: LCT.Ctx SA.StubsType) (ret::SA.StubsType) (cargs:: LCT.Ctx LCT.CrucibleType) (cret::LCT.CrucibleType) = (STC.StubsArch arch) =>StubsOverride (forall sym p . STC.Sym sym -> LCS.Override p sym (DMS.MacawExt arch) cargs cret) (Ctx.Assignment LCT.TypeRepr cargs) (LCT.TypeRepr cret)

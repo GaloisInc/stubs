@@ -80,7 +80,8 @@ test-suite stubs-tests
   other-modules: Infrastructure,
                  Stubs.Discovery,
                  Stubs.Solver,
-                 Stubs.SymbolicExecution
+                 Stubs.SymbolicExecution,
+                 Pipeline
   hs-source-dirs: tests
   build-depends: stubs-common,
                  stubs-wrapper,

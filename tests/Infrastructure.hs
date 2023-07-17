@@ -75,6 +75,12 @@ import qualified Stubs.Diagnostic as SD
 import qualified Stubs.Translate.Intrinsic as STI
 import qualified Data.Parameterized as P
 import qualified Data.Macaw.Architecture.Info as DMX
+import qualified Data.Foldable as F
+import qualified Stubs.FunctionOverride as AF
+import qualified Stubs.Panic as AP
+import qualified Stubs.Wrapper as SW
+import qualified Data.Macaw.X86 as DMX
+import qualified Stubs.Preamble as SPR
 
 -- | Build an LLVM annotation tracker to record instances of bad behavior
 -- checks.  Bad behavior encompasses both undefined behavior, and memory
@@ -169,6 +175,8 @@ symexec
      , WPO.OnlineSolver solver
      , p ~ ()
      , (w ~ DMC.ArchAddrWidth arch )
+     , STC.StubsArch arch
+     , SPR.Preamble arch
      )
   => bak
   -> LCF.HandleAllocator
@@ -183,10 +191,39 @@ symexec
 symexec bak halloc prog cfg args retRepr check ovs = do
   LCCC.SomeCFG cfg <- return cfg
 
+  let tsym = STC.Sym (LCB.backendGetSym bak) bak
+  -- Create primary overrides
+  --ov <- liftIO (SW.crucibleProgramToFunctionOverride tsym  prog)
+  -- Create Startup overrides : TODO check validity somwhere
+  initOvs <- liftIO $ SW.genInitHooks tsym prog
+  initCOvs <- liftIO $ SW.genInitOvHooks tsym prog
   let simAction = LCS.runOverrideSim retRepr $ do
                     -- First, initialize the symbolic file system...
                     --initFSOverride
                     -- ...then simulate any startup overrides...
+                    F.traverse_ (\ov -> AF.functionOverride ov
+                                                            bak
+                                                            Ctx.Empty
+                                                            dummyGetVarArg
+                                                            -- NOTE: Startup
+                                                            -- overrides cannot
+                                                            -- currently call
+                                                            -- into parent
+                                                            -- overrides
+                                                            [])
+                                initCOvs
+                    -- ...then simulate any startup overrides...
+                    F.traverse_ (\ov  -> AF.functionOverride ov
+                                                            bak
+                                                            Ctx.Empty
+                                                            dummyGetVarArg
+                                                            -- NOTE: Startup
+                                                            -- overrides cannot
+                                                            -- currently call
+                                                            -- into parent
+                                                            -- overrides
+                                                            [])
+                                initOvs
                     -- ...and finally, run the entrypoint function.
                     LCS.regValue <$> LCS.callCFG cfg (LCS.RegMap args)
 
@@ -214,6 +251,14 @@ symexec bak halloc prog cfg args retRepr check ovs = do
 
   res <- liftIO $ LCS.executeCrucible [] s0
   check res
+  where
+    -- Syntax overrides cannot make use of variadic arguments, so if this
+    -- callback is ever used, something has gone awry.
+    dummyGetVarArg :: AF.GetVarArg sym
+    dummyGetVarArg = AF.GetVarArg $ \_ ->
+      AP.panic AP.SymbolicExecution "sym-exec"
+        ["A startup override cannot use variadic arguments"]
+
 
 mallocStub :: (STC.StubsArch arch) =>P.SymbolRepr s ->  STI.SomeStubsOverride arch
 mallocStub ptr = STI.SomeStubsOverride (STI.StubsOverride (\(STC.Sym sym _)-> do 
@@ -223,5 +268,5 @@ mallocStub ptr = STI.SomeStubsOverride (STI.StubsOverride (\(STC.Sym sym _)-> do
             )) ((Ctx.extend Ctx.empty (LCT.BVRepr @32 WI.knownRepr))) (LCT.BoolRepr)) (SA.StubsSignature "malloc" (Ctx.extend Ctx.empty SA.StubsIntRepr) (SA.StubsIntrinsicRepr ptr))
 
 mallocOv :: (STC.StubsArch arch) => P.SymbolRepr s ->  STI.OverrideModule arch
-mallocOv ptr = STI.OverrideModule "alloc" [mallocStub ptr] [STI.SomeIntrinsicTyDecl (STI.IntrinsicTyDecl ptr LCT.BoolRepr)]
+mallocOv ptr = STI.OverrideModule "alloc" [mallocStub ptr] [STI.SomeIntrinsicTyDecl (STI.IntrinsicTyDecl ptr LCT.BoolRepr)] []
 

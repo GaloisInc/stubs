@@ -85,7 +85,10 @@ data CrucibleProgram arch = CrucibleProgram {
   crFnHandleMap :: [SomePreambleOverride arch],
   -- | Name of the entry point CFG
   crEntry :: String,
-  crOvHandleMap :: [SomeWrappedOverride arch]
+  crOvHandleMap :: [SomeWrappedOverride arch],
+  -- | Names of initialization functions
+  crInit :: [String],
+  crOvInits :: [String]
 }
 
 -- | A translated library / module. This is the result of translating a StubsLibrary
@@ -338,9 +341,9 @@ translateProgram ng halloc ovs prog = do
 
     -- 1. Translate Haskell Overrides
     -- 1.1 Collect Intrinsic Definitions, to put into environment
-    let intrinsicMap = foldr (\(STI.SomeIntrinsicTyDecl (STI.IntrinsicTyDecl s ct)) acc -> MapF.insert s (STC.coerceToIntrinsic s ct) acc) MapF.empty (concatMap (\(STI.OverrideModule _ _ decls)-> decls)  ovs)
+    let intrinsicMap = foldr (\(STI.SomeIntrinsicTyDecl (STI.IntrinsicTyDecl s ct)) acc -> MapF.insert s (STC.coerceToIntrinsic s ct) acc) MapF.empty (concatMap (\(STI.OverrideModule _ _ decls _)-> decls)  ovs)
     -- 1.2 Wrap up override definitions like preamble (Will put this information into CrucibleProgram, as it needs to be linked specially)
-    ovMapTpl <- concat <$> mapM (\(STI.OverrideModule _ decls _) -> mapM (\(STI.SomeStubsOverride (STI.StubsOverride ovf cargs cret) sig) -> do 
+    ovMapTpl <- concat <$> mapM (\(STI.OverrideModule _ decls _ _) -> mapM (\(STI.SomeStubsOverride (STI.StubsOverride ovf cargs cret) sig) -> do 
                 SA.StubsSignature n argtys ret <- return sig
                 hdl <-  mkHandle @arch halloc sig (STC.StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) MapF.empty intrinsicMap)
                 --Type Check
@@ -356,6 +359,7 @@ translateProgram ng halloc ovs prog = do
 
     let ovMap = map fst ovMapTpl
     let ovSigs = map snd ovMapTpl
+    let ovInits = concatMap STI.ovInits ovs
     --Every lib shares the same preamble handles
     preMap <- mapM (\(SA.SomeStubsSignature sig) -> do
             hdl <-  mkHandle @arch halloc sig (STC.StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) MapF.empty intrinsicMap)
@@ -406,7 +410,7 @@ translateProgram ng halloc ovs prog = do
                 return (cfgs++tlibs,accHdls++acc)
             ) ([],[]) orderedLibs
 
-    let crucProgs = map (\s -> CrucibleProgram{crEntry=s,crFnHandleMap=map snd preMap, crCFGs=fst translatedLibs,crExterns=mempty, crGlobals=mempty,crFwdDecs=mempty, crOvHandleMap = map snd ovMap}) (SA.stubsEntryPoints prog)
+    let crucProgs = map (\s -> CrucibleProgram{crEntry=s,crFnHandleMap=map snd preMap, crCFGs=fst translatedLibs,crExterns=mempty, crGlobals=mempty,crFwdDecs=mempty, crOvHandleMap = map snd ovMap, crInit=(SA.stubsInitFns prog), crOvInits=ovInits}) (SA.stubsEntryPoints prog)
     return crucProgs
 
 mkHandle :: forall arch args ret . (STC.StubsArch arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCF.HandleAllocator -> SA.StubsSignature args ret -> STC.StubsEnv arch-> IO ( LCF.FnHandle (ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret))

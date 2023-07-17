@@ -1528,7 +1528,11 @@ simulateFunction logAction bak execFeatures halloc archInfo archVals seConf init
                         LCLM.PtrRepr
 
   let tsym = STC.Sym (LCB.backendGetSym bak) bak
+  -- Create primary overrides
   ovs <- liftIO $ mapM (SW.crucibleProgramToFunctionOverride tsym ) crProgs
+  -- Create Startup overrides : TODO check validity somwhere
+  initOvs <- liftIO $ mapM (SW.genInitHooks tsym ) crProgs
+  initCOvs <- liftIO $ mapM (SW.genInitOvHooks tsym) crProgs
   let ASy.BuildSyscallABI buildSyscallABI = abiBuildSyscallABI fnConf
   let syscallABI = buildSyscallABI fs initialMem (ALB.bcUnsuportedRelocations binConf)
   let AF.BuildFunctionABI buildFunctionABI = abiBuildFunctionABI fnConf
@@ -1561,6 +1565,7 @@ simulateFunction logAction bak execFeatures halloc archInfo archVals seConf init
   let simAction = LCS.runOverrideSim regsRepr $ do
                     -- First, initialize the symbolic file system...
                     initFSOverride
+
                     -- ...then simulate any startup overrides...
                     F.traverse_ (\ov -> AF.functionOverride ov
                                                             bak
@@ -1572,7 +1577,19 @@ simulateFunction logAction bak execFeatures halloc archInfo archVals seConf init
                                                             -- into parent
                                                             -- overrides
                                                             [])
-                                []
+                                (concat initCOvs)
+                    -- ...then simulate any startup overrides...
+                    F.traverse_ (\ov  -> AF.functionOverride ov
+                                                            bak
+                                                            Ctx.Empty
+                                                            dummyGetVarArg
+                                                            -- NOTE: Startup
+                                                            -- overrides cannot
+                                                            -- currently call
+                                                            -- into parent
+                                                            -- overrides
+                                                            [])
+                                (concat initOvs)
                     -- ...and finally, run the entrypoint function.
                     LCS.regValue <$> LCS.callCFG cfg arguments
 

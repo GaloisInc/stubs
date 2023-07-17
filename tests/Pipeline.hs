@@ -112,7 +112,7 @@ corePipelineOv path stubProgs ovfs = do
                 _ -> return Nothing
 
 
-smallPipeline :: forall arch args ret ext p. (DMS.SymArchConstraints arch, ext ~ DMS.MacawExt arch, p ~ (), SPR.Preamble arch) =>
+smallPipeline :: forall arch args ret ext p. (DMS.SymArchConstraints arch, ext ~ DMS.MacawExt arch, p ~ (), SPR.Preamble arch, STC.StubsArch arch) =>
                                         ST.CrucibleProgram arch ->
                                         LCCC.SomeCFG (DMS.MacawExt arch) args ret ->
                                         (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args)) ->
