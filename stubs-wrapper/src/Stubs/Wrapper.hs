@@ -6,6 +6,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE DataKinds #-}
 
+{-|
+Description: Core ABI Wrapper Module 
+
+Generally, this module, and cabal target, focuses on loading translated Stubs into overrides for use in symbolic execution or analysis.
+-}
 module Stubs.Wrapper (
     loadParsedPrograms,
     crucibleProgramToFunctionOverride,
@@ -52,6 +57,7 @@ import qualified Stubs.Translate.Core as STC
 import qualified Data.Text as DT
 import qualified Stubs.AST as SA
 
+-- | Inherited from Ambient : Turn crucible-syntax Parsed Programs into overrides
 loadParsedPrograms :: forall ext sym arch w . (ext ~ DMS.MacawExt arch, DMM.MemWidth w) => [(FilePath,LCSC.ParsedProgram ext)] -> [WF.FunctionName] -> [(FilePath, Word64,WF.FunctionName)] -> IO (SFT.CrucibleSyntaxOverrides w () sym arch)
 loadParsedPrograms pathProgs startupOverrides funAddrOverrides = do
   overrides <- traverse (uncurry parsedProgToFunctionOverride) pathProgs
@@ -88,6 +94,7 @@ loadParsedPrograms pathProgs startupOverrides funAddrOverrides = do
       | otherwise
       = CMC.throwM $ SWE.StartupOverrideUnexpectedType $ SF.functionName ov
 
+-- | Given a symbolic backend, and a CrucibleProgram, generate a corresponding override
 crucibleProgramToFunctionOverride ::  (STC.StubsArch arch, SPR.Preamble arch) =>STC.Sym sym -> ST.CrucibleProgram arch -> IO (SF.SomeFunctionOverride p sym arch)
 crucibleProgramToFunctionOverride sym prog = do
     -- Translate preambles into bindings
@@ -123,6 +130,8 @@ crucibleProgramToFunctionOverride sym prog = do
                   })
       _ -> fail "Could not find entry point"
 
+-- | Generate overrides for functions marked as init hooks - these are intended to run before symbolic execution of a binary
+-- All init hooks have the signature Unit -> Unit
 genInitHooks ::(STC.StubsArch arch, SPR.Preamble arch) =>STC.Sym sym -> ST.CrucibleProgram arch -> IO [SF.FunctionOverride p sym Ctx.EmptyCtx arch LCT.UnitType ]
 genInitHooks sym prog = do 
       -- Translate preambles into bindings
@@ -134,6 +143,7 @@ genInitHooks sym prog = do
       let (inits, _) = List.partition (isInitPoint (ST.crInit prog)) (ST.crCFGs prog) 
       mapM (acfgToInitOverride preambleBindings ovBindings) inits
 
+-- | Similar to genInitHooks, but for init hooks of override modules
 genInitOvHooks :: (STC.StubsArch arch, SPR.Preamble arch) =>STC.Sym sym -> ST.CrucibleProgram arch -> IO [SF.FunctionOverride p sym Ctx.EmptyCtx arch LCT.UnitType]
 genInitOvHooks sym prog = do 
     let (inits, _) = List.partition (isInitOv (ST.crOvInits prog)) (ST.crOvHandleMap prog)

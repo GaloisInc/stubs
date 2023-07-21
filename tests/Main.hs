@@ -99,6 +99,7 @@ linkerTest = genTestCase ( SA.StubsProgram {
                                         _ -> print "Failed to get complete result" >> return False
                 _ -> print "Failed to finish execution" >> return False
 
+-- Basic Program to calculate factorial tail-recursively
 factorialTest :: TestTree
 factorialTest = genTestCase (SA.StubsProgram {
         SA.stubsModules=[SA.StubsModule{
@@ -146,6 +147,7 @@ symExecTest = genTestCase testProg check "Symbolic Execution smoke test"
                                         _ -> print "Failed to get complete result" >> return False
                 _ -> print "Failed to finish execution" >> return False
 
+-- Test exercising modules, in particular that they can depend on one another
 moduleTest :: TestTree
 moduleTest = genTestCase SA.StubsProgram{
     SA.stubsEntryPoints=["f"],
@@ -183,6 +185,7 @@ moduleTest = genTestCase SA.StubsProgram{
                                         _ -> print "Failed to get complete result" >> return False
                 _ -> print "Failed to finish execution" >> return False
 
+-- Exercise the ability to define Opaque types, and have these translate down to real types for execution
 opaqueTest :: TestTree
 opaqueTest = genTestCaseIO ( do
         Some counter <- return $ someSymbol "Counter"
@@ -242,6 +245,7 @@ opaqueTest = genTestCaseIO ( do
                 AbortedResult _ (AbortedExec r _) -> print ("Aborted Execution:" ++ show r) >> return False
                 _ -> print "Failed to finish execution" >> return False
 
+-- Allow modules to declare global variables, which can be read/written outside of the module
 globalVarTest :: TestTree
 globalVarTest = genTestCase SA.StubsProgram{
         SA.stubsEntryPoints= ["main"],
@@ -288,7 +292,7 @@ globalVarTest = genTestCase SA.StubsProgram{
                 AbortedResult _ (AbortedExec r _) -> print ("Aborted Execution:" ++ show r) >> return False
                 _ -> print "Failed to finish execution" >> return False
 
-
+-- Tests globals and opaque types interaction
 opaqueGlobalTest :: TestTree
 opaqueGlobalTest = genTestCaseIO (do
         Some counter <- return $ someSymbol "Counter"
@@ -392,6 +396,7 @@ genTestCase sprog check tag = testCase tag $ do
             Ctx.AssignEmpty -> return Ctx.empty
             _ -> error "Irrelevant to test"
 
+-- Test linking preamble functions into a real binary
 corePipelinePreambleTest :: TestTree
 corePipelinePreambleTest = testCase "Core Pipeline Preamble Check" $ do
     i <- STP.corePipeline "./tests/test-data/a.out" sProgs
@@ -413,6 +418,7 @@ corePipelinePreambleTest = testCase "Core Pipeline Preamble Check" $ do
     ] [] []]
 ,SA.stubsInitFns = []}]
 
+-- turn modules into separate overrides
 corePipelineModuleTest :: TestTree
 corePipelineModuleTest = testCase "Core Pipeline Module Check" $ do
     i <- STP.corePipeline "./tests/test-data/a.out" sProgs
@@ -592,6 +598,7 @@ corePipelineGlobalTest = genCoreTestIO (do
             ]
     ) "./tests/test-data/mult.out" "Core Pipeline Global Data" 2
 
+-- Test initializing a global variable as an init hook, where main program uses it without explicitly calling init
 initHookTest :: TestTree
 initHookTest = genTestCaseIO (do
         Some counter <- return $ someSymbol "Counter"

@@ -1,3 +1,4 @@
+{-| Define supported ABIs -}
 module Stubs.ABI (
     ABI(..)
   , allABIs

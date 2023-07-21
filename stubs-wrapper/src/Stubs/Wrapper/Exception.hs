@@ -1,6 +1,7 @@
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GADTs #-}
 
+{-| Module for wrapper related exceptions -}
 module Stubs.Wrapper.Exception 
     (StubsLoaderException(..))
 where
