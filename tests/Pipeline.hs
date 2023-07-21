@@ -6,13 +6,15 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE ExistentialQuantification #-}
+{-# HLINT ignore "Use if" #-}
+{-# LANGUAGE TypeOperators #-}
 
 module Pipeline where 
 import qualified Stubs.AST as SA
 import qualified Data.ByteString as B
 import qualified Lang.Crucible.FunctionHandle as LCF
 import qualified Stubs.Translate.Intrinsic as STI
-import qualified Lumberjack as LJ
 import qualified Data.Parameterized.Nonce as PN
 import qualified Stubs.SymbolicExecution as SVS
 import qualified Lang.Crucible.LLVM.MemModel as LCLM
@@ -41,14 +43,15 @@ import Data.Macaw.Symbolic (lookupReg)
 import What4.Interface (asConcrete)
 import Control.Lens (view)
 import qualified Stubs.Translate.Core as STC
-import qualified Data.Macaw.Architecture.Info as DMS
-
+import Stubs.Memory
+import qualified Stubs.Common as SC
+import Stubs.Memory.X86_64.Linux()
+import Stubs.Memory.AArch32.Linux()
+import qualified Stubs.Logging as SLg
+import qualified Lang.Crucible.Simulator.CallFrame as LCSCF
 
 corePipeline :: FilePath -> [SA.StubsProgram] -> IO (Maybe Integer)
-corePipeline path progs = corePipelineOv path progs []
-
-corePipelineOv :: FilePath -> [SA.StubsProgram] ->  [forall arch sym . (STC.StubsArch arch) => STC.Sym sym -> DMS.ArchitectureInfo arch -> STI.OverrideModule arch] -> IO (Maybe Integer)
-corePipelineOv path stubProgs ovfs = do
+corePipeline path stubProgs = do
     contents <- B.readFile path
     hAlloc <- LCF.newHandleAllocator
     let pinst = ProgramInstance{ piPath=path,
@@ -70,36 +73,29 @@ corePipelineOv path stubProgs ovfs = do
                                  piLogSymbolicBranches=Nothing,
                                  piLogFunctionCalls=Nothing
                                  }
-    let logAction= LJ.LogAction logShim
+    let logAction= SLg.emptyLogger
     Some ng <- PN.newIONonceGenerator
-    AS.withOnlineSolver (piSolver pinst) (piFloatMode pinst) ng $ \bak -> do
-        let sym = LCB.backendGetSym bak
-        let tsym = STC.Sym sym bak
+    AS.withOnlineSolver (piSolver pinst) (piFloatMode pinst) ng $ \bak-> do
+        let tsym = SC.Sym (LCB.backendGetSym bak) bak
         (recordFn, _) <- buildRecordLLVMAnnotation
         let ?recordLLVMAnnotation = recordFn
-        SL.withBinary path contents Nothing hAlloc sym $ \archInfo _ archVals buildSyscallABI buildFunctionABI _ buildGlobals _ binConf funAbiExt -> DMA.withArchConstraints archInfo $  do
+        SL.withBinary path contents Nothing hAlloc tsym $ \archInfo _ archVals buildSyscallABI buildFunctionABI _ _ binConf funAbiExt ovfs-> DMA.withArchConstraints archInfo $  do
             Just (SL.FunABIExt reg) <- return funAbiExt
             let ?memOpts = LCLM.defaultMemOptions
-            let seConf = SVS.SymbolicExecutionConfig
-                     { SVS.secSolver = piSolver pinst
-                     , SVS.secLogBranches = False
-                     }
             let abiConf = SVS.ABIConfig {
                 SVS.abiBuildFunctionABI = buildFunctionABI,
                 SVS.abiBuildSyscallABI=buildSyscallABI
             }
-            let ovs = map (\ovf -> ovf tsym archInfo) ovfs
+            let ovs = map (\(STI.BuildOverrideModule ovf) -> ovf tsym) ovfs
             crucProgs <- fmap concat (mapM (ST.translateProgram ng hAlloc ovs) stubProgs) 
             envVarMap <- AEnv.mkEnvVarMap bak (piConcreteEnvVars pinst) (piConcreteEnvVarsFromBytes pinst) (piSymbolicEnvVars pinst)
 
             -- execute symbolically
             entryPointAddr <- AEp.resolveEntryPointAddrOff binConf $ piEntryPoint pinst
-            ambientExecResult <- SVS.symbolicallyExecute logAction bak hAlloc archInfo archVals seConf [] entryPointAddr (piMemoryModel pinst) buildGlobals (piFsRoot pinst) (piLogFunctionCalls pinst) binConf abiConf (piCommandLineArguments pinst) envVarMap crucProgs
+            ambientExecResult <- SVS.symbolicallyExecute logAction bak hAlloc archInfo archVals (SVS.SymbolicExecutionConfig{SVS.secLogBranches=False,SVS.secSolver=piSolver pinst}) [] entryPointAddr (piMemoryModel pinst) (piFsRoot pinst) (piLogFunctionCalls pinst) binConf abiConf (piCommandLineArguments pinst) envVarMap crucProgs
             let crucibleRes = SVS.serCrucibleExecResult ambientExecResult
-
-            --TODO: parameterize: like check in smallPipeline
             case crucibleRes of
-                LCSE.FinishedResult _ r -> case r of
+                                LCSE.FinishedResult _ r -> case r of
                                         LCSE.TotalRes v -> do
                                             let q = view gpValue v
                                             let g = lookupReg archVals q reg
@@ -109,8 +105,20 @@ corePipelineOv path stubProgs ovfs = do
                                                 Nothing -> return Nothing
                                                 Just cv -> return $ Just (BV.asUnsigned $ fromConcreteBV cv)
                                         _ -> return Nothing
-                _ -> return Nothing
-
+                                -- Failed, so try to dump some useful information
+                                LCSE.AbortedResult _ r -> do 
+                                    putStrLn "Execution aborted" 
+                                    case r of 
+                                        LCSE.AbortedExec re st -> do 
+                                            print re 
+                                            let tau = view gpValue st 
+                                            case tau of 
+                                                LCSCF.OF _ -> print "in override"
+                                                LCSCF.MF _ -> print "in crucible code" 
+                                                _ -> print "while returning"
+                                            return Nothing
+                                        _ -> putStrLn "Cause unexpected: either exit() or multiple branches failed" >> return Nothing
+                                _ -> return Nothing 
 
 smallPipeline :: forall arch args ret ext p. (DMS.SymArchConstraints arch, ext ~ DMS.MacawExt arch, p ~ (), SPR.Preamble arch, STC.StubsArch arch) =>
                                         ST.CrucibleProgram arch ->

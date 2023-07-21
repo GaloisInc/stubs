@@ -44,6 +44,7 @@ import qualified Lang.Crucible.Simulator as LCS
 import qualified What4.Interface as WI
 
 import qualified Stubs.Panic as AP
+import qualified Stubs.Memory as SM
 
 -- | An index of all of the (statically) mapped memory in a program, suitable
 -- for pointer translation. This is much like the @MemPtrTable@ in
@@ -56,12 +57,12 @@ import qualified Stubs.Panic as AP
 -- 2. This one separately stores the 'memPtrArray' that gets written into the
 --    'memPtr', since we need to add additional assertions to the array as we
 --    lazily initialize memory. See @Note [Lazy memory initialization]@@.
-data MemPtrTable sym w =
-  MemPtrTable { memPtrTable :: IM.IntervalMap (DMM.MemWord w) (SymbolicMemChunk sym)
+data MemPtrTable sym arch =
+  MemPtrTable { memPtrTable :: IM.IntervalMap (DMM.MemWord (DMC.ArchAddrWidth arch)) (SymbolicMemChunk sym)
               -- ^ The ranges of (static) allocations that are mapped
-              , memPtr :: LCLM.LLVMPtr sym w
+              , memPtr :: LCLM.LLVMPtr sym (DMC.ArchAddrWidth arch)
               -- ^ The pointer to the allocation backing all of memory
-              , memPtrArray :: WI.SymArray sym (Ctx.SingleCtx (WI.BaseBVType w)) (WI.BaseBVType 8)
+              , memPtrArray :: WI.SymArray sym (Ctx.SingleCtx (WI.BaseBVType (DMC.ArchAddrWidth arch))) (WI.BaseBVType 8)
               -- ^ The SMT array mapping addresses to symbolic bytes
               }
 
@@ -102,10 +103,11 @@ combineSymbolicMemChunks
 -- 'MemPtrTable'. Instead, the initialization is deferred until simulation
 -- begins. See @Note [Lazy memory initialization]@.
 newMemPtrTable ::
-    forall sym bak m t w
+    forall sym bak m t arch w
   . ( 16 WI.<= w
     , DMM.MemWidth w
     , KnownNat w
+    , w ~ DMC.ArchAddrWidth arch
     , LCB.IsSymBackend sym bak
     , LCLM.HasLLVMAnn sym
     , MonadIO m
@@ -120,7 +122,7 @@ newMemPtrTable ::
  -- ^ The endianness of values in memory
  -> t (DMC.Memory w)
  -- ^ The macaw memories
- -> m (LCLM.MemImpl sym, MemPtrTable sym w)
+ -> m (LCLM.MemImpl sym, MemPtrTable sym arch)
 newMemPtrTable hooks bak endian mems = do
   let sym = LCB.backendGetSym bak
   let ?ptrWidth = DMC.memWidthNatRepr @w
@@ -269,8 +271,9 @@ mapRegionPointers :: ( DMM.MemWidth w
                      , LCB.IsSymInterface sym
                      , LCLM.HasLLVMAnn sym
                      , ?memOpts :: LCLM.MemOptions
+                     , DMC.ArchAddrWidth arch ~ w
                      )
-                  => MemPtrTable sym w
+                  => MemPtrTable sym arch
                   -> DMS.GlobalMap sym LCLM.Mem w
 mapRegionPointers mpt = DMS.GlobalMap $ \bak mem regionNum offsetVal ->
   let sym = LCB.backendGetSym bak in
@@ -330,11 +333,12 @@ mapRegionPointers mpt = DMS.GlobalMap $ \bak mem regionNum offsetVal ->
 -- NB: This is nearly identical to the function of the same name in
 -- macaw-symbolic, the only difference being that we use a different
 -- MemPtrTable data type.
-mkGlobalPointerValidityPred :: forall sym w
+mkGlobalPointerValidityPred :: forall sym w arch
                              . ( LCB.IsSymInterface sym
                                , DMM.MemWidth w
+                               , w ~ DMC.ArchAddrWidth arch
                                )
-                            => MemPtrTable sym w
+                            => MemPtrTable sym arch
                             -> DMS.MkGlobalPointerValidityAssertion sym w
 mkGlobalPointerValidityPred mpt = \sym puse mcond ptr -> do
   let w = DMM.memWidthNatRepr @w

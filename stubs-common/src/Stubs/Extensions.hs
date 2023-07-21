@@ -12,14 +12,14 @@
 
 -- | Defines verifier-specific extensions for Macaw's simulation functionality.
 module Stubs.Extensions
-  ( ambientExtensions
-  , readMem
+  ( ambientExtensions,
+  readMem
   , resolveAndPopulate
   , loadString
   , loadConcreteString
   , storeString
   , storeConcreteString
-  , AmbientSimulatorState(..)
+  ,AmbientSimulatorState(..)
   , incrementSimStat
   , lensNumOvsApplied
   , lensNumBoundsRefined
@@ -30,7 +30,6 @@ module Stubs.Extensions
   , syscallOvHandles
   , discoveredFunctionHandles
   , populatedMemChunks
-  , serverSocketFDs
   , simulationStats
   , overrideLookupFunctionHandle
   , sharedMemoryState
@@ -66,6 +65,7 @@ import qualified Data.Macaw.Memory as DMM
 import qualified Data.Macaw.Symbolic as DMS
 import qualified Data.Macaw.Symbolic.Backend as DMSB
 import qualified Data.Macaw.Symbolic.MemOps as DMSMO
+import Data.Macaw.Symbolic.MemOps ()
 import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Lang.Crucible.LLVM.MemModel as LCLM
@@ -82,27 +82,38 @@ import qualified What4.Protocol.Online as WPO
 
 import qualified Stubs.Exception as AE
 import qualified Stubs.Extensions.Memory as AEM
-import qualified Stubs.FunctionOverride as AF
-import qualified Stubs.Memory as AM
+--import qualified Stubs.FunctionOverride as AF
 import qualified Stubs.Memory.SharedMemory as AMS
-import qualified Stubs.Syscall as ASy
-import qualified Stubs.Syscall.Overrides.Networking.Types as ASONT
+--import qualified Stubs.Syscall as ASy
 import qualified Stubs.Verifier.Concretize as AVC
+import qualified Stubs.Syscall as ASy
+import qualified Stubs.FunctionOverride as AF
+import qualified Stubs.Memory as SM
+import qualified Lang.Crucible.LLVM.MemModel.CallStack
+import qualified Lang.Crucible.LLVM.MemModel.Partial as LCLMP
+import qualified Lang.Crucible.LLVM.Errors as LCLE
+--import qualified Stubs.Memory as SM
 
 -- | Return @ambient-verifier@ extension evaluation functions.
 ambientExtensions ::
-     ( LCB.IsSymInterface sym
+     forall sym arch bak scope st fs solver w. ( LCB.IsSymInterface sym
      , sym ~ WE.ExprBuilder scope st fs
      , bak ~ LCBO.OnlineBackend solver scope st fs
      , WPO.OnlineSolver solver
-     , LCLM.HasLLVMAnn sym
-     , ?memOpts :: LCLM.MemOptions
      , w ~ DMC.ArchAddrWidth arch
      , DMM.MemWidth w
+     , SM.MemType DMS.LLVMMemory arch ~ LCLM.Mem, SM.IsStubsMemoryModel DMS.LLVMMemory arch
+     , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w, SM.PtrType DMS.LLVMMemory arch ~ LCLMP.LLVMPointerType w
+     , SM.MemTable sym DMS.LLVMMemory arch ~ AEM.MemPtrTable sym arch
+     ,?memOpts::LCLM.MemOptions
+     ,?recordLLVMAnnotation::Lang.Crucible.LLVM.MemModel.CallStack.CallStack
+                                           -> LCLMP.BoolAnn sym
+                                           -> LCLE.BadBehavior sym
+                                           -> IO ()
      )
   => bak
   -> DMS.MacawArchEvalFn (AmbientSimulatorState sym arch) sym LCLM.Mem arch
-  -> AM.InitialMemory sym w
+  -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
   -> DMS.LookupFunctionHandle (AmbientSimulatorState sym arch) sym arch
   -- ^ A function to translate virtual addresses into function handles
@@ -115,27 +126,27 @@ ambientExtensions ::
   -- unsupported relocation types.
   -> LCSE.ExtensionImpl (AmbientSimulatorState sym arch) sym (DMS.MacawExt arch)
 ambientExtensions bak f initialMem lookupH lookupSyscall unsupportedRelocs =
-  (DMS.macawExtensions f (AM.imMemVar initialMem) (AM.imGlobalMap initialMem) lookupH lookupSyscall (AM.imValidityCheck initialMem))
+  (DMS.macawExtensions f (SM.imMemVar initialMem) (SM.imGlobalMap initialMem) lookupH lookupSyscall (\_ _ _ _->return Nothing))
     { LCSE.extensionEval = \_sym iTypes logFn cst g ->
         evalMacawExprExtension bak f initialMem lookupH lookupSyscall iTypes logFn cst g
     , LCSE.extensionExec =
         execAmbientStmtExtension bak f initialMem lookupH lookupSyscall unsupportedRelocs
     }
 
--- | This function proceeds in two steps:
---
--- 1.  If the input pointer is a global pointer (the block ID of the pointer is
---     zero), it is translated into an LLVM pointer.  If the input pointer is
---     not a global pointer then it has already been translated into an LLVM
---     pointer and this step is a no-op.  For more information on this process,
---     see the @tryGlobPointer@ documentation in "Data.Macaw.Symbolic.MemOps".
---
--- 2.  The LLVM pointer from step 1 is then resolved to a concrete pointer if
---     possible.  For more information, see the documentation on
---     @resolveSingletonPointer@ in "Ambient.Verifier.Concretize".
---
--- This function returns the resolved pointer from step 2 and an
--- 'AVC.ResolveSymBVEffect' explaining the outcome of the resolution process.
+-- -- | This function proceeds in two steps:
+-- --
+-- -- 1.  If the input pointer is a global pointer (the block ID of the pointer is
+-- --     zero), it is translated into an LLVM pointer.  If the input pointer is
+-- --     not a global pointer then it has already been translated into an LLVM
+-- --     pointer and this step is a no-op.  For more information on this process,
+-- --     see the @tryGlobPointer@ documentation in "Data.Macaw.Symbolic.MemOps".
+-- --
+-- -- 2.  The LLVM pointer from step 1 is then resolved to a concrete pointer if
+-- --     possible.  For more information, see the documentation on
+-- --     @resolveSingletonPointer@ in "Ambient.Verifier.Concretize".
+-- --
+-- -- This function returns the resolved pointer from step 2 and an
+-- -- 'AVC.ResolveSymBVEffect' explaining the outcome of the resolution process.
 resolvePointer
   :: ( LCB.IsSymInterface sym
      , sym ~ WE.ExprBuilder scope st fs
@@ -167,11 +178,12 @@ resolveAndPopulate
      , w ~ DMC.ArchAddrWidth arch
      , LCB.IsSymInterface sym
      , WPO.OnlineSolver solver
-     , DMM.MemWidth w
+     , DMM.MemWidth w, SM.IsStubsMemoryModel DMS.LLVMMemory arch
+     , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w
      )
   => bak
   -> LCLM.MemImpl sym
-  -> AM.InitialMemory sym w
+  -> SM.InitialMemory sym DMS.LLVMMemory arch
   -> WI.SymBV sym w
   -- ^ The amount of memory to read
   -> LCS.RegEntry sym (LCLM.LLVMPointerType w)
@@ -179,13 +191,13 @@ resolveAndPopulate
   -> IO (LCLM.LLVMPtr sym w, LCS.SimState p sym ext rtp f args)
 resolveAndPopulate bak memImpl initialMem readSizeBV ptr st = do
   (ptr', resolveEffect) <-
-      resolvePointer bak memImpl (AM.imGlobalMap initialMem) ptr
-  st' <- lazilyPopulateGlobalMemArr bak
-                                    (AM.imMemPtrTable initialMem)
-                                    readSizeBV
-                                    ptr'
-                                    st
-  return (ptr', updateBoundsRefined resolveEffect st')
+      resolvePointer bak memImpl (SM.imGlobalMap initialMem) ptr
+  -- st' <- lazilyPopulateGlobalMemArr bak
+  --                                   (AM.imMemPtrTable initialMem) -- will maybe be an issue
+  --                                   readSizeBV
+  --                                   ptr'
+  --                                   st
+  return (ptr', st)
 
 -- | Read memory through a pointer
 readMem :: forall sym scope st fs bak solver arch p w ext rtp f args ty.
@@ -196,11 +208,15 @@ readMem :: forall sym scope st fs bak solver arch p w ext rtp f args ty.
      , LCLM.HasLLVMAnn sym
      , p ~ AmbientSimulatorState sym arch
      , w ~ DMC.ArchAddrWidth arch
+     , DMM.MemWidth w
      , ?memOpts :: LCLM.MemOptions
+     , SM.IsStubsMemoryModel DMS.LLVMMemory arch ,
+     SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w,
+     SM.MemTable sym DMS.LLVMMemory arch ~ AEM.MemPtrTable sym arch
      )
   => bak
   -> LCLM.MemImpl sym
-  -> AM.InitialMemory sym w
+  -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
   -> Map.Map (DMM.MemWord w) String
   -- ^ Mapping from unsupported relocation addresses to the names of the
@@ -215,10 +231,10 @@ readMem :: forall sym scope st fs bak solver arch p w ext rtp f args ty.
         , LCS.SimState p sym ext rtp f args )
 readMem bak memImpl initialMem unsupportedRelocs st addrWidth memRep ptr0 =
   DMM.addrWidthClass addrWidth $ do
-    let mpt = AM.imMemPtrTable initialMem
     let sym = LCB.backendGetSym bak
+    let mpt = SM.imMemTable initialMem
     (ptr1, resolveEffect) <-
-        resolvePointer bak memImpl (AM.imGlobalMap initialMem) ptr0
+        resolvePointer bak memImpl (SM.imGlobalMap initialMem) ptr0
     assertRelocSupported ptr1 unsupportedRelocs
     case concreteImmutableGlobalRead memRep ptr1 mpt of
       Just bytes -> do
@@ -226,17 +242,16 @@ readMem bak memImpl initialMem unsupportedRelocs st addrWidth memRep ptr0 =
         let st' = incrementSimStat lensNumReads st
         pure (readVal, st')
       Nothing -> do
-        let w = DMM.memWidthNatRepr
+        let w = DMM.memWidthNatRepr @w
         memReprBytesBV <- WI.bvLit sym w $ BV.mkBV w $
                           toInteger $ DMC.memReprBytes memRep
-        st1 <- lazilyPopulateGlobalMemArr bak mpt memReprBytesBV ptr1 st
-        let puse = DMS.PointerUse (st1 ^. LCSE.stateLocation) DMS.PointerRead
-        mGlobalPtrValid <- (AM.imValidityCheck initialMem) sym puse Nothing ptr0
+        let puse = DMS.PointerUse (st ^. LCSE.stateLocation) DMS.PointerRead
+        mGlobalPtrValid <- (\_ _ _ _->return Nothing) sym puse Nothing ptr0
         case mGlobalPtrValid of
           Just globalPtrValid -> LCB.addAssertion bak globalPtrValid
           Nothing -> return ()
         readVal <- DMSMO.doReadMem bak memImpl addrWidth memRep ptr1
-        let st2 = updateReads readVal memRep (updateBoundsRefined resolveEffect st1)
+        let st2 = updateReads readVal memRep (updateBoundsRefined resolveEffect st)
         return (readVal,st2)
 
 -- | Write memory to a pointer
@@ -249,10 +264,12 @@ writeMem :: forall sym scope st fs bak solver arch p w ext rtp f args ty.
      , p ~ AmbientSimulatorState sym arch
      , w ~ DMC.ArchAddrWidth arch
      , ?memOpts :: LCLM.MemOptions
+     , SM.IsStubsMemoryModel DMS.LLVMMemory arch
+     , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w
      )
   => bak
   -> LCLM.MemImpl sym
-  -> AM.InitialMemory sym w
+  -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
   -> LCS.SimState p sym ext rtp f args
   -> DMM.AddrWidthRepr w
@@ -272,7 +289,7 @@ writeMem bak memImpl initialMem st addrWidth memRep ptr0 v =
                       toInteger $ DMC.memReprBytes memRep
     (ptr1, st1) <- resolveAndPopulate bak memImpl initialMem memReprBytesBV ptr0 st
     let puse = DMS.PointerUse (st1 ^. LCSE.stateLocation) DMS.PointerWrite
-    mGlobalPtrValid <- (AM.imValidityCheck initialMem) sym puse Nothing ptr0
+    mGlobalPtrValid <- return Nothing
     case mGlobalPtrValid of
       Just globalPtrValid -> LCB.addAssertion bak globalPtrValid
       Nothing -> return ()
@@ -280,19 +297,19 @@ writeMem bak memImpl initialMem st addrWidth memRep ptr0 v =
     pure (mem1, st1)
 
 -- | Load a null-terminated string from the memory.
---
+
 -- The pointer to read from must be concrete and nonnull. We allow symbolic
 -- characters, but we require that the string end with a concrete null
 -- terminator character. Otherwise it is very difficult to tell when the string
 -- has terminated. If a maximum number of characters is provided, no more
 -- than that number of charcters will be read.  In either case,
 -- 'loadString' will stop reading if it encounters a null-terminator.
---
+
 -- NOTE: The only differences between this function and the version defined in
 -- Crucible is that this function:
---
+
 -- * Uses the Ambient @readMem@ function to load through the string pointer
---
+
 -- * Permits symbolic characters
 loadString
   :: forall sym bak w p ext r args ret m arch scope st fs solver
@@ -307,12 +324,14 @@ loadString
      , m ~ LCS.OverrideSim p sym ext r args ret
      , sym ~ WE.ExprBuilder scope st fs
      , bak ~ LCBO.OnlineBackend solver scope st fs
-     , WPO.OnlineSolver solver
+     , WPO.OnlineSolver solver, SM.IsStubsMemoryModel DMS.LLVMMemory arch
+     , SM.MemTable sym DMS.LLVMMemory arch ~ AEM.MemPtrTable sym arch
+     , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w
      )
   => bak
   -> LCLM.MemImpl sym
   -- ^ memory to read from
-  -> AM.InitialMemory sym w
+  -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
   -> Map.Map (DMC.MemWord w) String
   -- ^ Mapping from unsupported relocation addresses to the names of the
@@ -359,12 +378,14 @@ loadConcreteString
      , m ~ LCS.OverrideSim p sym ext r args ret
      , sym ~ WE.ExprBuilder scope st fs
      , bak ~ LCBO.OnlineBackend solver scope st fs
-     , WPO.OnlineSolver solver
+     , WPO.OnlineSolver solver, SM.IsStubsMemoryModel DMS.LLVMMemory arch
+     , SM.MemTable sym DMS.LLVMMemory arch ~ AEM.MemPtrTable sym arch
+     , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w
      )
   => bak
   -> LCLM.MemImpl sym
   -- ^ memory to read from
-  -> AM.InitialMemory sym w
+  -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
   -> Map.Map (DMC.MemWord w) String
   -- ^ Mapping from unsupported relocation addresses to the names of the
@@ -404,11 +425,13 @@ storeString
      , sym ~ WE.ExprBuilder scope st fs
      , bak ~ LCBO.OnlineBackend solver scope st fs
      , WPO.OnlineSolver solver
+     , SM.IsStubsMemoryModel DMS.LLVMMemory arch
+     , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w
      )
   => bak
   -> LCLM.MemImpl sym
   -- ^ Memory to write to
-  -> AM.InitialMemory sym w
+  -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
   -> LCS.RegEntry sym (LCLM.LLVMPointerType w)
   -- ^ Pointer to write value to
@@ -460,11 +483,13 @@ storeConcreteString
      , sym ~ WE.ExprBuilder scope st fs
      , bak ~ LCBO.OnlineBackend solver scope st fs
      , WPO.OnlineSolver solver
+     , SM.IsStubsMemoryModel DMS.LLVMMemory arch
+     , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w
      )
   => bak
   -> LCLM.MemImpl sym
   -- ^ Memory to write to
-  -> AM.InitialMemory sym w
+  -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
   -> LCS.RegEntry sym (LCLM.LLVMPointerType w)
   -- ^ Pointer to write value to
@@ -497,10 +522,13 @@ evalMacawExprExtension ::
      , ?memOpts :: LCLM.MemOptions
      , w ~ DMC.ArchAddrWidth arch
      , DMM.MemWidth w
+     , SM.PtrType DMS.LLVMMemory arch ~ LCLMP.LLVMPointerType w, SM.IsStubsMemoryModel DMS.LLVMMemory arch
+     , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w
+     , SM.MemType DMS.LLVMMemory arch ~ LCLM.Mem
      )
   => bak
   -> DMS.MacawArchEvalFn (AmbientSimulatorState sym arch) sym LCLM.Mem arch
-  -> AM.InitialMemory sym w
+  -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
   -> DMS.LookupFunctionHandle (AmbientSimulatorState sym arch) sym arch
   -- ^ A function to translate virtual addresses into function handles
@@ -537,9 +565,9 @@ evalMacawExprExtension bak f initialMem lookupH lookupSyscall iTypes logFn cst g
                          bak iTypes logFn cst g e0
   where
     sym = LCB.backendGetSym bak
-    mvar = AM.imMemVar initialMem
-    globs = AM.imGlobalMap initialMem
-    toMemPred = AM.imValidityCheck initialMem
+    mvar = SM.imMemVar initialMem
+    globs = SM.imGlobalMap initialMem
+    toMemPred _ _ _ _ = return Nothing
 
 -- | This evaluates a Macaw statement extension in the simulator.
 execAmbientStmtExtension :: forall sym scope st fs bak solver arch p w.
@@ -552,10 +580,15 @@ execAmbientStmtExtension :: forall sym scope st fs bak solver arch p w.
      , w ~ DMC.ArchAddrWidth arch
      , ?memOpts :: LCLM.MemOptions
      , DMM.MemWidth w
+     , SM.MemType DMS.LLVMMemory arch ~ LCLM.Mem
+     ,SM.IsStubsMemoryModel DMS.LLVMMemory arch,
+     SM.PtrType DMS.LLVMMemory arch ~ LCLM.LLVMPointerType (DMC.ArchAddrWidth arch)
+     , SM.MemTable sym DMS.LLVMMemory arch ~ AEM.MemPtrTable sym arch
+     , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w
      )
   => bak
   -> DMS.MacawArchEvalFn p sym LCLM.Mem arch
-  -> AM.InitialMemory sym w
+  -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
   -> DMS.LookupFunctionHandle p sym arch
   -- ^ A function to turn machine addresses into Crucible function
@@ -638,27 +671,29 @@ execAmbientStmtExtension bak f initialMem lookupH lookupSyscall unsupportedReloc
       LCSE.extensionExec (DMS.macawExtensions f mvar globs lookupFnH lookupSyscall toMemPred) s0 st
   where
     sym = LCB.backendGetSym bak
-    mvar = AM.imMemVar initialMem
-    globs = AM.imGlobalMap initialMem
-    toMemPred = AM.imValidityCheck initialMem
-    mpt = AM.imMemPtrTable initialMem
+    mvar = SM.imMemVar initialMem
+    mpt = SM.imMemTable initialMem
+    globs = SM.imGlobalMap initialMem
+    toMemPred = (\_ _ _ _->return Nothing)
 
 -- | Check if a pointer has a special region number. Currently, the only such
 -- special region number is that of the stack pointer.
 -- See Note [Special pointer region numbers].
 hasSpecialPointerRegion ::
-     LCB.IsSymInterface sym
+     (LCB.IsSymInterface sym,
+     SM.IsStubsMemoryModel DMS.LLVMMemory arch,
+     SM.PtrType DMS.LLVMMemory arch ~ LCLM.LLVMPointerType (DMC.ArchAddrWidth arch)
+     )
   => sym
-  -> AM.InitialMemory sym w
+  -> SM.InitialMemory sym DMS.LLVMMemory arch
   -> LCLM.LLVMPtr sym w
   -> IO Bool
 hasSpecialPointerRegion sym initialMem ptr = do
-  eq <- WI.natEq sym (LCLMP.llvmPointerBlock (AM.imStackBasePtr initialMem))
+  eq <- WI.natEq sym (LCLMP.llvmPointerBlock (SM.imStackBasePtr initialMem))
                      (LCLMP.llvmPointerBlock ptr)
   case WI.asConstantPred eq of
     Just b  -> pure b
     Nothing -> pure False
-
 -- Update the metrics tracking the total number of reads and number of
 -- symbolic reads
 updateReads :: forall sym ty p ext rtp f args arch
@@ -711,10 +746,10 @@ updateBoundsRefined resolveEffect state =
 -- are the bytes backing the global memory. Return @Nothing@ otherwise.
 -- See @Note [Lazy memory initialization]@ in Ambient.Extensions.Memory.
 concreteImmutableGlobalRead ::
-  (LCB.IsSymInterface sym, DMM.MemWidth w) =>
+  (LCB.IsSymInterface sym, DMM.MemWidth w, DMM.MemWidth (DMC.RegAddrWidth (DMC.ArchReg arch))) =>
   DMC.MemRepr ty ->
   LCLM.LLVMPtr sym w ->
-  AEM.MemPtrTable sym w ->
+  AEM.MemPtrTable sym arch ->
   Maybe [WI.SymBV sym 8]
 concreteImmutableGlobalRead memRep ptr mpt
   | -- First, check that the pointer being read from is concrete.
@@ -825,7 +860,7 @@ lazilyPopulateGlobalMemArr ::
   , DMM.MemWidth w
   ) =>
   bak ->
-  AEM.MemPtrTable sym w ->
+  AEM.MemPtrTable sym arch ->
   -- ^ The global memory
   WI.SymBV sym w ->
   -- ^ The amount of memory to read
@@ -977,9 +1012,9 @@ extendUpperBound i extendBy =
     IMI.OpenInterval   lo hi -> IMI.OpenInterval   lo (hi + extendBy)
     IMI.ClosedInterval lo hi -> IMI.ClosedInterval lo (hi + extendBy)
 
--- | Initialize the memory backing global memory by assuming that the elements
--- of the array are equal to the appropriate bytes.
--- See @Note [Lazy memory initialization]@ in "Ambient.Extensions.Memory".
+-- -- | Initialize the memory backing global memory by assuming that the elements
+-- -- of the array are equal to the appropriate bytes.
+-- -- See @Note [Lazy memory initialization]@ in "Ambient.Extensions.Memory".
 
 -- NB: This is the same code as in this part of macaw-symbolic:
 -- https://github.com/GaloisInc/macaw/blob/ef0ece6a726217fe6231b9ddf523868e491e6ef0/symbolic/src/Data/Macaw/Symbolic/Memory.hs#L474-L496
@@ -1118,7 +1153,6 @@ data AmbientSimulatorState sym arch = AmbientSimulatorState
     -- ^ The regions of memory which we have populated with symbolic bytes in
     -- the 'AEM.MemPtrTable' backing global memory.
     -- See @Note [Lazy memory initialization@ in "Ambient.Extensions.Memory".
-  , _serverSocketFDs :: Map.Map Integer (Some ASONT.ServerSocketInfo)
     -- ^ A map from registered socket file descriptors to their corresponding
     -- metadata. See @Note [The networking story]@ in
     -- "Ambient.Syscall.Overrides.Networking".
@@ -1144,7 +1178,6 @@ emptyAmbientSimulatorState = AmbientSimulatorState
   , _syscallOvHandles = MapF.empty
   , _discoveredFunctionHandles = Map.empty
   , _populatedMemChunks = IS.empty
-  , _serverSocketFDs = Map.empty
   , _simulationStats = emptyAmbientSimulationStats
   , _overrideLookupFunctionHandle = Nothing
   , _sharedMemoryState = AMS.emptyAmbientSharedMemoryState
@@ -1176,10 +1209,10 @@ populatedMemChunks :: Lens' (AmbientSimulatorState sym arch)
 populatedMemChunks = lens _populatedMemChunks
                           (\s v -> s { _populatedMemChunks = v })
 
-serverSocketFDs :: Lens' (AmbientSimulatorState sym arch)
-                       (Map.Map Integer (Some ASONT.ServerSocketInfo))
-serverSocketFDs = lens _serverSocketFDs
-                       (\s v -> s { _serverSocketFDs = v })
+-- serverSocketFDs :: Lens' (AmbientSimulatorState sym arch)
+--                        (Map.Map Integer (Some ASONT.ServerSocketInfo))
+-- serverSocketFDs = lens _serverSocketFDs
+--                        (\s v -> s { _serverSocketFDs = v })
 
 simulationStats :: Lens' (AmbientSimulatorState sym arch) AmbientSimulationStats
 simulationStats = lens _simulationStats (\s v -> s { _simulationStats = v })
@@ -1197,201 +1230,201 @@ sharedMemoryState
 sharedMemoryState =
   lens _sharedMemoryState (\s v -> s { _sharedMemoryState = v })
 
-{-
-Note [Lazily registering overrides]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-During symbolic simulation, the verifier needs to register function handles for
-any overrides that have not yet been used by the simulator. This is done in a
-lazy fashion: before the verifier simulates a function, it will check to see
-if it has previously registered. If so, just use the previously registered
-function handle. If not, allocate a fresh handle for that function, register
-it, then proceed. This lazy behavior is helpful for two reasons:
+-- {-
+-- Note [Lazily registering overrides]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- During symbolic simulation, the verifier needs to register function handles for
+-- any overrides that have not yet been used by the simulator. This is done in a
+-- lazy fashion: before the verifier simulates a function, it will check to see
+-- if it has previously registered. If so, just use the previously registered
+-- function handle. If not, allocate a fresh handle for that function, register
+-- it, then proceed. This lazy behavior is helpful for two reasons:
 
-1. In general, the verifier may not have discovered all of the functions it
-   needs prior to starting simulation. As a result, at least some lazy
-   registration will be required to handle functions that aren't discovered
-   until subsequent runs of the code discoverer.
+-- 1. In general, the verifier may not have discovered all of the functions it
+--    needs prior to starting simulation. As a result, at least some lazy
+--    registration will be required to handle functions that aren't discovered
+--    until subsequent runs of the code discoverer.
 
-2. As a practical matter, it is difficult to ascertain the types of syscall
-   function handles until simulation begins. Lazy registration avoids this
-   issue, as one can wait until one is in the context of LookupSyscallHandle,
-   where the types are within reach.
+-- 2. As a practical matter, it is difficult to ascertain the types of syscall
+--    function handles until simulation begins. Lazy registration avoids this
+--    issue, as one can wait until one is in the context of LookupSyscallHandle,
+--    where the types are within reach.
 
-We track registered overrides in AmbientSimulatorState, which is a custom
-personality data type the verifier tracks during simulation. The
-LookupFunctionHandle and LookupSyscallHandle interfaces pass through
-CrucibleState, so if we need to register a newly discovered override, it is a
-matter of updating the AmbientSimulatorState inside of the CrucibleState and
-returning the new state.
+-- We track registered overrides in AmbientSimulatorState, which is a custom
+-- personality data type the verifier tracks during simulation. The
+-- LookupFunctionHandle and LookupSyscallHandle interfaces pass through
+-- CrucibleState, so if we need to register a newly discovered override, it is a
+-- matter of updating the AmbientSimulatorState inside of the CrucibleState and
+-- returning the new state.
 
-Registered overrides for functions can be stored in a simple Map, as their
-types are easy to ascertain ahead of time. Registered overrides for syscalls,
-on the other hand, are stored in a MapF. Since their types are difficult to
-know ahead of time (point (2) above), existentially closing over their types
-avoids this problem.
+-- Registered overrides for functions can be stored in a simple Map, as their
+-- types are easy to ascertain ahead of time. Registered overrides for syscalls,
+-- on the other hand, are stored in a MapF. Since their types are difficult to
+-- know ahead of time (point (2) above), existentially closing over their types
+-- avoids this problem.
 
-Note [Incremental code discovery]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-The verifier will not perform code discovery unless it needs to, as:
+-- Note [Incremental code discovery]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- The verifier will not perform code discovery unless it needs to, as:
 
-1. Code discovery is fairly expensive, and
-2. In large binaries, one typically only needs to discover a portion of the
-   functions available in the binary.
+-- 1. Code discovery is fairly expensive, and
+-- 2. In large binaries, one typically only needs to discover a portion of the
+--    functions available in the binary.
 
-Because of this, the verifier will only discover one function at a time, and
-only if the verifier needs to find an address that has not previously been
-discovered before. This has a number of consequences for the design of the
-verifier:
+-- Because of this, the verifier will only discover one function at a time, and
+-- only if the verifier needs to find an address that has not previously been
+-- discovered before. This has a number of consequences for the design of the
+-- verifier:
 
-* Because code discovery requires knowing which address to discover, the
-  first thing the verifier must do is determine the address corresponding
-  to the distinguished entry point function so that its code can be discovered.
-  If the user manually specifies an address, this is no issue. If the user
-  tries to find a function with a particular name, such as `main` (see
-  Note [Entry Point] in A.Verifier), then this is somewhat more challenging,
-  since we do not know a priori where `main`'s address is. We could uncover
-  this information by performing code discovery on all functions in the binary,
-  but this would be prohibitively expensive.
+-- * Because code discovery requires knowing which address to discover, the
+--   first thing the verifier must do is determine the address corresponding
+--   to the distinguished entry point function so that its code can be discovered.
+--   If the user manually specifies an address, this is no issue. If the user
+--   tries to find a function with a particular name, such as `main` (see
+--   Note [Entry Point] in A.Verifier), then this is somewhat more challenging,
+--   since we do not know a priori where `main`'s address is. We could uncover
+--   this information by performing code discovery on all functions in the binary,
+--   but this would be prohibitively expensive.
 
-  Our solution is to look at the section headers of the binary, which offer a
-  much cheaper way to map each function name to its address. This information
-  is stored in A.Loader.BinaryConfig.bcMainBinarySymbolMap. Note that this
-  won't work if the binary is stripped, but that is to be expected—there is
-  no hope of discovering code in a stripped binary unless you know the exact
-  address at which to start.
+--   Our solution is to look at the section headers of the binary, which offer a
+--   much cheaper way to map each function name to its address. This information
+--   is stored in A.Loader.BinaryConfig.bcMainBinarySymbolMap. Note that this
+--   won't work if the binary is stripped, but that is to be expected—there is
+--   no hope of discovering code in a stripped binary unless you know the exact
+--   address at which to start.
 
-* When looking up a function in the verifier, we want to avoid code discovery
-  if the function has a user-supplied override, as the override obviates the
-  need to discover the function's CFG. But overrides apply to function names,
-  whereas the verifier looks up functions by their addresses. In order to know
-  which function addresses have overrides, we need to look up the names for
-  each address. This mapping is contained in a LoadedBinaryPath's
-  lbpEntryPoints field. Again, this information is gleaned by inspecting each
-  binary's section headers.
+-- * When looking up a function in the verifier, we want to avoid code discovery
+--   if the function has a user-supplied override, as the override obviates the
+--   need to discover the function's CFG. But overrides apply to function names,
+--   whereas the verifier looks up functions by their addresses. In order to know
+--   which function addresses have overrides, we need to look up the names for
+--   each address. This mapping is contained in a LoadedBinaryPath's
+--   lbpEntryPoints field. Again, this information is gleaned by inspecting each
+--   binary's section headers.
 
-* When the verifier encounters a PLT stub, it knows the name of the function it
-  should jump to. But how does it know which binary the function is defined in?
-  We solve this problem by, once again, looking at each binary's section
-  headers. In particular, the A.Loader.BinaryConfig.bcDynamicFuncSymbolMap
-  field maps the names of global, dynamic functions (which are the only
-  functions that PLT stubs could reasonably jump to) to their addresses. When
-  the verifier encounters a PLT stub without an override, it will use the
-  bcDynamicFuncSymbolMap to determine the address in another binary to jump
-  to and then proceed like normal.
+-- * When the verifier encounters a PLT stub, it knows the name of the function it
+--   should jump to. But how does it know which binary the function is defined in?
+--   We solve this problem by, once again, looking at each binary's section
+--   headers. In particular, the A.Loader.BinaryConfig.bcDynamicFuncSymbolMap
+--   field maps the names of global, dynamic functions (which are the only
+--   functions that PLT stubs could reasonably jump to) to their addresses. When
+--   the verifier encounters a PLT stub without an override, it will use the
+--   bcDynamicFuncSymbolMap to determine the address in another binary to jump
+--   to and then proceed like normal.
 
-* After a function has been discovered for the first time, its CFG handle is
-  stored in the discoveredFunctionHandles field of AmbientSimulatorState. That
-  way, subsequent lookups of the function need not re-perform code discovery.
-  This is very much in the same vein as Note [Lazily registering overrides].
+-- * After a function has been discovered for the first time, its CFG handle is
+--   stored in the discoveredFunctionHandles field of AmbientSimulatorState. That
+--   way, subsequent lookups of the function need not re-perform code discovery.
+--   This is very much in the same vein as Note [Lazily registering overrides].
 
-Note [Special pointer region numbers]
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-The verifier's currently has an extremely simplistic view of dynamically
-allocated memory: every call to malloc creates a unique region number that is
-separate from every other call to malloc. Moreover, malloc will always return
-a non-zero region number, as the region 0 is reserved for raw bitvector values.
-Comparing pointers with different region numbers, therefore, is usually a sign
-that something is amiss, and macaw will treat these situations as undefined
-behavior. (See, for instance, `doPtrEq` in `macaw-symbolic`.)
+-- Note [Special pointer region numbers]
+-- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+-- The verifier's currently has an extremely simplistic view of dynamically
+-- allocated memory: every call to malloc creates a unique region number that is
+-- separate from every other call to malloc. Moreover, malloc will always return
+-- a non-zero region number, as the region 0 is reserved for raw bitvector values.
+-- Comparing pointers with different region numbers, therefore, is usually a sign
+-- that something is amiss, and macaw will treat these situations as undefined
+-- behavior. (See, for instance, `doPtrEq` in `macaw-symbolic`.)
 
-This approach is extremely simplistic, but it usually works quite well in
-practice. Unfortunately, there are some corner cases where this breaks down.
-In particular, there is code in the wild that attempts to compare the addresses
-of different pointers. To illustrate the difficulty, we will use the following
-C program example that iterates over a stack-allocated array (this will take a
-bit of exposition, so bear with me):
+-- This approach is extremely simplistic, but it usually works quite well in
+-- practice. Unfortunately, there are some corner cases where this breaks down.
+-- In particular, there is code in the wild that attempts to compare the addresses
+-- of different pointers. To illustrate the difficulty, we will use the following
+-- C program example that iterates over a stack-allocated array (this will take a
+-- bit of exposition, so bear with me):
 
-  int arr[ARR_LEN];
-  for (int i = 0; i < ARR_LEN; i++) {
-    arr[i] = 0;
-  }
+--   int arr[ARR_LEN];
+--   for (int i = 0; i < ARR_LEN; i++) {
+--     arr[i] = 0;
+--   }
 
-An optimizing compiler can optimize away the intermediate `i` index value by
-instead traversing the stack. Here is what that may look like as AArch32
-psuedo-assembly, where `r1` is the address to the top of the stack and `r2`
-is an address somewhere between `sp` (the stack pointer) and `r1`:
+-- An optimizing compiler can optimize away the intermediate `i` index value by
+-- instead traversing the stack. Here is what that may look like as AArch32
+-- psuedo-assembly, where `r1` is the address to the top of the stack and `r2`
+-- is an address somewhere between `sp` (the stack pointer) and `r1`:
 
-  0x0: str     #0, [r2, #4]!
-  0x4: cmp     r1, r2
-  0x8: bne     0x0
+--   0x0: str     #0, [r2, #4]!
+--   0x4: cmp     r1, r2
+--   0x8: bne     0x0
 
-Here is what happens in these three lines:
+-- Here is what happens in these three lines:
 
-0x0: Write `0x0` to the memory that `r2` points to, then increment `r2`'s
-     address by 4.
-0x4: Compare the addresses of `r1` and `r2`. The full semantics of the `cmp`
-     instruction are too complicated to describe here, but one key step is
-     that a value derived from `r1` and `r2` will be compared to `0x0`. If
-     they are equal, the Z condition flag will be set. Otherwise, Z will
-     not be set.
-0x8: If the Z condition flag is not set, then go back to address 0x0.
-     Otherwise, proceed.
+-- 0x0: Write `0x0` to the memory that `r2` points to, then increment `r2`'s
+--      address by 4.
+-- 0x4: Compare the addresses of `r1` and `r2`. The full semantics of the `cmp`
+--      instruction are too complicated to describe here, but one key step is
+--      that a value derived from `r1` and `r2` will be compared to `0x0`. If
+--      they are equal, the Z condition flag will be set. Otherwise, Z will
+--      not be set.
+-- 0x8: If the Z condition flag is not set, then go back to address 0x0.
+--      Otherwise, proceed.
 
-This works because the compiler knows what part of the stack is dedicated to
-storing `arr`'s elements, so the assembly iterates over the relevant stack
-addresses rather than incrementing an intermediate variable. The loop will
-end when `r1` and `r2` contain the same address, which will cause the Z
-condition flag to be set.
+-- This works because the compiler knows what part of the stack is dedicated to
+-- storing `arr`'s elements, so the assembly iterates over the relevant stack
+-- addresses rather than incrementing an intermediate variable. The loop will
+-- end when `r1` and `r2` contain the same address, which will cause the Z
+-- condition flag to be set.
 
-OK, what does any of this have to do with allocation region numbers in the
-verifier? Recall that raw bitvectors always have a region number of 0, whereas
-malloc'd memory always has a non-zero region number. This is dire for the
-example above, since `r1` and `r2` are both derived from `sp`. The verifier
-backs the memory in the stack pointer with a chunk of malloc'd memory, which
-means that `sp` (and any pointer resulting from arithmetic on `sp`) will have
-a non-zero region number. As a result, the verifier will always claim that
-`r1`/`r2` are not equal to 0x0, as they always have different region numbers.
-This means that the Z flag will never be set, which will cause this loop to
-never terminate. Ack!
+-- OK, what does any of this have to do with allocation region numbers in the
+-- verifier? Recall that raw bitvectors always have a region number of 0, whereas
+-- malloc'd memory always has a non-zero region number. This is dire for the
+-- example above, since `r1` and `r2` are both derived from `sp`. The verifier
+-- backs the memory in the stack pointer with a chunk of malloc'd memory, which
+-- means that `sp` (and any pointer resulting from arithmetic on `sp`) will have
+-- a non-zero region number. As a result, the verifier will always claim that
+-- `r1`/`r2` are not equal to 0x0, as they always have different region numbers.
+-- This means that the Z flag will never be set, which will cause this loop to
+-- never terminate. Ack!
 
-The issue ultimately lies in the fact that the verifier's treatment of
-dynamically allocated memory is not very well equipped to handle pointer
-comparisons in general. The simplistic approach of giving every piece of
-malloc'd memory a unique region number is good for catching undefined behavior,
-but it is less suitable for handling the sorts of pointer optimizations seen
-above. In the long term, we will want a more nuanced approach to dynamic
-memory allocation.
+-- The issue ultimately lies in the fact that the verifier's treatment of
+-- dynamically allocated memory is not very well equipped to handle pointer
+-- comparisons in general. The simplistic approach of giving every piece of
+-- malloc'd memory a unique region number is good for catching undefined behavior,
+-- but it is less suitable for handling the sorts of pointer optimizations seen
+-- above. In the long term, we will want a more nuanced approach to dynamic
+-- memory allocation.
 
-In the short term, however, we get by with a hack: we treat the stack pointer's
-region number specially. That is, we recognize that compilers are liable to do
-stack-traversing optimizations like the one above that require more flexibility
-vis-à-vis pointer comparisons. As a result, we override the following macaw
-operations and provide slightly different semantics when one of the arguments
-is a pointer with the same region number as the stack pointer:
+-- In the short term, however, we get by with a hack: we treat the stack pointer's
+-- region number specially. That is, we recognize that compilers are liable to do
+-- stack-traversing optimizations like the one above that require more flexibility
+-- vis-à-vis pointer comparisons. As a result, we override the following macaw
+-- operations and provide slightly different semantics when one of the arguments
+-- is a pointer with the same region number as the stack pointer:
 
-* PtrEq: Normally, macaw's default behavior is to treat pointers from different
-  regions as being uncomparable. If one of the pointers is derived from the
-  stack pointer, however, we relax this requirement and simply compare the
-  pointer offsets without considering the region numbers.
+-- * PtrEq: Normally, macaw's default behavior is to treat pointers from different
+--   regions as being uncomparable. If one of the pointers is derived from the
+--   stack pointer, however, we relax this requirement and simply compare the
+--   pointer offsets without considering the region numbers.
 
-* PtrToBits: Normally, macaw will only allow converting pointers with the region
-  number 0 to a raw bitvector. If the pointer is derived from the stack pointer,
-  however, we relax this requirement and simply convert the pointer offset to a
-  bitvector.
+-- * PtrToBits: Normally, macaw will only allow converting pointers with the region
+--   number 0 to a raw bitvector. If the pointer is derived from the stack pointer,
+--   however, we relax this requirement and simply convert the pointer offset to a
+--   bitvector.
 
-It is worth emphasizing that this is a hack. It is possible that there are other
-special pointers requiring similar treatment that we have not yet identified.
-If that is the case, we will need to expand the scope of the hack (i.e., the
-`hasSpecialPointerBlock` function will need to be changed). It is also possible
-that there are other macaw operations that need to be included above. For
-instance, PtrToBits only applies to pointer comparisons where the pointer width
-is the same as the architecture width. This appears to be enough in practice to
-handle the type of code illustrated above, but this may not work if a pointer's
-width is truncated or widened.
+-- It is worth emphasizing that this is a hack. It is possible that there are other
+-- special pointers requiring similar treatment that we have not yet identified.
+-- If that is the case, we will need to expand the scope of the hack (i.e., the
+-- `hasSpecialPointerBlock` function will need to be changed). It is also possible
+-- that there are other macaw operations that need to be included above. For
+-- instance, PtrToBits only applies to pointer comparisons where the pointer width
+-- is the same as the architecture width. This appears to be enough in practice to
+-- handle the type of code illustrated above, but this may not work if a pointer's
+-- width is truncated or widened.
 
-One might wonder: what happens if we apply this hack to /all/ pointers, not just
-the stack pointer? While tempting, this would return incorrect behavior for C
-programs that check if a pointer is NULL, which is a common idiom:
+-- One might wonder: what happens if we apply this hack to /all/ pointers, not just
+-- the stack pointer? While tempting, this would return incorrect behavior for C
+-- programs that check if a pointer is NULL, which is a common idiom:
 
-  int *x = malloc(sizeof(int));
-  if (x != NULL) {
-    puts("This should be printed");
-  }
+--   int *x = malloc(sizeof(int));
+--   if (x != NULL) {
+--     puts("This should be printed");
+--   }
 
-We know that each call to malloc returns a unique, non-zero region number. This
-guarantees that the pointer representing `x`'s address is (1) not the same as
-the stack pointer's region, and (2) not zero, which is the region number for
-NULL (i.e., 0x0). In this particular example, we /do/ want to consider the
-region number when checking for pointer equality, so it is important that we
-exclude it from the scope of the hack.
--}
+-- We know that each call to malloc returns a unique, non-zero region number. This
+-- guarantees that the pointer representing `x`'s address is (1) not the same as
+-- the stack pointer's region, and (2) not zero, which is the region number for
+-- NULL (i.e., 0x0). In this particular example, we /do/ want to consider the
+-- region number when checking for pointer equality, so it is important that we
+-- exclude it from the scope of the hack.
+-- -}

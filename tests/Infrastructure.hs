@@ -11,28 +11,19 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ImpredicativeTypes #-}
+{-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 module Infrastructure
     (
-        buildRecordLLVMAnnotation,
         ProgramInstance(..),
         symexec,
-        SomeRegEntry(..),
-        logShim, mallocOv
+        SomeRegEntry(..)
     )
 where
 
 import           Control.Monad.IO.Class (liftIO, MonadIO )
 import qualified Data.ByteString as BS
-import           Data.IORef ( IORef, newIORef, modifyIORef')
-import qualified Data.Map as Map
-
-
 import qualified Lang.Crucible.Backend as LCB
-import qualified Lang.Crucible.LLVM.Errors as LCLE
-import qualified Lang.Crucible.LLVM.MemModel as LCLM
-import qualified Lang.Crucible.LLVM.MemModel.CallStack as LCLMC
-import qualified Lang.Crucible.LLVM.MemModel.Partial as LCLMP
-
 import           Data.Word ( Word64 )
 
 import qualified Stubs.EntryPoint as AEp
@@ -44,13 +35,12 @@ import qualified Lang.Crucible.Syntax.Concrete as LCSC
 import qualified Data.Macaw.Symbolic as DMS
 
 import           Data.Macaw.BinaryLoader.X86 ()
-
 import           Data.Macaw.X86.Symbolic ()
 import qualified Lang.Crucible.FunctionHandle as LCF
 
 import qualified What4.Interface as WI
 import qualified Lang.Crucible.CFG.Expr as LCCE
-import Lang.Crucible.Simulator (RegEntry (regValue), gpValue)
+import Lang.Crucible.Simulator (RegEntry)
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Lang.Crucible.Simulator.ExecutionTree as LCSE
 import qualified Lang.Crucible.LLVM.Intrinsics as LCLI
@@ -74,27 +64,16 @@ import qualified Stubs.AST as SA
 import qualified Stubs.Diagnostic as SD
 import qualified Stubs.Translate.Intrinsic as STI
 import qualified Data.Parameterized as P
-import qualified Data.Macaw.Architecture.Info as DMX
 import qualified Data.Foldable as F
 import qualified Stubs.FunctionOverride as AF
 import qualified Stubs.Panic as AP
 import qualified Stubs.Wrapper as SW
-import qualified Data.Macaw.X86 as DMX
 import qualified Stubs.Preamble as SPR
-
--- | Build an LLVM annotation tracker to record instances of bad behavior
--- checks.  Bad behavior encompasses both undefined behavior, and memory
--- errors.  This function returns a function to set '?recordLLVMAnnotation' to,
--- as well as a reference to the record of bad behaviors that will be built up.
-buildRecordLLVMAnnotation
-  :: LCB.IsSymInterface sym
-  => IO ( LCLMC.CallStack -> LCLMP.BoolAnn sym -> LCLE.BadBehavior sym -> IO ()
-        , IORef (LCLM.LLVMAnnMap sym) )
-buildRecordLLVMAnnotation = do
-  badBehavior <- liftIO $ newIORef Map.empty
-  let recordFn = \cs ann behavior ->
-        modifyIORef' badBehavior (Map.insert ann (cs, behavior))
-  return (recordFn , badBehavior)
+import qualified Stubs.Common as SC
+import qualified Stubs.Memory as SM
+import qualified Lang.Crucible.LLVM.MemModel as LCLM
+import qualified Stubs.Extensions as SE
+import qualified Data.Macaw.Discovery as DMS
 
 -- | A definition of the initial state of a program to be verified
 --
@@ -160,9 +139,6 @@ data ProgramInstance =
 
 data SomeRegEntry tp = forall sym . (WI.IsExprBuilder sym) => SomeRegEntry (RegEntry sym tp)
 
-logShim:: SD.Diagnostic -> IO ()
-logShim _ = return ()
-
 symexec
   :: forall m ext arch sym bak scope st fs solver p w args ret a. ( CMC.MonadThrow m
      , MonadIO m
@@ -188,10 +164,10 @@ symexec
   -> (WI.IsExprBuilder sym => (LCSE.ExecResult p sym ext (LCS.RegEntry sym ret)) -> m a)
   -> [STI.SomeStubsOverride arch]
   -> m a
-symexec bak halloc prog cfg args retRepr check ovs = do
+symexec bak halloc prog cfg args retRepr check ovs = do --todo link ovs
   LCCC.SomeCFG cfg <- return cfg
 
-  let tsym = STC.Sym (LCB.backendGetSym bak) bak
+  let tsym = SC.Sym (LCB.backendGetSym bak) bak
   -- Create primary overrides
   --ov <- liftIO (SW.crucibleProgramToFunctionOverride tsym  prog)
   -- Create Startup overrides : TODO check validity somwhere
@@ -258,15 +234,3 @@ symexec bak halloc prog cfg args retRepr check ovs = do
     dummyGetVarArg = AF.GetVarArg $ \_ ->
       AP.panic AP.SymbolicExecution "sym-exec"
         ["A startup override cannot use variadic arguments"]
-
-
-mallocStub :: (STC.StubsArch arch) =>P.SymbolRepr s ->  STI.SomeStubsOverride arch
-mallocStub ptr = STI.SomeStubsOverride (STI.StubsOverride (\(STC.Sym sym _)-> do 
-          LCS.mkOverride' "malloc" LCT.BoolRepr (do 
-              LCS.RegMap (Ctx.Empty Ctx.:> _) <-  LCS.getOverrideArgs
-              return $ WI.truePred sym
-            )) ((Ctx.extend Ctx.empty (LCT.BVRepr @32 WI.knownRepr))) (LCT.BoolRepr)) (SA.StubsSignature "malloc" (Ctx.extend Ctx.empty SA.StubsIntRepr) (SA.StubsIntrinsicRepr ptr))
-
-mallocOv :: (STC.StubsArch arch) => P.SymbolRepr s ->  STI.OverrideModule arch
-mallocOv ptr = STI.OverrideModule "alloc" [mallocStub ptr] [STI.SomeIntrinsicTyDecl (STI.IntrinsicTyDecl ptr LCT.BoolRepr)] []
-

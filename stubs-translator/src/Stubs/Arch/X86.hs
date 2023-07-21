@@ -12,7 +12,7 @@
 {-|
 Description: Preamble Instance for X86_64
 -}
-module Stubs.Preamble.X86() where
+module Stubs.Arch.X86() where
 import qualified Stubs.AST as SA
 import qualified Data.Macaw.X86 as DMX
 import qualified What4.Interface as WI
@@ -20,7 +20,7 @@ import qualified Stubs.Preamble as SPR
 import qualified Data.Parameterized.Context as Ctx
 import Data.Macaw.X86.ArchTypes ()
 import Data.Macaw.X86.Symbolic ()
-import Stubs.Preamble.Common 
+import Stubs.Preamble.Common
 import qualified Lang.Crucible.Types as LCT
 import qualified Stubs.Translate.Core as STC
 import qualified Data.Parameterized.NatRepr as PN
@@ -28,8 +28,12 @@ import qualified Lang.Crucible.CFG.Reg as LCCR
 import qualified Lang.Crucible.CFG.Expr as LCCE
 import GHC.Natural (naturalToInteger)
 import qualified Data.Parameterized.Map as MapF
+import qualified Stubs.Translate.Intrinsic as STI
+import qualified Data.Parameterized as P
+import qualified Stubs.Common as SC 
+import qualified Lang.Crucible.Simulator as LCS
 
-instance STC.StubsArch DMX.X86_64 where 
+instance STC.StubsArch DMX.X86_64 where
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsInt = LCT.BVType (STC.ArchIntSize DMX.X86_64)
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsUInt = LCT.BVType (STC.ArchIntSize DMX.X86_64)
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsLong = LCT.BVType (STC.ArchLongSize DMX.X86_64)
@@ -44,7 +48,7 @@ instance STC.StubsArch DMX.X86_64 where
     type instance ArchIntSize DMX.X86_64 = 32
     type instance ArchShortSize DMX.X86_64 = 16
     type instance ArchLongSize DMX.X86_64 = 64
-    
+
     toCrucibleTy tyrepr = do
         case tyrepr of
             SA.StubsIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
@@ -55,24 +59,24 @@ instance STC.StubsArch DMX.X86_64 where
             SA.StubsShortRepr-> return $ LCT.BVRepr (PN.knownNat @16)
             SA.StubsULongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
             SA.StubsUShortRepr-> return $ LCT.BVRepr (PN.knownNat @16)
-            SA.StubsAliasRepr s -> do 
-                env <- STC.getStubEnv 
+            SA.StubsAliasRepr s -> do
+                env <- STC.getStubEnv
                 let tymap = STC.stTyMap env
-                case MapF.lookup  s tymap of 
+                case MapF.lookup  s tymap of
                     Just (STC.WrappedStubsTypeAliasRepr _ t) -> STC.toCrucibleTy t
                     Nothing -> error $ "missing type alias: " ++ show s
-            SA.StubsIntrinsicRepr s -> do 
-                env <- STC.getStubEnv 
-                let intrinsicMap = STC.stIntrinsicMap env 
-                case MapF.lookup s intrinsicMap of 
-                    Just (STC.WrappedIntrinsicRepr _ t) -> return t 
+            SA.StubsIntrinsicRepr s -> do
+                env <- STC.getStubEnv
+                let intrinsicMap = STC.stIntrinsicMap env
+                case MapF.lookup s intrinsicMap of
+                    Just (STC.WrappedIntrinsicRepr _ t) -> return t
                     Nothing -> error $ "Missing intrinsic: " ++ show s
 
-    translateLit lit = do 
+    translateLit lit = do
         let n = PN.knownNat @32
         let ln = PN.knownNat @64
         let sn = PN.knownNat @16
-        case lit of 
+        case lit of
             SA.BoolLit b -> LCCR.App $ LCCE.BoolLit b
             SA.UnitLit -> LCCR.App LCCE.EmptyApp
             SA.IntLit i -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit i)
@@ -97,7 +101,21 @@ instance SPR.Preamble DMX.X86_64 where
     preambleMap SA.StubsSignature{SA.sigFnName="ushort",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsShortRepr), SA.sigFnRetTy=SA.StubsUShortRepr} = bvIdOverride @DMX.X86_64 "ushort"
     preambleMap SA.StubsSignature{SA.sigFnName="long",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsULongRepr), SA.sigFnRetTy=SA.StubsLongRepr} = bvIdOverride @DMX.X86_64 "long"
     preambleMap SA.StubsSignature{SA.sigFnName="ulong",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsLongRepr), SA.sigFnRetTy=SA.StubsULongRepr} = bvIdOverride @DMX.X86_64 "ulong"
-    preambleMap SA.StubsSignature{SA.sigFnName="uint_s",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUShortRepr), SA.sigFnRetTy=SA.StubsUIntRepr} = bvExtendOverride @DMX.X86_64 "uint_s" False 
+    preambleMap SA.StubsSignature{SA.sigFnName="uint_s",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUShortRepr), SA.sigFnRetTy=SA.StubsUIntRepr} = bvExtendOverride @DMX.X86_64 "uint_s" False
     preambleMap SA.StubsSignature{SA.sigFnName="ulong_i",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUIntRepr), SA.sigFnRetTy=SA.StubsULongRepr} = bvExtendOverride @DMX.X86_64 "ulong_i" False
 
     preambleMap sig = error ("Missing implementation for preamble function:"++SA.sigFnName sig)
+
+instance STI.OverrideArch DMX.X86_64 where
+     buildOverrides = []--[STI.BuildOverrideModule (const mallocOv)]
+
+
+-- mallocStub :: (STC.StubsArch arch) => STI.SomeStubsOverride arch
+-- mallocStub ptr = let P.Some ptr = P.someSymbol "Pointer" in STI.SomeStubsOverride (STI.StubsOverride (\(SC.Sym sym _)-> do
+--           LCS.mkOverride' "malloc" LCT.BoolRepr (do
+--               LCS.RegMap (Ctx.Empty Ctx.:> _) <-  LCS.getOverrideArgs
+--               return $ WI.truePred sym
+--             )) (Ctx.extend Ctx.empty (LCT.BVRepr @32 WI.knownRepr)) LCT.BoolRepr) (SA.StubsSignature "malloc" (Ctx.extend Ctx.empty SA.StubsIntRepr) (SA.StubsIntrinsicRepr ptr))
+
+-- mallocOv :: (STC.StubsArch arch) => STI.OverrideModule arch
+-- mallocOv = let P.Some ptr = P.someSymbol "Pointer" in STI.OverrideModule "alloc" [mallocStub] [STI.SomeIntrinsicTyDecl (STI.IntrinsicTyDecl ptr LCT.BoolRepr)] []

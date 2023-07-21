@@ -3,6 +3,14 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# Language ScopedTypeVariables #-}
 {-# Language TypeApplications #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE RankNTypes #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
+{-# LANGUAGE FlexibleContexts #-}
 
 module Stubs.Memory.X86_64.Linux (
     x86_64LinuxStmtExtensionOverride
@@ -34,6 +42,120 @@ import qualified What4.Symbol as WSym
 
 import qualified Stubs.Memory as AM
 import qualified Stubs.Panic as AP
+import qualified Stubs.Memory as SM
+import qualified Lang.Crucible.Types as LCT
+import qualified Stubs.Common as SC
+import qualified Data.Macaw.Symbolic.Memory as DMSM
+import qualified Data.Macaw.X86 as DMA
+import qualified Data.Macaw.X86.Symbolic ()
+import Control.Monad.IO.Class (liftIO, MonadIO)
+import qualified Data.Parameterized.NatRepr as PN
+import Stubs.Memory ()
+import qualified Lang.Crucible.LLVM.MemModel.CallStack
+import qualified Lang.Crucible.LLVM.Errors as LCLE
+import qualified Lang.Crucible.LLVM.MemModel.Partial as LCLMP
+import qualified Stubs.Memory.Common as SMC
+import qualified Stubs.Logging as SL
+import qualified Stubs.Extensions as SE
+import qualified Stubs.Extensions.Memory as AEM
+import qualified Data.Macaw.Symbolic as DMSMO
+import qualified Stubs.Loader.BinaryConfig as SLB
+import qualified Data.Macaw.BinaryLoader as DMB
+import Data.Macaw.BinaryLoader.X86 ()
+
+instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where 
+  type instance PtrType DMS.LLVMMemory DMX.X86_64 =  LCLM.LLVMPointerType (DMC.ArchAddrWidth DMX.X86_64)
+  type instance MemType DMS.LLVMMemory DMX.X86_64 = LCLM.Mem
+  type instance BVToPtrTy w DMS.LLVMMemory DMX.X86_64 = LCLM.LLVMPointerType w
+  type instance MemTable sym DMS.LLVMMemory DMX.X86_64 = AEM.MemPtrTable sym DMX.X86_64
+  type instance MemMap sym DMX.X86_64 = DMSMO.GlobalMap sym LCLM.Mem (DMC.ArchAddrWidth DMX.X86_64)
+  type instance VerifierState sym DMS.LLVMMemory DMX.X86_64 = (SE.AmbientSimulatorState sym DMX.X86_64) 
+ 
+  ptrRepr = let ?ptrWidth=WI.knownRepr in LCLM.PtrRepr
+
+  genExtImpl :: forall sym binfmt m. (DMB.BinaryLoader
+                      DMA.X86_64 binfmt, Monad m, MonadIO m) => SC.Sym sym
+    -> SM.InitialMemory sym DMSMO.LLVMMemory DMA.X86_64
+    -> DMSMO.MacawArchEvalFn
+      (SE.AmbientSimulatorState sym DMX.X86_64) sym (SM.MemType DMSMO.LLVMMemory DMA.X86_64) DMA.X86_64
+    -> LCF.HandleAllocator
+    -> DMS.GenArchVals DMS.LLVMMemory DMX.X86_64
+    -> DMA.ArchitectureInfo DMX.X86_64
+    -> SLB.BinaryConfig DMX.X86_64 binfmt
+    -> SM.FunctionABI DMX.X86_64 sym (SE.AmbientSimulatorState sym DMX.X86_64) DMS.LLVMMemory
+    -> SM.SyscallABI DMX.X86_64 sym (SE.AmbientSimulatorState sym DMX.X86_64)
+    -> m (LCSE.ExtensionImpl (SE.AmbientSimulatorState sym DMX.X86_64) sym (DMSMO.MacawExt DMA.X86_64))
+  genExtImpl (SC.Sym _ bak) initialMem f halloc archVals archInfo binconf functionABI syscallABI = do 
+    let ?memOpts = LCLM.defaultMemOptions
+    (re, _) <- liftIO $ SM.buildRecordLLVMAnnotation @sym
+    let ?recordLLVMAnnotation = re
+    return $ SE.ambientExtensions @sym @DMX.X86_64 bak f initialMem (SMC.symExLookupFunction SL.emptyLogger bak initialMem archVals binconf functionABI halloc archInfo Nothing)
+     (SMC.symExLookupSyscall bak syscallABI halloc) mempty
+
+  bvToPtr :: LCT.TypeRepr tp-> LCT.TypeRepr (SM.ToPtrTy tp DMS.LLVMMemory DMX.X86_64)
+  bvToPtr (LCT.BVRepr n) = LCLM.LLVMPointerRepr n
+  bvToPtr ty = case ty of 
+    LCT.AnyRepr -> LCT.AnyRepr
+    LCT.UnitRepr -> LCT.UnitRepr
+    LCT.BoolRepr -> LCT.BoolRepr
+    LCT.IntegerRepr -> LCT.IntegerRepr
+    LCT.NatRepr -> LCT.NatRepr
+    LCT.RealValRepr -> LCT.RealValRepr
+    LCT.ComplexRealRepr -> LCT.ComplexRealRepr
+    LCT.CharRepr -> LCT.CharRepr
+    LCT.FloatRepr r -> LCT.FloatRepr r
+    LCT.IEEEFloatRepr r -> LCT.IEEEFloatRepr r
+    LCT.MaybeRepr r -> LCT.MaybeRepr r
+    LCT.VectorRepr r -> LCT.VectorRepr r
+    LCT.SequenceRepr r -> LCT.SequenceRepr r
+    LCT.StringRepr r -> LCT.StringRepr r
+    LCT.StructRepr r -> LCT.StructRepr r
+    LCT.VariantRepr r -> LCT.VariantRepr r
+    LCT.IntrinsicRepr r1 r2 -> LCT.IntrinsicRepr r1 r2
+    LCT.FunctionHandleRepr r1 r2 -> LCT.FunctionHandleRepr r1 r2
+    LCT.RecursiveRepr r1 r2 -> LCT.RecursiveRepr r1 r2
+    LCT.WordMapRepr r1 r2 -> LCT.WordMapRepr r1 r2
+    LCT.SymbolicArrayRepr r1 r2 -> LCT.SymbolicArrayRepr r1 r2
+    LCT.StringMapRepr r -> LCT.StringMapRepr r
+    LCT.SymbolicStructRepr r -> LCT.SymbolicStructRepr r
+    LCT.ReferenceRepr r -> LCT.ReferenceRepr r
+
+  genStackPtr baseptr offset (SC.Sym sym _) = liftIO $ LCLM.ptrAdd sym WI.knownRepr baseptr offset
+  insertStackPtr archVals sp initialRegsEntry= DMS.updateReg archVals initialRegsEntry DMC.sp_reg sp
+
+
+  memPtrSize :: PN.NatRepr (DMC.ArchAddrWidth DMX.X86_64)
+  memPtrSize = WI.knownRepr
+  initMem (SC.Sym sym bak) archInfo stackSize binConf halloc = do 
+
+    let mems = fmap (DMB.memoryImage . SLB.lbpBinary) (SLB.bcBinaries binConf)
+    let endian = DMSM.toCrucibleEndian (DMA.archEndianness archInfo)
+    stackSizeBV <- liftIO $ WI.bvLit sym WI.knownRepr (BVS.mkBV WI.knownRepr stackSize)
+    let ?ptrWidth = SM.memPtrSize @DMS.LLVMMemory @DMX.X86_64
+    (recordFn, _) <- liftIO SM.buildRecordLLVMAnnotation
+    let ?recordLLVMAnnotation = recordFn
+    let ?memOpts = LCLM.defaultMemOptions
+
+    let supportedRelocs = SLB.bcSupportedRelocations binConf
+    let globs = SLB.bcDynamicGlobalVarAddrs binConf
+    (mem, memPtrTbl) <- AEM.newMemPtrTable (SMC.globalMemoryHooks mems globs supportedRelocs) bak endian mems
+    (stackBasePtr, mem1) <- liftIO $ LCLM.doMalloc bak LCLM.StackAlloc LCLM.Mutable "stack_alloc" mem stackSizeBV LCLD.noAlignment
+    fsvar <- liftIO $ freshFSBaseGlobalVar halloc
+    gsvar <- liftIO $ freshGSBaseGlobalVar halloc
+    stackArrayStorage <- liftIO $ WI.freshConstant sym (WSym.safeSymbol "stack_array") WI.knownRepr
+    mem2 <- liftIO $ LCLM.doArrayStore bak mem1 stackBasePtr LCLD.noAlignment stackArrayStorage stackSizeBV
+    (mem3, globals0) <- liftIO $ x86_64LinuxInitGlobals fsvar gsvar (SC.Sym sym bak) mem2
+    memVar <- liftIO $ LCLM.mkMemVar (DT.pack "ambient-verifier::memory") halloc
+    let globals1 = LCSG.insertGlobal memVar mem3 globals0
+
+    let globalMap = AEM.mapRegionPointers memPtrTbl
+    return SM.InitialMemory{
+      SM.imMemVar=memVar,
+      SM.imGlobals=globals1,
+      SM.imStackBasePtr=stackBasePtr,
+      SM.imGlobalMap=globalMap,
+      SM.imMemTable=memPtrTbl
+    }
 
 -- | Memory segment size in bytes
 segmentSize :: Integer
@@ -109,15 +231,15 @@ freshGSBaseGlobalVar hdlAlloc =
 -- and returns an 'InitArchSpecificGlobals' that initializes those globals
 -- and inserts them into the global variable state.
 x86_64LinuxInitGlobals
-  :: ( ?memOpts :: LCLM.MemOptions
+  :: ( ?memOpts :: LCLM.MemOptions, 
+       ?recordLLVMAnnotation::Lang.Crucible.LLVM.MemModel.CallStack.CallStack -> LCLMP.BoolAnn sym -> LCLE.BadBehavior sym -> IO ()
      )
   => LCCC.GlobalVar (LCLM.LLVMPointerType (DMC.ArchAddrWidth DMX.X86_64))
   -- ^ Global variable for FSBASE pointer
   -> LCCC.GlobalVar (LCLM.LLVMPointerType (DMC.ArchAddrWidth DMX.X86_64))
   -- ^ Global variable for GSBASE pointer
-  -> AM.InitArchSpecificGlobals DMX.X86_64
-x86_64LinuxInitGlobals fsbaseGlob gsbaseGlob =
-  AM.InitArchSpecificGlobals $ \bak mem0 -> do
+  -> (SC.Sym sym -> LCLM.MemImpl sym-> IO (LCLM.MemImpl sym,LCSG.SymGlobalState sym ))
+x86_64LinuxInitGlobals fsbaseGlob gsbaseGlob = \(SC.Sym _ bak) mem0 -> do
     (fsbasePtr, mem1) <- initSegmentMemory bak mem0 "fs_array"
     (gsbasePtr, mem2) <- initSegmentMemory bak mem1 "gs_array"
     let globals0 = LCSG.insertGlobal fsbaseGlob fsbasePtr LCSG.emptyGlobals

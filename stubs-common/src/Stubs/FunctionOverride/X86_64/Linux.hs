@@ -52,6 +52,11 @@ import qualified Stubs.FunctionOverride.Extension as AFE
 import qualified Stubs.FunctionOverride.StackArguments as AFS
 import qualified Stubs.FunctionOverride.X86_64.Linux.Specialized as AFXLS
 import qualified Stubs.Verifier.Concretize as AVC
+import qualified Stubs.Memory.X86_64.Linux ()
+import qualified Lang.Crucible.LLVM.MemModel.CallStack
+import qualified Lang.Crucible.LLVM.MemModel.Partial as LCLMP
+import qualified Lang.Crucible.LLVM.Errors as LCLE
+import qualified Stubs.Memory as SM
 
 -- | Extract integer arguments from the corresponding six x86_64 registers.
 -- Any additional arguments are read from the stack at @8(%rsp)@, @16(%rsp)@,
@@ -205,22 +210,23 @@ x86_64LinuxReturnAddr bak archVals regs mem = do
     regsEntry :: LCS.RegEntry sym (LCT.StructType (DMS.MacawCrucibleRegTypes DMX.X86_64))
     regsEntry = LCS.RegEntry (LCT.StructRepr (DMS.crucArchRegTypes (DMS.archFunctions archVals))) regs
 
-x86_64LinuxFunctionABI :: ( LCLM.HasLLVMAnn sym
-                          , ?memOpts :: LCLM.MemOptions )
-                       => AF.BuildFunctionABI DMX.X86_64 sym (AE.AmbientSimulatorState sym DMX.X86_64)
-x86_64LinuxFunctionABI = AF.BuildFunctionABI $ \fovCtx fs initialMem archVals unsupportedRelocs addrOvs namedOvs otherGlobs ->
+x86_64LinuxFunctionABI :: (?recordLLVMAnnotation::Lang.Crucible.LLVM.MemModel.CallStack.CallStack
+                                           -> LCLMP.BoolAnn sym
+                                           -> LCLE.BadBehavior sym
+                                           -> IO ()) => SM.BuildFunctionABI DMX.X86_64 sym (AE.AmbientSimulatorState sym DMX.X86_64) DMS.LLVMMemory
+x86_64LinuxFunctionABI = SM.BuildFunctionABI $ \fovCtx initialMem archVals unsupportedRelocs addrOvs namedOvs otherGlobs ->
   let ?ptrWidth = PN.knownNat @64 in
-  let (nameMap, globMap) = AFC.mkFunctionNameGlobMaps
-                             fovCtx fs initialMem unsupportedRelocs namedOvs
+  let ?memOpts = LCLM.defaultMemOptions in
+  let (nameMap, globMap) = AFC.mkFunctionNameGlobMaps namedOvs
                              otherGlobs AFXLS.x86_64LinuxSpecializedOverrides
-  in AF.FunctionABI { AF.functionIntegerArguments = \bak ->
+  in SM.FunctionABI { SM.functionIntegerArguments = \bak ->
                         x86_64LinuxIntegerArguments bak archVals
-                    , AF.functionIntegerArgumentRegisters = DMX.x86ArgumentRegs
-                    , AF.functionIntegerReturnRegisters = x86_64LinuxIntegerReturnRegisters
-                    , AF.functionReturnAddr = x86_64LinuxReturnAddr
-                    , AF.functionNameMapping = nameMap
-                    , AF.functionGlobalMapping = globMap
-                    , AF.functionAddrMapping = addrOvs
+                    , SM.functionIntegerArgumentRegisters = DMX.x86ArgumentRegs
+                    , SM.functionIntegerReturnRegisters = x86_64LinuxIntegerReturnRegisters
+                    , SM.functionReturnAddr = x86_64LinuxReturnAddr
+                    , SM.functionNameMapping = nameMap
+                    , SM.functionGlobalMapping = globMap
+                    , SM.functionAddrMapping = addrOvs
                     }
 
 -- | A lookup function from 'AFE.TypeAlias' to types with the appropriate width

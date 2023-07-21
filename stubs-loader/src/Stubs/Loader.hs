@@ -46,7 +46,6 @@ import qualified PE.Parser as PE
 import qualified Stubs.ABI as AA
 import qualified Stubs.Exception as AE
 import qualified Stubs.Extensions as AExt
-import qualified Stubs.FunctionOverride as AF
 import qualified Stubs.FunctionOverride.Extension as AFE
 import qualified Stubs.FunctionOverride.X86_64.Linux as AFXL
 import qualified Stubs.FunctionOverride.AArch32.Linux as AFAL
@@ -57,21 +56,24 @@ import qualified Stubs.Loader.ELF.Symbols.AArch32 as ALESA
 import qualified Stubs.Loader.ELF.PLTStubDetector as ALEP
 import qualified Stubs.Loader.Relocations as ALR
 import qualified Stubs.Loader.Versioning as ALV
-import qualified Stubs.Memory as AM
 import qualified Stubs.Memory.AArch32.Linux as AMAL
 import qualified Stubs.Memory.X86_64.Linux as AMXL
-import qualified Stubs.Syscall as AS
 import qualified Stubs.Syscall.AArch32.Linux as ASAL
 import qualified Stubs.Syscall.X86_64.Linux as ASXL
 import Data.Macaw.CFG (ArchReg, ArchAddrWidth)
 import Data.Macaw.Types (BVType)
 import Data.Macaw.X86.X86Reg as DMX
 import qualified Stubs.Preamble as SPR
-import Stubs.Preamble.X86 ()
-import Stubs.Preamble.AArch32 ()
+import Stubs.Arch.X86 ()
+import Stubs.Arch.AArch32 ()
 import qualified Data.Macaw.ARM.ARMReg as ARMReg
 import qualified Language.ASL.Globals as ASL
 import qualified Stubs.Translate.Core as STC
+import qualified Stubs.Memory as SM
+import qualified Stubs.Translate.Intrinsic as STI
+import qualified Stubs.Extensions as SE
+import qualified Stubs.Common as SC
+import qualified What4.Interface as WI
 
 data FunABIExt arch = FunABIExt {
   abiExtArchReg :: ArchReg arch (BVType (ArchAddrWidth arch))
@@ -94,6 +96,7 @@ withBinary
    . ( CMC.MonadThrow m
      , MonadIO m
      , LCLM.HasLLVMAnn sym
+     , WI.IsExprBuilder sym
      )
   => FilePath
   -- ^ Path to binary
@@ -102,28 +105,34 @@ withBinary
   -> Maybe FilePath
   -- ^ Path to directory containing @.so@ files
   -> LCF.HandleAllocator
-  -> sym
+  -> SC.Sym sym
   -> ( forall arch binFmt mem p w
       . ( DMB.BinaryLoader arch binFmt
         , 16 <= DMC.ArchAddrWidth arch
         , DMS.SymArchConstraints arch
         , SPR.Preamble arch
         , STC.StubsArch arch
+        , STI.OverrideArch arch
         , mem ~ DMS.LLVMMemory
         , p ~ AExt.AmbientSimulatorState sym arch
         , w ~ DMC.RegAddrWidth (DMC.ArchReg arch)
+        , 1 <= w 
+        , SM.IsStubsMemoryModel mem arch
+        , SM.PtrType DMS.LLVMMemory arch ~ LCLM.LLVMPointerType (DMC.ArchAddrWidth arch)
+        , SM.MemType DMS.LLVMMemory arch ~ LCLM.Mem 
+        , SM.VerifierState sym DMS.LLVMMemory arch ~ SE.AmbientSimulatorState sym arch
         )
      => DMA.ArchitectureInfo arch
      -> AA.ABI
      -> DMS.GenArchVals mem arch
-     -> AS.BuildSyscallABI arch sym p
-     -> AF.BuildFunctionABI arch sym p
+     -> SM.BuildSyscallABI arch sym p mem
+     -> SM.BuildFunctionABI arch sym p mem
      -> LCSC.ParserHooks (DMS.MacawExt arch)
-     -> AM.InitArchSpecificGlobals arch
      -> Int
      -- ^ Total number of bytes loaded (includes shared libraries).
      -> ALB.BinaryConfig arch binFmt
      -> Maybe (FunABIExt arch) 
+     -> [STI.BuildOverrideModule arch sym]
      -- ^ Information about the loaded binaries
      -> m a)
   -> m a
@@ -166,10 +175,10 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
                 AFXL.x86_64LinuxFunctionABI
                 (AFE.machineCodeParserHooks (Proxy @DMX.X86_64)
                                             AFXL.x86_64LinuxTypes)
-                (AMXL.x86_64LinuxInitGlobals fsbaseGlob gsbaseGlob)
                 (elfBinarySizeTotal bins)
                 binConf
                 (Just (FunABIExt DMX.RAX))
+                STI.buildOverrides
             Nothing -> CMC.throwM (AE.UnsupportedELFArchitecture name DE.EM_X86_64 DE.ELFCLASS64)
         (DE.EM_ARM, DE.ELFCLASS32) -> do
           tlsGlob <- liftIO $ AMAL.freshTLSGlobalVar hdlAlloc
@@ -193,10 +202,10 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
                 (AFAL.aarch32LinuxFunctionABI tlsGlob)
                 (AFE.machineCodeParserHooks (Proxy @Macaw.AArch32.ARM)
                                             AFAL.aarch32LinuxTypes)
-                (AMAL.aarch32LinuxInitGlobals tlsGlob)
                 (elfBinarySizeTotal bins)
                 binConf
                 (Just (FunABIExt (ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R0"))))
+                STI.buildOverrides
             Nothing -> CMC.throwM (AE.UnsupportedELFArchitecture name DE.EM_ARM DE.ELFCLASS32)
         (machine, klass) -> CMC.throwM (AE.UnsupportedELFArchitecture name machine klass)
     Left _ -> throwDecodeFailure name bytes

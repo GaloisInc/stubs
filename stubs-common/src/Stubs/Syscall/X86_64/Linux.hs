@@ -28,7 +28,7 @@ import qualified Stubs.Override as AO
 import qualified Stubs.Panic as AP
 import qualified Stubs.Syscall as AS
 import qualified Stubs.Syscall.Names.X86_64.Linux as SN
-import qualified Stubs.Syscall.Overrides as ASO
+import qualified Stubs.Memory as SM
 
 type SyscallRegsType = Ctx.EmptyCtx Ctx.::> LCLM.LLVMPointerType 64
                                     Ctx.::> LCLM.LLVMPointerType 64
@@ -150,18 +150,14 @@ x86_64LinuxSyscallReturnRegisters ovTyp ovSim atps argRegs rtps
              [ "Unexpected shape of return registers: " ++ show rtps ]
 
 -- | An ABI for Linux syscalls on x86_64 processors
-x86_64LinuxSyscallABI :: AS.BuildSyscallABI DMX.X86_64 sym (AE.AmbientSimulatorState sym DMX.X86_64)
-x86_64LinuxSyscallABI = AS.BuildSyscallABI $ \fs initialMem unsupportedRelocs ->
+x86_64LinuxSyscallABI :: SM.BuildSyscallABI DMX.X86_64 sym (AE.AmbientSimulatorState sym DMX.X86_64) mem
+x86_64LinuxSyscallABI = SM.BuildSyscallABI $ \initialMem unsupportedRelocs ->
   let ?ptrWidth = PN.knownNat @64 in
-  AS.SyscallABI { AS.syscallArgumentRegisters = x86_64LinuxSyscallArgumentRegisters
-                , AS.syscallNumberRegister = x86_64LinuxSyscallNumberRegister
-                , AS.syscallReturnRegisters = x86_64LinuxSyscallReturnRegisters
-                , AS.syscallOverrideMapping = Map.fromList
-                    [ (WF.functionName (AS.syscallName s), ss)
-                    | ss@(AS.SomeSyscall s) <-
-                        ASO.allOverrides fs initialMem unsupportedRelocs
-                    ]
-                , AS.syscallCodeMapping = SN.syscallMap
+  SM.SyscallABI { SM.syscallArgumentRegisters = x86_64LinuxSyscallArgumentRegisters
+                , SM.syscallNumberRegister = x86_64LinuxSyscallNumberRegister
+                , SM.syscallReturnRegisters = x86_64LinuxSyscallReturnRegisters
+                , SM.syscallOverrideMapping = mempty
+                , SM.syscallCodeMapping = SN.syscallMap
                 }
 
 -- | Extract the value of a given register from the x86_64 argument register

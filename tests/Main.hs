@@ -37,7 +37,7 @@ import qualified Lang.Crucible.CFG.Reg as LCCR
 import qualified Lang.Crucible.CFG.SSAConversion as LCSSA
 import qualified What4.Interface as WI
 import qualified Lang.Crucible.Simulator as LCSE
-import Stubs.Preamble.X86 () --for instance
+import Stubs.Arch.X86 () --for instance
 import Data.Parameterized.SymbolRepr (someSymbol)
 import qualified Pipeline as STP
 import qualified Stubs.Translate.Intrinsic as STI
@@ -503,7 +503,7 @@ genCoreTestIO iprog path tag exp = testCase tag $ do
     sprog <- iprog
     i <- STP.corePipeline path sprog
     case i of
-        Just n -> assertEqual "Unexpected value returned" n exp
+        Just n -> assertEqual "Unexpected value returned" exp n
         Nothing -> assertFailure "Failed to get return value"
 
 mallocOvTest :: TestTree 
@@ -525,7 +525,7 @@ mallocOvTest = testCase "Malloc Intrinsic Test" $ do
         ],
         SA.stubsInitFns = []
     }
-    i <- STP.corePipelineOv "./tests/test-data/a.out" [sprog] [\_ _ -> mallocOv ptr]
+    i <- STP.corePipeline "./tests/test-data/a.out" [sprog] --[STI.BuildOverrideModule (\_ -> mallocOv ptr)]
     case i of
         Just n -> assertEqual "Unexpected value returned" n 20
         Nothing -> assertFailure "Failed to get return value"
@@ -586,7 +586,7 @@ corePipelineGlobalTest = genCoreTestIO (do
                         SA.SomeStubsFunction SA.StubsFunction {
                             SA.stubFnSig=SA.StubsSignature {
                                 SA.sigFnName="f",
-                                SA.sigFnArgTys=Ctx.empty,
+                                SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
                                 SA.sigFnRetTy=SA.StubsIntRepr
                             },
                             SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return (SA.AppExpr "get" Ctx.empty SA.StubsIntRepr )]
@@ -598,7 +598,73 @@ corePipelineGlobalTest = genCoreTestIO (do
             ]
     ) "./tests/test-data/mult.out" "Core Pipeline Global Data" 2
 
--- Test initializing a global variable as an init hook, where main program uses it without explicitly calling init
+corePipelineGlobalITest :: TestTree
+corePipelineGlobalITest = genCoreTestIO (do
+        Some counter <- return $ someSymbol "Counter"
+        return [
+            SA.StubsProgram{
+                SA.stubsEntryPoints=["f","g","j"],
+                SA.stubsModules=[
+                    SA.mkStubsModule "counter" [
+                    SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="init",
+                    SA.sigFnArgTys=Ctx.empty,
+                    SA.sigFnRetTy=SA.StubsUnitRepr
+                    },
+                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 0),SA.Return $  SA.LitExpr $ SA.UnitLit]},
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="inc",
+                    SA.sigFnArgTys=Ctx.empty,
+                    SA.sigFnRetTy=SA.StubsUnitRepr
+                    },
+                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr),SA.Return $  SA.LitExpr SA.UnitLit]},
+                    
+            SA.SomeStubsFunction
+                SA.StubsFunction {
+                    SA.stubFnSig=SA.StubsSignature{
+                    SA.sigFnName="get",
+                    SA.sigFnArgTys=Ctx.empty,
+                    SA.sigFnRetTy=SA.StubsIntRepr
+                    },
+                    SA.stubFnBody=[SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr]}
+
+                ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl "i" (SA.StubsAliasRepr counter))],
+                SA.mkStubsModule "core" [
+                        SA.SomeStubsFunction SA.StubsFunction {
+                            SA.stubFnSig=SA.StubsSignature {
+                                SA.sigFnName="j",
+                                SA.sigFnArgTys=Ctx.empty,
+                                SA.sigFnRetTy=SA.StubsUnitRepr
+                            },
+                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "init" Ctx.empty SA.StubsUnitRepr ), SA.Return $ SA.LitExpr SA.UnitLit]
+                        },
+                        SA.SomeStubsFunction SA.StubsFunction {
+                            SA.stubFnSig=SA.StubsSignature {
+                                SA.sigFnName="g",
+                                SA.sigFnArgTys=Ctx.empty,
+                                SA.sigFnRetTy=SA.StubsIntRepr
+                            },
+                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return $ SA.LitExpr $ SA.IntLit 9]
+                        },
+                        SA.SomeStubsFunction SA.StubsFunction {
+                            SA.stubFnSig=SA.StubsSignature {
+                                SA.sigFnName="f",
+                                SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+                                SA.sigFnRetTy=SA.StubsIntRepr
+                            },
+                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return (SA.AppExpr "get" Ctx.empty SA.StubsIntRepr )]
+                        }
+                ] [] []
+                ],
+                SA.stubsInitFns = []
+            }
+            ]
+    ) "./tests/test-data/mult_i.out" "Core Pipeline Global Data (with intermediate variable return)" 2
+
 initHookTest :: TestTree
 initHookTest = genTestCaseIO (do
         Some counter <- return $ someSymbol "Counter"
@@ -664,6 +730,37 @@ initHookTest = genTestCaseIO (do
                 AbortedResult _ (AbortedExec r _) -> print ("Aborted Execution:" ++ show r) >> return False
                 _ -> print "Failed to finish execution" >> return False
 
+corePipelineMultipleOverrideTest :: TestTree 
+corePipelineMultipleOverrideTest = genCoreTestIO (do 
+    return [SA.StubsProgram{
+        SA.stubsEntryPoints=["f","g"],
+        SA.stubsModules=[
+            SA.mkStubsModule "core" [
+                SA.SomeStubsFunction 
+                    SA.StubsFunction {
+                        SA.stubFnSig=SA.StubsSignature {
+                                SA.sigFnName="f",
+                                SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+                                SA.sigFnRetTy=SA.StubsIntRepr
+                            },
+                        SA.stubFnBody=[SA.Return (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr) )]
+                    },
+                SA.SomeStubsFunction 
+                    SA.StubsFunction {
+                        SA.stubFnSig=SA.StubsSignature {
+                                SA.sigFnName="g",
+                                SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
+                                SA.sigFnRetTy=SA.StubsIntRepr
+                            },
+                        SA.stubFnBody=[SA.Return (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr) )]
+                    }
+            ] [] []
+        ],
+        SA.stubsInitFns=[]
+    }]
+    ) "./tests/test-data/two.out" "Core Pipeline with multiple overrides (no sharing)" 2
+
+
 main :: IO ()
 main = defaultMain $ do
-    testGroup "" [symExecTest, linkerTest,factorialTest,moduleTest, opaqueTest, globalVarTest, opaqueGlobalTest, corePipelinePreambleTest, corePipelineModuleTest,corePipelineOpaqueTest,corePipelineGlobalTest, mallocOvTest,initHookTest]
+    testGroup "" [symExecTest, linkerTest,factorialTest,moduleTest, opaqueTest, globalVarTest, opaqueGlobalTest, corePipelinePreambleTest, corePipelineModuleTest,corePipelineOpaqueTest,corePipelineGlobalTest, mallocOvTest,initHookTest,corePipelineGlobalITest,corePipelineMultipleOverrideTest]

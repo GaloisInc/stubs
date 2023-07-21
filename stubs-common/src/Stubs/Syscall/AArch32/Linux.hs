@@ -35,7 +35,7 @@ import qualified Stubs.Override as AO
 import qualified Stubs.Panic as AP
 import qualified Stubs.Syscall as AS
 import qualified Stubs.Syscall.Names.AArch32.Linux as SN
-import qualified Stubs.Syscall.Overrides as ASO
+import qualified Stubs.Memory as SM
 
 type SyscallRegsType = Ctx.EmptyCtx Ctx.::> LCLM.LLVMPointerType 32
                                     Ctx.::> LCLM.LLVMPointerType 32
@@ -176,16 +176,12 @@ aarch32LinuxSyscallReturnRegisters ovTy ovSim argsRepr args retRepr
     r0 = ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R0")
     r1 = ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R1")
 
-aarch32LinuxSyscallABI :: AS.BuildSyscallABI DMA.ARM sym (AE.AmbientSimulatorState sym DMA.ARM)
-aarch32LinuxSyscallABI = AS.BuildSyscallABI $ \fs initialMem unsupportedRelocs ->
+aarch32LinuxSyscallABI :: SM.BuildSyscallABI DMA.ARM sym (AE.AmbientSimulatorState sym DMA.ARM) mem
+aarch32LinuxSyscallABI = SM.BuildSyscallABI $ \ initialMem unsupportedRelocs ->
   let ?ptrWidth = PN.knownNat @32 in
-  AS.SyscallABI { AS.syscallArgumentRegisters = aarch32LinuxSyscallArgumentRegisters
-                , AS.syscallNumberRegister = aarch32LinuxSyscallNumberRegister
-                , AS.syscallReturnRegisters = aarch32LinuxSyscallReturnRegisters
-                , AS.syscallOverrideMapping = Map.fromList
-                    [ (WF.functionName (AS.syscallName s), ss)
-                    | ss@(AS.SomeSyscall s) <-
-                        ASO.allOverrides fs initialMem unsupportedRelocs
-                    ]
-                , AS.syscallCodeMapping = SN.syscallMap
+  SM.SyscallABI { SM.syscallArgumentRegisters = aarch32LinuxSyscallArgumentRegisters
+                , SM.syscallNumberRegister = aarch32LinuxSyscallNumberRegister
+                , SM.syscallReturnRegisters = aarch32LinuxSyscallReturnRegisters
+                , SM.syscallOverrideMapping = mempty
+                , SM.syscallCodeMapping = SN.syscallMap
                 }

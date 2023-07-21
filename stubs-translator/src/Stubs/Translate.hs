@@ -73,6 +73,7 @@ import qualified Data.Graph as Graph
 import qualified Data.Set as Set
 import qualified Stubs.Opaque as SO
 import qualified Stubs.Translate.Intrinsic as STI
+import qualified Stubs.Common as SC
 
 -- | A translated Program. Several fields are taken from crucible-syntax's ParsedProgram, for easy conversion
 data CrucibleProgram arch = CrucibleProgram {
@@ -105,7 +106,7 @@ data PreambleOverride arch args ret = PreambleOverride (forall sym bak solver sc
     bak -> LCS.Override p sym (DMS.MacawExt arch) (STC.ArchTypeMatchCtx arch args) (STC.ArchTypeMatch arch ret)) (StubHandle arch args ret)
 
 data SomeWrappedOverride arch = forall args ret. SomeWrappedOverride(WrappedOverride arch args ret) 
-data WrappedOverride arch args ret = WrappedOverride (forall sym p . STC.Sym sym -> LCS.Override p sym (DMS.MacawExt arch) (STC.ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret)) (StubHandle arch args ret)
+data WrappedOverride arch args ret = WrappedOverride (forall sym p . SC.Sym sym -> LCS.Override p sym (DMS.MacawExt arch) (STC.ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret)) (StubHandle arch args ret)
 
 -- Unexported Internal Function. A mix of returing Atoms vs Expr causes this hierarchy to be necessary
 translateExpr' :: forall arch s ret b sret args . (b ~ ArchTypeMatch arch sret, LCCE.IsSyntaxExtension(DMS.MacawExt arch), STC.StubsArch arch) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Atom s b)
@@ -277,7 +278,7 @@ translateFn ng _ handles hdl env gmap SA.StubsFunction{SA.stubFnSig=SA.StubsSign
     return $ LCSC.ACFG args cret cfg
 
 -- | Translate all declarations from a StubsLibrary
-translateDecls :: forall arch s bak. (STC.StubsArch arch, SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) =>
+translateDecls :: forall arch s . (STC.StubsArch arch, SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) =>
         PN.NonceGenerator IO s ->
         LCF.HandleAllocator ->
         [(String, SomePreambleOverride arch)] -> -- Override mappings : needed so all modules use the same preamble handles
@@ -395,7 +396,7 @@ translateProgram ng halloc ovs prog = do
         ) dependencyList
 
     let (g',vl,_) = Graph.graphFromEdges v
-    let orderedLibs = map (\v -> case vl v of
+    let orderedLibs = map (\v' -> case vl v' of
             (l,_,_)-> l
             ) $ Graph.topSort $ Graph.transposeG g'
     --Global variable initialization

@@ -13,13 +13,11 @@
 {-|
 Description: Preamble Instance for AArch32
 -}
-module Stubs.Preamble.AArch32() where
+module Stubs.Arch.AArch32() where
 import qualified Stubs.AST as SA
 import qualified What4.Interface as WI
 import qualified Stubs.Preamble as SPR
 import qualified Data.Parameterized.Context as Ctx
-import Data.Macaw.X86.ArchTypes ()
-import Data.Macaw.X86.Symbolic ()
 import qualified SemMC.Architecture.AArch32 as SAA
 import Data.Macaw.AArch32.Symbolic ()
 import Stubs.Preamble.Common
@@ -30,6 +28,7 @@ import qualified Lang.Crucible.CFG.Expr as LCCE
 import qualified Lang.Crucible.CFG.Reg as LCCR
 import GHC.Natural (naturalToInteger)
 import qualified Data.Parameterized.Map as MapF
+import qualified Stubs.Translate.Intrinsic as STI
 
 instance STC.StubsArch SAA.AArch32 where 
     type instance ArchTypeMatch SAA.AArch32 'SA.StubsInt = LCT.BVType (STC.ArchIntSize SAA.AArch32)
@@ -103,3 +102,7 @@ instance SPR.Preamble SAA.AArch32 where
     preambleMap SA.StubsSignature{SA.sigFnName="uint_s",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUShortRepr), SA.sigFnRetTy=SA.StubsUIntRepr} = bvExtendOverride @SAA.AArch32 "uint_s" False 
     preambleMap SA.StubsSignature{SA.sigFnName="ulong_i",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUIntRepr), SA.sigFnRetTy=SA.StubsULongRepr} = bvExtendOverride @SAA.AArch32 "ulong_i" False
     preambleMap sig = error ("Missing implementation for preamble function:"++SA.sigFnName sig)
+
+instance STI.OverrideArch SAA.AArch32 where 
+  buildOverrides = []
+    

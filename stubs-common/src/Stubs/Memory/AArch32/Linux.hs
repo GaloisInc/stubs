@@ -1,6 +1,12 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE InstanceSigs #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Stubs.Memory.AArch32.Linux (
     aarch32LinuxInitGlobals
   , aarch32LinuxStmtExtensionOverride
@@ -30,7 +36,91 @@ import qualified What4.Interface as WI
 import qualified What4.Symbol as WSym
 
 import qualified Stubs.Memory as AM
+import qualified Stubs.Common as SC
+import qualified Lang.Crucible.LLVM.MemModel.Partial as LCLMP
+import qualified Lang.Crucible.LLVM.Errors as LCLE
+import qualified Lang.Crucible.LLVM.MemModel.CallStack
+import qualified Lang.Crucible.Types as LCT
+import qualified Data.Macaw.Symbolic.Memory as DMSM
+import qualified Data.Macaw.Architecture.Info as DMA
+import qualified Data.Parameterized.NatRepr as PN
+import qualified Stubs.Memory as SM
+import qualified SemMC.Architecture.AArch32 as SAA
+import Control.Monad.IO.Class (liftIO)
+import Data.Macaw.AArch32.Symbolic ()
+import qualified Stubs.Extensions as SE
+import qualified Data.Macaw.Symbolic.MemOps as DMSMO
+import qualified Stubs.Extensions.Memory as AEM
+import qualified Data.Macaw.BinaryLoader as DMB
+import qualified Stubs.Loader.BinaryConfig as SLB
+import qualified Stubs.Memory.Common as SMC
 
+instance SM.IsStubsMemoryModel DMS.LLVMMemory SAA.AArch32 where 
+  type instance PtrType DMS.LLVMMemory SAA.AArch32 =  LCLM.LLVMPointerType (DMC.ArchAddrWidth SAA.AArch32)
+  type instance MemType DMS.LLVMMemory SAA.AArch32 = LCLM.Mem
+  type instance BVToPtrTy w DMS.LLVMMemory SAA.AArch32 = LCLM.LLVMPointerType w
+  type instance MemTable sym DMS.LLVMMemory SAA.AArch32 = AEM.MemPtrTable sym SAA.AArch32
+  type instance MemMap sym SAA.AArch32 = DMSMO.GlobalMap sym LCLM.Mem (DMC.ArchAddrWidth SAA.AArch32)
+
+  type instance VerifierState sym DMS.LLVMMemory SAA.AArch32 = (SE.AmbientSimulatorState sym SAA.AArch32) 
+
+  bvToPtr :: LCT.TypeRepr tp-> LCT.TypeRepr (SM.ToPtrTy tp DMS.LLVMMemory SAA.AArch32)
+  bvToPtr (LCT.BVRepr n) = LCLM.LLVMPointerRepr n
+  bvToPtr ty = case ty of 
+    LCT.AnyRepr -> LCT.AnyRepr
+    LCT.UnitRepr -> LCT.UnitRepr
+    LCT.BoolRepr -> LCT.BoolRepr
+    LCT.IntegerRepr -> LCT.IntegerRepr
+    LCT.NatRepr -> LCT.NatRepr
+    LCT.RealValRepr -> LCT.RealValRepr
+    LCT.ComplexRealRepr -> LCT.ComplexRealRepr
+    LCT.CharRepr -> LCT.CharRepr
+    LCT.FloatRepr r -> LCT.FloatRepr r
+    LCT.IEEEFloatRepr r -> LCT.IEEEFloatRepr r
+    LCT.MaybeRepr r -> LCT.MaybeRepr r
+    LCT.VectorRepr r -> LCT.VectorRepr r
+    LCT.SequenceRepr r -> LCT.SequenceRepr r
+    LCT.StringRepr r -> LCT.StringRepr r
+    LCT.StructRepr r -> LCT.StructRepr r
+    LCT.VariantRepr r -> LCT.VariantRepr r
+    LCT.IntrinsicRepr r1 r2 -> LCT.IntrinsicRepr r1 r2
+    LCT.FunctionHandleRepr r1 r2 -> LCT.FunctionHandleRepr r1 r2
+    LCT.RecursiveRepr r1 r2 -> LCT.RecursiveRepr r1 r2
+    LCT.WordMapRepr r1 r2 -> LCT.WordMapRepr r1 r2
+    LCT.SymbolicArrayRepr r1 r2 -> LCT.SymbolicArrayRepr r1 r2
+    LCT.StringMapRepr r -> LCT.StringMapRepr r
+    LCT.SymbolicStructRepr r -> LCT.SymbolicStructRepr r
+    LCT.ReferenceRepr r -> LCT.ReferenceRepr r
+
+  memPtrSize :: PN.NatRepr (DMC.ArchAddrWidth SAA.AArch32)
+  memPtrSize = WI.knownRepr
+
+  genStackPtr baseptr offset (SC.Sym sym _) = liftIO $ LCLM.ptrAdd sym WI.knownRepr baseptr offset
+
+  initMem (SC.Sym sym bak) archInfo stackSize binConf halloc = do 
+    let endian = DMSM.toCrucibleEndian (DMA.archEndianness archInfo)
+    mem <- liftIO $ LCLM.emptyMem endian
+    stackSizeBV <- liftIO $ WI.bvLit sym WI.knownRepr (BVS.mkBV WI.knownRepr stackSize)
+    let ?ptrWidth = SM.memPtrSize @DMS.LLVMMemory @SAA.AArch32
+    (recordFn, _) <- liftIO SM.buildRecordLLVMAnnotation
+    let ?recordLLVMAnnotation = recordFn
+    let ?memOpts = LCLM.defaultMemOptions
+    (stackBasePtr, mem1) <- liftIO $ LCLM.doMalloc bak LCLM.StackAlloc LCLM.Mutable "stack_alloc" mem stackSizeBV LCLD.noAlignment
+    tlsvar <- liftIO $ freshTLSGlobalVar halloc
+    (_, globals0) <- liftIO $ aarch32LinuxInitGlobals tlsvar (SC.Sym sym bak) mem1
+    memVar <- liftIO $ LCLM.mkMemVar (DT.pack "ambient-verifier::memory") halloc
+    let globals1 = LCSG.insertGlobal memVar mem1 globals0
+    let mems = fmap (DMB.memoryImage . SLB.lbpBinary) (SLB.bcBinaries binConf)
+    (_, memPtrTbl) <- AEM.newMemPtrTable (SMC.globalMemoryHooks mems mempty mempty) bak endian mems
+    let globalMap = AEM.mapRegionPointers memPtrTbl
+
+    return SM.InitialMemory{
+      SM.imMemVar=memVar,
+      SM.imGlobals=globals1,
+      SM.imStackBasePtr=stackBasePtr,
+      SM.imMemTable=memPtrTbl,
+      SM.imGlobalMap=globalMap
+    }
 -- | TLS pointer memory size in bytes
 tlsMemorySize :: Integer
 tlsMemorySize = 4 * 1024
@@ -78,13 +168,13 @@ freshTLSGlobalVar hdlAlloc =
 -- and returns an 'InitArchSpecificGlobals' that initializes the global
 -- and inserts it into the global variable state.
 aarch32LinuxInitGlobals ::
-     ( ?memOpts :: LCLM.MemOptions
+     ( ?memOpts :: LCLM.MemOptions,
+     ?recordLLVMAnnotation::Lang.Crucible.LLVM.MemModel.CallStack.CallStack -> LCLMP.BoolAnn sym -> LCLE.BadBehavior sym -> IO ()
      )
   => LCCC.GlobalVar (LCLM.LLVMPointerType (DMC.ArchAddrWidth DMA.ARM))
      -- ^ Global variable for TLS
-  -> AM.InitArchSpecificGlobals DMA.ARM
-aarch32LinuxInitGlobals tlsGlob =
-  AM.InitArchSpecificGlobals $ \bak mem0 -> do
+  -> (SC.Sym sym -> LCLM.MemImpl sym-> IO (LCLM.MemImpl sym,LCSG.SymGlobalState sym ))
+aarch32LinuxInitGlobals tlsGlob = \(SC.Sym _ bak) mem0 -> do
     (tlsPtr, mem1) <- initTLSMemory bak mem0
     return (mem1, LCSG.insertGlobal tlsGlob tlsPtr LCSG.emptyGlobals)
 

@@ -44,6 +44,7 @@ import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified What4.Expr as WE
 import qualified Lang.Crucible.Backend as LCB
 import qualified What4.Interface as WI
+import qualified Data.Data as Data
 
 -- | Type family to map a list of Stubs types to a corresponding list of Crucible types
 type family ArchTypeMatchCtx (arch :: *) (stubTy :: Ctx SA.StubsType) = (crucTy :: Ctx LCT.CrucibleType) where
@@ -52,6 +53,7 @@ type family ArchTypeMatchCtx (arch :: *) (stubTy :: Ctx SA.StubsType) = (crucTy 
 
 -- | Type class for defining a valid architecture for translation
 class (DMS.SymArchConstraints arch, 
+        Data.Typeable arch,
         ArchTypeMatch arch 'SA.StubsBool ~ LCT.BoolType, -- Bool must translate to bool, for loops and conditionals (enforced by crucible's Generator)
         ArchTypeMatch arch 'SA.StubsInt ~ LCT.BVType (ArchIntSize arch),
         ArchTypeMatch arch 'SA.StubsUInt ~ LCT.BVType (ArchIntSize arch),
@@ -111,9 +113,6 @@ withReturn :: (forall ret2 . ret ~ ArchTypeMatch arch ret2 =>  SA.StubsTypeRepr 
 withReturn f = do
     StubsState _ retrepr _ _ _ _ _ <- get
     f retrepr
-
-data Sym sym = forall scope st fs solver . (sym ~ WE.ExprBuilder scope st fs,WI.IsExprBuilder sym,WPO.OnlineSolver solver, LCB.IsSymBackend sym (LCBO.OnlineBackend solver scope st fs)) => Sym sym ( LCBO.OnlineBackend solver scope st fs)
-
 -- | A symbol (representing an opaque type), alongside a type repr that will be resolved during translation
 data WrappedStubsTypeAliasRepr (s :: P.Symbol) where
     WrappedStubsTypeAliasRepr :: P.SymbolRepr s -> SA.StubsTypeRepr (SA.ResolveAlias s) -> WrappedStubsTypeAliasRepr s 

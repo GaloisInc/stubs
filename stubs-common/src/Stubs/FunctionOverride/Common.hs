@@ -1,5 +1,6 @@
 {-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE RankNTypes #-}
 
 module Stubs.FunctionOverride.Common
   ( mkFunctionNameGlobMaps
@@ -18,30 +19,20 @@ import qualified What4.FunctionName as WF
 
 import qualified Stubs.Extensions as AE
 import qualified Stubs.FunctionOverride as AF
-import qualified Stubs.FunctionOverride.Overrides as AFO
 import qualified Stubs.Memory as AM
+import qualified Stubs.Memory as SM
 
 -- | Compute a pair of maps, where the first element contains a mapping from
 -- function names to overrides, and the second element contains a mapping from
 -- global names to global variables. This is ultimately used in service of
 -- building a 'AF.FunctionABI'.
 mkFunctionNameGlobMaps ::
-     ( LCLM.HasLLVMAnn sym
-     , LCLM.HasPtrWidth w
-     , DMC.MemWidth w
+    forall arch sym w p.
+     ( DMC.MemWidth w
      , w ~ DMC.ArchAddrWidth arch
      , p ~ AE.AmbientSimulatorState sym arch
-     , ?memOpts :: LCLM.MemOptions
      )
-  => AF.FunctionOverrideContext arch sym
-  -- ^ In what context are the function overrides are being run?
-  -> LCLS.LLVMFileSystem (DMC.ArchAddrWidth arch)
-  -- ^ File system to use in overrides
-  -> AM.InitialMemory sym (DMC.ArchAddrWidth arch)
-  -> Map.Map (DMC.MemWord (DMC.ArchAddrWidth arch)) String
-  -- ^ Mapping from unsupported relocation addresses to the names of the
-  -- unsupported relocation types.
-  -> [AF.SomeFunctionOverride p sym arch]
+  => [AF.SomeFunctionOverride p sym arch]
   -- ^ Overrides for functions with particular names
   -> [Some LCS.GlobalVar]
   -- ^ Additional global variables to register for simulation
@@ -53,7 +44,7 @@ mkFunctionNameGlobMaps ::
   -- ^ A pair where the first element contains a mapping from function names to
   -- overrides, and the second element contains a mapping from global names to
   -- global variables.
-mkFunctionNameGlobMaps fovCtx fs initialMem unsupportedRelocs namedOvs otherGlobs specializedOvs =
+mkFunctionNameGlobMaps  namedOvs otherGlobs specializedOvs =
     (nameMap, globMap)
   where
     nameMap =
@@ -81,8 +72,7 @@ mkFunctionNameGlobMaps fovCtx fs initialMem unsupportedRelocs namedOvs otherGlob
 
     -- NOTE: The order of elements in customNamedOvs is important.  See @Note
     -- [Override Specialization Order]@ for more information.
-    customNamedOvs = AFO.builtinGenericOverrides fovCtx fs initialMem unsupportedRelocs
-                  ++ specializedOvs
+    customNamedOvs = specializedOvs
 
 {-
 Note [Override Specialization Order]

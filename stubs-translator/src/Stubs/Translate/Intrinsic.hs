@@ -14,11 +14,13 @@ This allows for more complex concepts like memory to be written directly in Hask
 module Stubs.Translate.Intrinsic where 
 import qualified Stubs.AST as SA
 import qualified Stubs.Translate.Core as STC
+import qualified Stubs.Common as SC
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Data.Macaw.Symbolic as DMS
 import qualified Data.Parameterized as P
 import qualified Lang.Crucible.Types as LCT
 import qualified Data.Parameterized.Context as Ctx
+import qualified Stubs.Preamble as SPR
 
 -- | Declaration of an Intrinsic type. These are similar to Opaques, but map directly into a Crucible type instead of a Stubs type
 data IntrinsicTyDecl s tp = IntrinsicTyDecl (P.SymbolRepr s) (LCT.TypeRepr tp)
@@ -32,7 +34,17 @@ data OverrideModule arch = OverrideModule {
     ovInits :: [String] --init fns
 }
 
-data StubsOverride arch (args:: LCT.Ctx SA.StubsType) (ret::SA.StubsType) (cargs:: LCT.Ctx LCT.CrucibleType) (cret::LCT.CrucibleType) = (STC.StubsArch arch) =>StubsOverride (forall sym p . STC.Sym sym -> LCS.Override p sym (DMS.MacawExt arch) cargs cret) (Ctx.Assignment LCT.TypeRepr cargs) (LCT.TypeRepr cret)
+data StubsOverride arch (args:: LCT.Ctx SA.StubsType) (ret::SA.StubsType) (cargs:: LCT.Ctx LCT.CrucibleType) (cret::LCT.CrucibleType) = (STC.StubsArch arch) =>StubsOverride (forall sym p . SC.Sym sym -> LCS.Override p sym (DMS.MacawExt arch) cargs cret) (Ctx.Assignment LCT.TypeRepr cargs) (LCT.TypeRepr cret)
 
 -- | An Override and a matching Signature, needed for type checking
 data SomeStubsOverride arch = forall args ret cargs cret. (STC.StubsArch arch) => SomeStubsOverride (StubsOverride arch args ret cargs cret) (SA.StubsSignature args ret)
+
+-- | Function to construct an override module for an architecture, given a Sym
+data BuildOverrideModule arch sym= BuildOverrideModule (
+    (SPR.Preamble arch, STC.StubsArch arch) =>
+    SC.Sym sym -> OverrideModule arch
+    )
+
+-- | Typeclass to define override modules on a per-architecture basis
+class (STC.StubsArch arch) => OverrideArch arch where 
+    buildOverrides :: [BuildOverrideModule arch sym]

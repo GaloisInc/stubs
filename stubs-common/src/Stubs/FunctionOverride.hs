@@ -15,8 +15,6 @@ module Stubs.FunctionOverride (
   , SomeFunctionOverride(..)
   , FunctionOverrideHandle
   , FunctionAddrLoc(..)
-  , FunctionABI(..)
-  , BuildFunctionABI(..)
   , FunctionOverrideContext(..)
   ) where
 
@@ -41,7 +39,6 @@ import qualified What4.Expr as WE
 import qualified What4.FunctionName as WF
 import qualified What4.Protocol.Online as WPO
 
-import qualified Stubs.Memory as AM
 import qualified Stubs.Syscall as AS
 
 -------------------------------------------------------------------------------
@@ -276,136 +273,6 @@ data FunctionAddrLoc w
     --   @Note [AArch32 and TLS]@ in "Ambient.FunctionOverride.AArch32.Linux"
     --   for one application of this.
   deriving (Eq, Ord, Show)
-
--------------------------------------------------------------------------------
--- Function Call ABI Specification
--------------------------------------------------------------------------------
-
--- Now we actually need to perform the architecture-specific mapping. We can
--- use the type-level information in the override signatures to help us (and
--- especially the type repr inside of the FunctionCall type)
---
--- Note that this is data rather than a class because there can be different
--- ABIs for a given architecture (e.g., Windows and Linux)
-data FunctionABI arch sym p =
-  FunctionABI {
-    -- Given a full register state, extract all of the arguments we need for
-    -- the function call. See Note [Passing arguments to functions].
-    functionIntegerArguments
-      :: forall bak atps
-       . LCB.IsSymBackend sym bak
-      => bak
-      -> LCT.CtxRepr atps
-      -- Types of arguments
-      -> Ctx.Assignment (LCS.RegValue' sym) (DMS.MacawCrucibleRegTypes arch)
-      -- Argument register values
-      -> LCLM.MemImpl sym
-      -- The memory state at the time of the function call
-      -> IO (Ctx.Assignment (LCS.RegEntry sym) atps, GetVarArg sym)
-      -- A pair containing the function argument values and a callback for
-      -- retrieving variadic arguments.
-
-    -- The registers used to pass integer arguments to functions.
-  , functionIntegerArgumentRegisters
-      :: [DMC.ArchReg arch (DMT.BVType (DMC.ArchAddrWidth arch))]
-
-    -- Build an OverrideSim action with appropriate return register types from
-    -- a given OverrideSim action
-  , functionIntegerReturnRegisters
-     :: forall bak t r args rtp mem
-      . LCB.IsSymBackend sym bak
-     => bak
-     -> DMS.GenArchVals mem arch
-     -- Architecture-specific information
-     -> LCT.TypeRepr t
-     -- Function return type
-     -> OverrideResult sym arch t
-     -- Function's return value
-     -> LCS.RegValue sym (DMS.ArchRegStruct arch)
-     -- Argument register values from before function execution
-     -> LCS.OverrideSim p sym (DMS.MacawExt arch) r args rtp (LCS.RegValue sym (DMS.ArchRegStruct arch))
-     -- OverrideSim action with return type matching system return register
-     -- type
-
-    -- If the return address for the function being called can be determined,
-    -- then return Just that address. Otherwise, return Nothing. Some ABIs
-    -- store this information directly in a register, while other ABIs store
-    -- this information on the stack, so we provide both registers and the stack
-    -- as arguments.
-  , functionReturnAddr
-      :: forall bak solver scope st fs mem
-       . ( LCB.IsSymBackend sym bak
-         , sym ~ WE.ExprBuilder scope st fs
-         , bak ~ LCBO.OnlineBackend solver scope st fs
-         , WPO.OnlineSolver solver
-         )
-      => bak
-      -> DMS.GenArchVals mem arch
-      -> Ctx.Assignment (LCS.RegValue' sym) (DMS.MacawCrucibleRegTypes arch)
-      -- Registers for the given architecture
-      -> LCLM.MemImpl sym
-      -- The memory state at the time of the function call
-      -> IO (Maybe (DMC.MemWord (DMC.ArchAddrWidth arch)))
-
-    -- A mapping of function addresses to overrides. This is utilized for two
-    -- purposes:
-    --
-    -- * User-provided overrides at particular addresses, as specified in an
-    --   @overrides.yaml@ file.
-    --
-    -- * Kernel-provided user helpers that are reachable from user space
-    --   at fixed addresses in kernel memory. In particular, see
-    --   Note [AArch32 and TLS] in Ambient.FunctionOverride.AArch32.Linux for
-    --   how this is used to implement TLS for AArch32 binaries.
-    --
-    -- Note that if a function's address has an override in this map, that will
-    -- always take precedence over any overrides for functions of the same name
-    -- in 'functionNameMapping'.  The values of the mapping are nonempty lists
-    -- to ensure that at least one override actually exists for each key in the
-    -- map.
-    --
-    -- See @Note [NonEmpty List Override Mapping Values]@ for information on
-    -- why the values for the mapping are nonempty lists.
-  , functionAddrMapping
-     :: Map.Map (FunctionAddrLoc (DMC.ArchAddrWidth arch))
-                (NEL.NonEmpty (SomeFunctionOverride p sym arch))
-
-    -- A mapping from function names to overrides.
-    --
-    -- See @Note [NonEmpty List Override Mapping Values]@ for information on
-    -- why the values for the mapping are nonempty lists.
-  , functionNameMapping
-     :: (LCB.IsSymInterface sym, LCLM.HasLLVMAnn sym)
-     => Map.Map WF.FunctionName
-                (NEL.NonEmpty (SomeFunctionOverride p sym arch))
-
-    -- A mapping from global names to global variables.
-  , functionGlobalMapping
-     :: Map.Map LCSA.GlobalName (Some LCS.GlobalVar)
-  }
-
--- A function to construct a FunctionABI with memory access
-newtype BuildFunctionABI arch sym p = BuildFunctionABI (
-       forall mem
-     . FunctionOverrideContext arch sym
-    -- In what context are the function overrides are being run?
-    -> LCLS.LLVMFileSystem (DMC.ArchAddrWidth arch)
-    -- File system to use in overrides
-    -> AM.InitialMemory sym (DMC.ArchAddrWidth arch)
-    -> DMS.GenArchVals mem arch
-    -- Architecture-specific information
-    -> Map.Map (DMC.MemWord (DMC.ArchAddrWidth arch)) String
-    -- ^ Mapping from unsupported relocation addresses to the names of the
-    -- unsupported relocation types.
-    -> Map.Map (FunctionAddrLoc (DMC.ArchAddrWidth arch))
-               (NEL.NonEmpty (SomeFunctionOverride p sym arch))
-    -- Overrides for functions at particular addresses
-    -> [ SomeFunctionOverride p sym arch ]
-    -- Overrides for functions with particular names
-    -> [ Some LCS.GlobalVar ]
-    -- Additional global variables to register for simulation
-    -> FunctionABI arch sym p
-  )
 
 -- | In what context are we running a function override? This tracked because
 -- some function overrides (e.g., @get-global-pointer-named@) can only be run in

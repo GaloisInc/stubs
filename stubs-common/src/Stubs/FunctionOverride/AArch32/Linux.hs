@@ -56,6 +56,8 @@ import qualified Stubs.FunctionOverride.StackArguments as AFS
 import qualified Stubs.Override as AO
 import qualified Stubs.Panic as AP
 import qualified Stubs.Verifier.Concretize as AVC
+import qualified Stubs.Memory.AArch32.Linux ()
+import qualified Stubs.Memory as SM
 
 -- | Integer arguments are passed in the first four registers in ARM. Functions
 -- that require additional arguments are passed on the stack at @[sp, #0]@,
@@ -221,11 +223,10 @@ aarch32LinuxFunctionABI ::
      (?memOpts :: LCLM.MemOptions, LCLM.HasLLVMAnn sym)
   => LCCC.GlobalVar (LCLM.LLVMPointerType 32)
      -- ^ Global variable for TLS
-  -> AF.BuildFunctionABI DMA.ARM sym (AE.AmbientSimulatorState sym DMA.ARM)
-aarch32LinuxFunctionABI tlsGlob = AF.BuildFunctionABI $ \fovCtx fs initialMem archVals unsupportedRelocs addrOvs namedOvs otherGlobs ->
+  -> SM.BuildFunctionABI DMA.ARM sym (AE.AmbientSimulatorState sym DMA.ARM) DMS.LLVMMemory
+aarch32LinuxFunctionABI tlsGlob = SM.BuildFunctionABI $ \fovCtx  initialMem archVals unsupportedRelocs addrOvs namedOvs otherGlobs ->
   let ?ptrWidth = PN.knownNat @32 in
-  let (nameMap, globMap) = AFC.mkFunctionNameGlobMaps
-                             fovCtx fs initialMem unsupportedRelocs namedOvs
+  let (nameMap, globMap) = AFC.mkFunctionNameGlobMaps namedOvs
                              otherGlobs [] in
   let customKernelOvs =
         -- The addresses are taken from
@@ -235,14 +236,14 @@ aarch32LinuxFunctionABI tlsGlob = AF.BuildFunctionABI $ \fovCtx fs initialMem ar
           , AF.SomeFunctionOverride (buildKUserGetTLSOverride tlsGlob) NEL.:| []
           )
         ] in
-  AF.FunctionABI { AF.functionIntegerArguments = \bak ->
+  SM.FunctionABI { SM.functionIntegerArguments = \bak ->
                      aarch32LinuxIntegerArguments bak archVals
-                 , AF.functionIntegerArgumentRegisters = aarch32LinuxIntegerArgumentRegisters
-                 , AF.functionIntegerReturnRegisters = aarch32LinuxIntegerReturnRegisters
-                 , AF.functionReturnAddr = aarch32LinuxReturnAddr
-                 , AF.functionNameMapping = nameMap
-                 , AF.functionGlobalMapping = globMap
-                 , AF.functionAddrMapping =
+                 , SM.functionIntegerArgumentRegisters = aarch32LinuxIntegerArgumentRegisters
+                 , SM.functionIntegerReturnRegisters = aarch32LinuxIntegerReturnRegisters
+                 , SM.functionReturnAddr = aarch32LinuxReturnAddr
+                 , SM.functionNameMapping = nameMap
+                 , SM.functionGlobalMapping = globMap
+                 , SM.functionAddrMapping =
                      Map.union (Map.fromList customKernelOvs) addrOvs
                  }
 

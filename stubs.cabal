@@ -78,7 +78,6 @@ test-suite stubs-tests
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules: Infrastructure,
-                 Stubs.Discovery,
                  Stubs.Solver,
                  Stubs.SymbolicExecution,
                  Pipeline

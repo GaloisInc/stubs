@@ -43,12 +43,12 @@ common shared
 library 
     import: shared
     exposed-modules: Stubs.AST,
+                     Stubs.Arch.X86,
+                     Stubs.Arch.AArch32,
                      Stubs.Translate,
                      Stubs.Translate.Core,
                      Stubs.Translate.Intrinsic,
                      Stubs.Preamble,
-                     Stubs.Preamble.X86,
-                     Stubs.Preamble.AArch32,
                      Stubs.Opaque
     other-modules:  Stubs.Preamble.Common
     hs-source-dirs: src
