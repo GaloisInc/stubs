@@ -262,6 +262,7 @@ data StubsExpr (a::StubsType) where
     ArgLit :: StubsArg a -> StubsExpr a
     TupleExpr :: Ctx.Assignment StubsExpr ctx -> StubsExpr (StubsTuple ctx)
     AppExpr :: String -> Ctx.Assignment StubsExpr args -> StubsTypeRepr a -> StubsExpr a
+    TupleAccessExpr :: StubsExpr (StubsTuple c) -> Int ->  StubsTypeRepr a -> StubsExpr a -- enforce typerepr correctness at translation
 
 $(return [])
 instance OrdF StubsLit where
@@ -350,6 +351,7 @@ stubsExprToTy e = case e of
     ArgLit a -> argType a
     AppExpr _ _ r -> r
     TupleExpr t -> StubsTupleRepr $ stubsAssignmentToTys t
+    TupleAccessExpr _ _ v -> v
 
 -- | Retrieve types of a list of expressions
 stubsAssignmentToTys :: Ctx.Assignment StubsExpr ctx -> Ctx.Assignment StubsTypeRepr ctx

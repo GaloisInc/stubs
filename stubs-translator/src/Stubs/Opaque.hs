@@ -74,5 +74,7 @@ exprToReifyTy (SA.VarLit (SA.StubsVar _ t)) tys = reifyType t tys
 exprToReifyTy (SA.GlobalVarLit (SA.StubsVar _ t)) tys = reifyType t tys
 exprToReifyTy (SA.ArgLit (SA.StubsArg _ t)) tys = reifyType t tys
 exprToReifyTy (SA.AppExpr _ _ t) tys = reifyType t tys -- sig itself is checked during translation
+exprToReifyTy (SA.TupleExpr c) _ = SA.SomeStubsTypeRepr $ SA.stubsExprToTy (SA.TupleExpr c)
+exprToReifyTy (SA.TupleAccessExpr _ _ ty) tys = reifyType ty tys
 
 

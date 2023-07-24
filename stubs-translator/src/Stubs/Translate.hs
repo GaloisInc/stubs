@@ -74,7 +74,6 @@ import qualified Stubs.Opaque as SO
 import qualified Stubs.Translate.Intrinsic as STI
 import qualified Stubs.Common as SC
 import qualified Lang.Crucible.Types as LCT
-
 -- | A translated Program. Several fields are taken from crucible-syntax's ParsedProgram, for easy conversion
 data CrucibleProgram arch = CrucibleProgram {
   -- | The generated CFGs
@@ -161,6 +160,24 @@ translateExpr' e = do
         SA.TupleExpr (tupl::Ctx.Assignment SA.StubsExpr ctx) -> do 
             struct <- translateTuple tupl
             LCCG.mkAtom struct
+        SA.TupleAccessExpr tupl idx ty -> do 
+            struct <- translateExpr tupl
+            let t = SA.stubsExprToTy tupl
+            case t of 
+                SA.StubsTupleRepr tupty -> do 
+                    ctupty <- runReaderT (STC.toCrucibleTyCtx tupty) env 
+                    let sz = Ctx.size ctupty
+                    case Ctx.intIndex idx sz of 
+                        Nothing -> fail "Index out of bounds in tuple access"
+                        Just (Some idx) -> do 
+                            let actual = ctupty Ctx.! idx
+                            cty <- runReaderT (STC.toCrucibleTy @arch ty) env
+                            Just PN.Refl <- pure $ PN.testEquality cty actual
+                            
+                            let cactual = ctupty Ctx.! idx 
+                            let acc = LCCR.App $ LCCE.GetStruct struct idx cactual
+                            LCCG.mkAtom acc
+                _ -> fail "Expected tuple in tuple access expression"
         _ -> do
             ce <- translateExpr'' e
             LCCG.mkAtom ce
@@ -175,6 +192,7 @@ translateExpr' e = do
                 SA.AppExpr {} -> fail "internal translateExpr called on AppExpr"
                 SA.GlobalVarLit _ -> fail "internal translateExpr called on GlobalVarLit"
                 SA.TupleExpr _ -> fail "internal translateExpr called on TupleExpr"
+                SA.TupleAccessExpr _ _ _ -> fail "internal translateExpr called on TupleAccessExpr"
         translateTuple :: forall arch ctx a. (STC.ArchTypeMatchCtx arch ctx ~ a, STC.StubsArch arch) => Ctx.Assignment SA.StubsExpr ctx -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s (LCT.StructType a))
         translateTuple tupl = do 
             env <- gets stStubsenv

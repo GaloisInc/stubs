@@ -71,7 +71,7 @@ genTestCase sprog check tag = testCase tag $ do
             _ -> error "Irrelevant to test"
 
 -- The tests themselves
-standaloneTests = [linkerTest,factorialTest,symExecTest,moduleTest,opaqueTest,opaqueGlobalTest,globalVarTest, initHookTest]
+standaloneTests = [linkerTest,factorialTest,symExecTest,moduleTest,opaqueTest,opaqueGlobalTest,globalVarTest, initHookTest, tupleTest]
 
 testProg :: StubsProgram
 testProg =
@@ -443,6 +443,51 @@ initHookTest = genTestCaseIO (do
                                             case retRepr of
                                                 LCT.BVRepr _ -> case asConcrete $ regValue q of
                                                     Just k -> if BV.asUnsigned (fromConcreteBV k) == 3 then return True else print ("Unexpected value received: " ++ show (BV.asUnsigned (fromConcreteBV k))) >> return False
+                                                    Nothing -> print "Failed to concretize return" >> return False
+                                                _ -> print "Unexpected return type" >> return False
+                                        _ -> print "Failed to get complete result" >> return False
+                AbortedResult _ (AbortedExec r _) -> print ("Aborted Execution:" ++ show r) >> return False
+                _ -> print "Failed to finish execution" >> return False
+
+tupleTest :: TestTree 
+tupleTest = let pointTy = Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr  in genTestCase SA.StubsProgram {
+        SA.stubsModules = [
+            SA.mkStubsModule "point"  [
+                SA.SomeStubsFunction 
+                    SA.StubsFunction {
+                        SA.stubFnSig=SA.StubsSignature "mkPoint" pointTy (SA.StubsTupleRepr pointTy) ,
+                        SA.stubFnBody=[SA.Return (SA.TupleExpr (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)) ))]
+                    },
+                SA.SomeStubsFunction 
+                    SA.StubsFunction {
+                        SA.stubFnSig=SA.StubsSignature "dist" (Ctx.extend Ctx.empty (SA.StubsTupleRepr pointTy)) SA.StubsIntRepr,
+                        SA.stubFnBody=[
+                            SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.TupleAccessExpr (SA.ArgLit $ SA.StubsArg 0 (SA.StubsTupleRepr pointTy)) 0 SA.StubsIntRepr)) 
+                            (SA.TupleAccessExpr (SA.ArgLit $ SA.StubsArg 0 (SA.StubsTupleRepr pointTy)) 1 SA.StubsIntRepr)) SA.StubsIntRepr )
+                        ]
+                    }
+            ] [] [],
+        SA.mkStubsModule "core" [
+            SA.SomeStubsFunction SA.StubsFunction {
+                SA.stubFnSig= SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr,
+                SA.stubFnBody=[
+                    SA.Assignment (SA.StubsVar "p" $ SA.StubsTupleRepr pointTy) (SA.AppExpr "mkPoint" (Ctx.extend (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 3)) (SA.LitExpr $ SA.IntLit 5))  $ SA.StubsTupleRepr pointTy ),
+                    SA.Return (SA.AppExpr "dist" (Ctx.extend Ctx.empty (SA.VarLit (SA.StubsVar "p" $ SA.StubsTupleRepr pointTy))) SA.StubsIntRepr)]
+            } 
+        ] [] []
+     ],
+     SA.stubsEntryPoints=["main"],
+     SA.stubsInitFns=[]
+    } check "Tuple functionality"
+    where
+        check :: (forall sym . WI.IsExprBuilder sym => LCT.TypeRepr ret -> LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool)
+        check retRepr crucibleRes = case crucibleRes of
+                FinishedResult _ r -> case r of
+                                        TotalRes v -> do
+                                            let q = view gpValue v
+                                            case retRepr of
+                                                LCT.BVRepr _ -> case asConcrete $ regValue q of
+                                                    Just k -> if BV.asUnsigned (fromConcreteBV k) == 8 then return True else print ("Unexpected value received: " ++ show (BV.asUnsigned (fromConcreteBV k))) >> return False
                                                     Nothing -> print "Failed to concretize return" >> return False
                                                 _ -> print "Unexpected return type" >> return False
                                         _ -> print "Failed to get complete result" >> return False
