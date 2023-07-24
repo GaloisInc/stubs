@@ -45,6 +45,7 @@ instance STC.StubsArch DMX.X86_64 where
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsUnit = LCT.UnitType
     type instance ArchTypeMatch DMX.X86_64 ('SA.StubsAlias s) = STC.ArchTypeMatch DMX.X86_64 (SA.ResolveAlias s)
     type instance ArchTypeMatch DMX.X86_64 ('SA.StubsIntrinsic s) = SA.ResolveIntrinsic s
+    type instance ArchTypeMatch DMX.X86_64 ('SA.StubsTuple c) = LCT.StructType (STC.ArchTypeMatchCtx DMX.X86_64 c)
 
     type instance ArchIntSize DMX.X86_64 = 32
     type instance ArchShortSize DMX.X86_64 = 16
@@ -72,6 +73,10 @@ instance STC.StubsArch DMX.X86_64 where
                 case MapF.lookup s intrinsicMap of
                     Just (STC.WrappedIntrinsicRepr _ t) -> return t
                     Nothing -> error $ "Missing intrinsic: " ++ show s
+
+            SA.StubsTupleRepr t -> do 
+                internal <- STC.toCrucibleTyCtx @_ @DMX.X86_64 t
+                return (LCT.StructRepr internal)
 
     translateLit lit = do
         let n = PN.knownNat @32

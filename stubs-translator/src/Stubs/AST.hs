@@ -66,6 +66,7 @@ data StubsType where
     StubsAlias :: Symbol -> StubsType
     -- | Like Crucible Intrinsics: These are known to Override Modules only, and map directly to crucible types
     StubsIntrinsic :: Symbol -> StubsType
+    StubsTuple :: Ctx.Ctx StubsType -> StubsType
 
 type StubsInt = 'StubsInt
 type StubsUnit = 'StubsUnit
@@ -76,6 +77,7 @@ type StubsShort = 'StubsShort
 type StubsULong = 'StubsULong
 type StubsUShort = 'StubsUShort
 type StubsIntrinsic = 'StubsIntrinsic
+type StubsTuple = 'StubsTuple
 
 -- | Value-level type representations of StubsType
 data StubsTypeRepr a where
@@ -89,6 +91,7 @@ data StubsTypeRepr a where
     StubsUShortRepr :: StubsTypeRepr StubsUShort
     StubsAliasRepr :: P.SymbolRepr s -> StubsTypeRepr (ResolveAlias s)
     StubsIntrinsicRepr :: P.SymbolRepr s -> StubsTypeRepr (StubsIntrinsic s)
+    StubsTupleRepr :: Ctx.Assignment StubsTypeRepr ctx -> StubsTypeRepr (StubsTuple ctx)
 
 instance ShowF StubsTypeRepr where 
     showF StubsIntRepr = "Int"
@@ -101,6 +104,7 @@ instance ShowF StubsTypeRepr where
     showF StubsUShortRepr = "UShort"
     showF (StubsAliasRepr s) = "Opaque:" ++ show s 
     showF (StubsIntrinsicRepr s) = "Intrinsic:" ++ show s 
+    showF (StubsTupleRepr t) = "Tuple:("++ show t ++ ")"
 
 instance Show (StubsTypeRepr a) where 
     show StubsIntRepr = "Int"
@@ -113,6 +117,7 @@ instance Show (StubsTypeRepr a) where
     show StubsUShortRepr = "UShort"
     show (StubsAliasRepr s) = "Opaque:" ++ show s 
     show (StubsIntrinsicRepr s) = "Intrinsic:" ++ show s 
+    show (StubsTupleRepr t) = "Tuple:("++ show t ++ ")"
 
 type family ResolveAlias (s :: Symbol) :: StubsType
 
@@ -255,7 +260,7 @@ data StubsExpr (a::StubsType) where
     VarLit :: StubsVar a-> StubsExpr a
     GlobalVarLit :: StubsVar a -> StubsExpr a
     ArgLit :: StubsArg a -> StubsExpr a
-    --TupleExpr :: Ctx.Assignment StubsExpr ctx -> StubsExpr (StubsTuple ctx)
+    TupleExpr :: Ctx.Assignment StubsExpr ctx -> StubsExpr (StubsTuple ctx)
     AppExpr :: String -> Ctx.Assignment StubsExpr args -> StubsTypeRepr a -> StubsExpr a
 
 $(return [])
@@ -344,6 +349,7 @@ stubsExprToTy e = case e of
     GlobalVarLit v -> varType v
     ArgLit a -> argType a
     AppExpr _ _ r -> r
+    TupleExpr t -> StubsTupleRepr $ stubsAssignmentToTys t
 
 -- | Retrieve types of a list of expressions
 stubsAssignmentToTys :: Ctx.Assignment StubsExpr ctx -> Ctx.Assignment StubsTypeRepr ctx

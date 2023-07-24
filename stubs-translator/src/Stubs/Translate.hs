@@ -73,6 +73,7 @@ import qualified Data.Set as Set
 import qualified Stubs.Opaque as SO
 import qualified Stubs.Translate.Intrinsic as STI
 import qualified Stubs.Common as SC
+import qualified Lang.Crucible.Types as LCT
 
 -- | A translated Program. Several fields are taken from crucible-syntax's ParsedProgram, for easy conversion
 data CrucibleProgram arch = CrucibleProgram {
@@ -108,7 +109,7 @@ data SomeWrappedOverride arch = forall args ret. SomeWrappedOverride(WrappedOver
 data WrappedOverride arch args ret = WrappedOverride (forall sym p . SC.Sym sym -> LCS.Override p sym (DMS.MacawExt arch) (STC.ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret)) (StubHandle arch args ret)
 
 -- Unexported Internal Function. A mix of returing Atoms vs Expr causes this hierarchy to be necessary
-translateExpr' :: forall arch s ret b sret args . (b ~ ArchTypeMatch arch sret, LCCE.IsSyntaxExtension(DMS.MacawExt arch), STC.StubsArch arch) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Atom s b)
+translateExpr' :: forall arch s ret b sret args. (b ~ ArchTypeMatch arch sret, LCCE.IsSyntaxExtension(DMS.MacawExt arch), STC.StubsArch arch) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Atom s b)
 translateExpr' e = do
     regMap <- gets stRegMap
     argmap <- gets stParams
@@ -157,6 +158,9 @@ translateExpr' e = do
                     ccall <- LCCG.call t cex
                     LCCG.mkAtom ccall
                 Nothing -> fail $ "call to unknown function: " ++ f -- Top level translation prevents this, but invoking something more internal could cause this
+        SA.TupleExpr (tupl::Ctx.Assignment SA.StubsExpr ctx) -> do 
+            struct <- translateTuple tupl
+            LCCG.mkAtom struct
         _ -> do
             ce <- translateExpr'' e
             LCCG.mkAtom ce
@@ -170,6 +174,13 @@ translateExpr' e = do
                 SA.ArgLit _ -> fail "internal translateExpr called on ArgLit"
                 SA.AppExpr {} -> fail "internal translateExpr called on AppExpr"
                 SA.GlobalVarLit _ -> fail "internal translateExpr called on GlobalVarLit"
+                SA.TupleExpr _ -> fail "internal translateExpr called on TupleExpr"
+        translateTuple :: forall arch ctx a. (STC.TupleArch arch ctx, STC.ArchTypeMatchCtx arch ctx ~ a, STC.StubsArch arch) => Ctx.Assignment SA.StubsExpr ctx -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s (LCT.StructType a))
+        translateTuple tupl = do 
+            env <- gets stStubsenv
+            internals <- translateExprs tupl 
+            ctys <- runReaderT (toCrucibleTyCtx $ SA.stubsAssignmentToTys tupl) env
+            return $ LCCR.App $ LCCE.MkStruct ctys internals
 
 -- | Translate a single StubsExpr
 translateExpr  :: forall arch s ret b sret ext args . (b ~ ArchTypeMatch arch sret, ext ~ DMS.MacawExt arch, LCCE.IsSyntaxExtension ext, STC.StubsArch arch) => SA.StubsExpr sret -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s b)

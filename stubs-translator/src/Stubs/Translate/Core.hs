@@ -9,6 +9,8 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ImpredicativeTypes#-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE QuantifiedConstraints #-}
 
 {-|
 Description: Definition of Core typeclasses, monads, and constraints for translation
@@ -46,7 +48,7 @@ type family ArchTypeMatchCtx (arch :: Type) (stubTy :: Ctx.Ctx SA.StubsType) = (
     ArchTypeMatchCtx arch (a Ctx.::> k) = ArchTypeMatchCtx arch a Ctx.::> ArchTypeMatch arch k
 
 -- | Type class for defining a valid architecture for translation
-class (DMS.SymArchConstraints arch, 
+class (DMS.SymArchConstraints arch,
         Data.Typeable arch,
         ArchTypeMatch arch 'SA.StubsBool ~ LCT.BoolType, -- Bool must translate to bool, for loops and conditionals (enforced by crucible's Generator)
         ArchTypeMatch arch 'SA.StubsInt ~ LCT.BVType (ArchIntSize arch),
@@ -55,6 +57,7 @@ class (DMS.SymArchConstraints arch,
         ArchTypeMatch arch 'SA.StubsUShort ~ LCT.BVType (ArchShortSize arch),
         ArchTypeMatch arch 'SA.StubsLong ~ LCT.BVType (ArchLongSize arch),
         ArchTypeMatch arch 'SA.StubsULong ~ LCT.BVType (ArchLongSize arch),
+        forall c. ArchTypeMatch arch (SA.StubsTuple c) ~ LCT.StructType (ArchTypeMatchCtx arch c),
         -- 16 taken from previous constraints imposed on arch
         16 PN.<= ArchIntSize arch, 1 PN.<= ArchIntSize arch, KnownNat (ArchIntSize arch),
         16 PN.<= ArchShortSize arch, 1 PN.<= ArchShortSize arch, KnownNat (ArchShortSize arch),
