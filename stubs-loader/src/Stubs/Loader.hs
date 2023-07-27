@@ -132,7 +132,7 @@ withBinary
      -- ^ Total number of bytes loaded (includes shared libraries).
      -> ALB.BinaryConfig arch binFmt
      -> Maybe (FunABIExt arch) 
-     -> [STI.BuildOverrideModule arch sym]
+     -> [STI.OverrideModule arch]
      -- ^ Information about the loaded binaries
      -> m a)
   -> m a
@@ -168,6 +168,7 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
                                       Map.empty
               -- Here we capture all of the necessary constraints required by the
               -- callback and pass them down along with the architecture info
+              ovs <- STI.buildOverrides
               k DMX.x86_64_linux_info
                 AA.X86_64Linux
                 archVals
@@ -178,7 +179,7 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
                 (elfBinarySizeTotal bins)
                 binConf
                 (Just (FunABIExt DMX.RAX))
-                STI.buildOverrides
+                ovs
             Nothing -> CMC.throwM (AE.UnsupportedELFArchitecture name DE.EM_X86_64 DE.ELFCLASS64)
         (DE.EM_ARM, DE.ELFCLASS32) -> do
           tlsGlob <- liftIO $ AMAL.freshTLSGlobalVar hdlAlloc
@@ -195,6 +196,7 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
                                       dynGlobSymMap
                                       unsupportedRels
                                       supportedRels
+              ovs <- STI.buildOverrides
               k Macaw.AArch32.arm_linux_info
                 AA.AArch32Linux
                 archVals
@@ -205,7 +207,7 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
                 (elfBinarySizeTotal bins)
                 binConf
                 (Just (FunABIExt (ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R0"))))
-                STI.buildOverrides
+                ovs
             Nothing -> CMC.throwM (AE.UnsupportedELFArchitecture name DE.EM_ARM DE.ELFCLASS32)
         (machine, klass) -> CMC.throwM (AE.UnsupportedELFArchitecture name machine klass)
     Left _ -> throwDecodeFailure name bytes

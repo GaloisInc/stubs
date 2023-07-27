@@ -79,14 +79,13 @@ corePipeline path stubProgs = do
         let tsym = SC.Sym (LCB.backendGetSym bak) bak
         (recordFn, _) <- buildRecordLLVMAnnotation
         let ?recordLLVMAnnotation = recordFn
-        SL.withBinary path contents Nothing hAlloc tsym $ \archInfo _ archVals buildSyscallABI buildFunctionABI _ _ binConf funAbiExt ovfs-> DMA.withArchConstraints archInfo $  do
+        SL.withBinary path contents Nothing hAlloc tsym $ \archInfo _ archVals buildSyscallABI buildFunctionABI _ _ binConf funAbiExt ovs-> DMA.withArchConstraints archInfo $  do
             Just (SL.FunABIExt reg) <- return funAbiExt
             let ?memOpts = LCLM.defaultMemOptions
             let abiConf = SVS.ABIConfig {
                 SVS.abiBuildFunctionABI = buildFunctionABI,
                 SVS.abiBuildSyscallABI=buildSyscallABI
             }
-            let ovs = map (\(STI.BuildOverrideModule ovf) -> ovf tsym) ovfs
             crucProgs <- fmap concat (mapM (ST.translateProgram ng hAlloc ovs) stubProgs) 
             envVarMap <- AEnv.mkEnvVarMap bak (piConcreteEnvVars pinst) (piConcreteEnvVarsFromBytes pinst) (piSymbolicEnvVars pinst)
 

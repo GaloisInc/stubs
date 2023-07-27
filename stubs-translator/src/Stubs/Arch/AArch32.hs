@@ -104,5 +104,5 @@ instance SPR.Preamble SAA.AArch32 where
     preambleMap sig = error ("Missing implementation for preamble function:"++SA.sigFnName sig)
 
 instance STI.OverrideArch SAA.AArch32 where 
-  buildOverrides = []
+  buildOverrides = pure []
     

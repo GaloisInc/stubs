@@ -32,6 +32,7 @@ import qualified Stubs.Translate.Intrinsic as STI
 import qualified Data.Parameterized as P
 import qualified Stubs.Common as SC 
 import qualified Lang.Crucible.Simulator as LCS
+import Control.Monad.IO.Class (MonadIO)
 
 instance STC.StubsArch DMX.X86_64 where
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsInt = LCT.BVType (STC.ArchIntSize DMX.X86_64)
@@ -107,15 +108,19 @@ instance SPR.Preamble DMX.X86_64 where
     preambleMap sig = error ("Missing implementation for preamble function:"++SA.sigFnName sig)
 
 instance STI.OverrideArch DMX.X86_64 where
-     buildOverrides = []--[STI.BuildOverrideModule (const mallocOv)]
+     buildOverrides = do 
+        allocModule <- mallocOv @DMX.X86_64
+        return [allocModule]
 
 
--- mallocStub :: (STC.StubsArch arch) => STI.SomeStubsOverride arch
--- mallocStub ptr = let P.Some ptr = P.someSymbol "Pointer" in STI.SomeStubsOverride (STI.StubsOverride (\(SC.Sym sym _)-> do
---           LCS.mkOverride' "malloc" LCT.BoolRepr (do
---               LCS.RegMap (Ctx.Empty Ctx.:> _) <-  LCS.getOverrideArgs
---               return $ WI.truePred sym
---             )) (Ctx.extend Ctx.empty (LCT.BVRepr @32 WI.knownRepr)) LCT.BoolRepr) (SA.StubsSignature "malloc" (Ctx.extend Ctx.empty SA.StubsIntRepr) (SA.StubsIntrinsicRepr ptr))
+mallocStub :: (STC.StubsArch arch) => P.SymbolRepr s -> STI.SomeStubsOverride arch
+mallocStub ptr = STI.SomeStubsOverride (STI.StubsOverride (\(SC.Sym sym _)-> do
+          LCS.mkOverride' "malloc" LCT.BoolRepr (do
+              LCS.RegMap (Ctx.Empty Ctx.:> _) <-  LCS.getOverrideArgs
+              return $ WI.truePred sym
+            )) (Ctx.extend Ctx.empty (LCT.BVRepr @32 WI.knownRepr)) LCT.BoolRepr) (SA.StubsSignature "malloc" (Ctx.extend Ctx.empty SA.StubsIntRepr) (SA.StubsIntrinsicRepr ptr))
 
--- mallocOv :: (STC.StubsArch arch) => STI.OverrideModule arch
--- mallocOv = let P.Some ptr = P.someSymbol "Pointer" in STI.OverrideModule "alloc" [mallocStub] [STI.SomeIntrinsicTyDecl (STI.IntrinsicTyDecl ptr LCT.BoolRepr)] []
+mallocOv :: (STC.StubsArch arch, MonadIO m) => m (STI.OverrideModule arch)
+mallocOv = do 
+    P.Some ptr <- return $ P.someSymbol "Pointer"
+    return $ STI.OverrideModule "alloc" [mallocStub ptr] [STI.SomeIntrinsicTyDecl (STI.IntrinsicTyDecl ptr LCT.BoolRepr)] []
