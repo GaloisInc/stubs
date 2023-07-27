@@ -99,19 +99,24 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory SAA.AArch32 where
 
   initMem (SC.Sym sym bak) archInfo stackSize binConf halloc = do 
     let endian = DMSM.toCrucibleEndian (DMA.archEndianness archInfo)
-    mem <- liftIO $ LCLM.emptyMem endian
-    stackSizeBV <- liftIO $ WI.bvLit sym WI.knownRepr (BVS.mkBV WI.knownRepr stackSize)
+    
+    let mems = fmap (DMB.memoryImage . SLB.lbpBinary) (SLB.bcBinaries binConf)
     let ?ptrWidth = SM.memPtrSize @DMS.LLVMMemory @SAA.AArch32
     (recordFn, _) <- liftIO SM.buildRecordLLVMAnnotation
     let ?recordLLVMAnnotation = recordFn
     let ?memOpts = LCLM.defaultMemOptions
+    (mem, memPtrTbl) <- AEM.newMemPtrTable (SMC.globalMemoryHooks mems mempty mempty) bak endian mems
+    stackSizeBV <- liftIO $ WI.bvLit sym WI.knownRepr (BVS.mkBV WI.knownRepr stackSize)
+
     (stackBasePtr, mem1) <- liftIO $ LCLM.doMalloc bak LCLM.StackAlloc LCLM.Mutable "stack_alloc" mem stackSizeBV LCLD.noAlignment
     tlsvar <- liftIO $ freshTLSGlobalVar halloc
-    (_, globals0) <- liftIO $ aarch32LinuxInitGlobals tlsvar (SC.Sym sym bak) mem1
+
+    stackArrayStorage <- liftIO $ WI.freshConstant sym (WSym.safeSymbol "stack_array") WI.knownRepr
+    mem2 <- liftIO $ LCLM.doArrayStore bak mem1 stackBasePtr LCLD.noAlignment stackArrayStorage stackSizeBV
+
+    (mem3, globals0) <- liftIO $ aarch32LinuxInitGlobals tlsvar (SC.Sym sym bak) mem2
     memVar <- liftIO $ LCLM.mkMemVar (DT.pack "ambient-verifier::memory") halloc
-    let globals1 = LCSG.insertGlobal memVar mem1 globals0
-    let mems = fmap (DMB.memoryImage . SLB.lbpBinary) (SLB.bcBinaries binConf)
-    (_, memPtrTbl) <- AEM.newMemPtrTable (SMC.globalMemoryHooks mems mempty mempty) bak endian mems
+    let globals1 = LCSG.insertGlobal memVar mem3 globals0
     let globalMap = AEM.mapRegionPointers memPtrTbl
 
     return SM.InitialMemory{
