@@ -2,14 +2,11 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE GADTs #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE EmptyCase #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ImplicitParams #-}
 {-# LANGUAGE ImpredicativeTypes #-}
 {-# LANGUAGE QuantifiedConstraints #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -60,20 +57,13 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Data.Macaw.CFG as DMC
 import qualified Stubs.Translate as ST
 import qualified Stubs.Translate.Core as STC
-import qualified Stubs.AST as SA
-import qualified Stubs.Diagnostic as SD
 import qualified Stubs.Translate.Intrinsic as STI
-import qualified Data.Parameterized as P
 import qualified Data.Foldable as F
 import qualified Stubs.FunctionOverride as AF
 import qualified Stubs.Panic as AP
 import qualified Stubs.Wrapper as SW
 import qualified Stubs.Preamble as SPR
 import qualified Stubs.Common as SC
-import qualified Stubs.Memory as SM
-import qualified Lang.Crucible.LLVM.MemModel as LCLM
-import qualified Stubs.Extensions as SE
-import qualified Data.Macaw.Discovery as DMS
 
 -- | A definition of the initial state of a program to be verified
 --
@@ -175,7 +165,6 @@ symexec bak halloc prog cfg args retRepr check ovs = do --todo link ovs
   initCOvs <- liftIO $ SW.genInitOvHooks tsym prog
   let simAction = LCS.runOverrideSim retRepr $ do
                     -- First, initialize the symbolic file system...
-                    --initFSOverride
                     -- ...then simulate any startup overrides...
                     F.traverse_ (\ov -> AF.functionOverride ov
                                                             bak
@@ -234,3 +223,4 @@ symexec bak halloc prog cfg args retRepr check ovs = do --todo link ovs
     dummyGetVarArg = AF.GetVarArg $ \_ ->
       AP.panic AP.SymbolicExecution "sym-exec"
         ["A startup override cannot use variadic arguments"]
+

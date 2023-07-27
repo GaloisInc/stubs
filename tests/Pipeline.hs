@@ -65,7 +65,7 @@ corePipeline path stubProgs = do
                                  piFloatMode=AS.IEEE,
                                  piEntryPoint=AEp.DefaultEntryPoint,
                                  piMemoryModel=SM.DefaultMemoryModel,
-                                 piOverrideDir=Just "./tests/test-data/libc-overrides",
+                                 piOverrideDir=Nothing,
                                  piIterationBound=Nothing,
                                  piRecursionBound=Nothing,
                                  piSolverInteractionFile=Nothing,
@@ -92,7 +92,7 @@ corePipeline path stubProgs = do
 
             -- execute symbolically
             entryPointAddr <- AEp.resolveEntryPointAddrOff binConf $ piEntryPoint pinst
-            ambientExecResult <- SVS.symbolicallyExecute logAction bak hAlloc archInfo archVals (SVS.SymbolicExecutionConfig{SVS.secLogBranches=False,SVS.secSolver=piSolver pinst}) [] entryPointAddr (piMemoryModel pinst) (piFsRoot pinst) (piLogFunctionCalls pinst) binConf abiConf (piCommandLineArguments pinst) envVarMap crucProgs
+            ambientExecResult <- SVS.symbolicallyExecute logAction bak hAlloc archInfo archVals (SVS.SymbolicExecutionConfig{SVS.secLogBranches=False,SVS.secSolver=piSolver pinst}) [] entryPointAddr binConf abiConf (piCommandLineArguments pinst) envVarMap crucProgs
             let crucibleRes = SVS.serCrucibleExecResult ambientExecResult
             case crucibleRes of
                                 LCSE.FinishedResult _ r -> case r of
@@ -125,7 +125,7 @@ smallPipeline :: forall arch args ret ext p. (DMS.SymArchConstraints arch, ext ~
                                         LCCC.SomeCFG (DMS.MacawExt arch) args ret ->
                                         (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args)) ->
                                         LCT.TypeRepr ret->
-                                        (forall sym . WI.IsExprBuilder sym => (LCSE.ExecResult p sym ext (LCS.RegEntry sym ret)) -> IO Bool) ->
+                                        (forall sym . WI.IsExprBuilder sym => LCSE.ExecResult p sym ext (LCS.RegEntry sym ret) -> IO Bool) ->
                                         IO Bool
 smallPipeline prog cfg argsf ret check = do
     hAlloc <- LCF.newHandleAllocator

@@ -20,48 +20,35 @@ module Stubs.SymbolicExecution (
   , insertFreshGlobals
   , FunctionConfig(..)
   , ABIConfig(..)
-  , TestableStubsArch
   ) where
 
-import           Control.Lens ( Lens', (^.), (&), (.~), set, over )
 import           Control.Monad ( foldM )
 import qualified Control.Monad.Catch as CMC
 import           Control.Monad.IO.Class ( MonadIO(..) )
 import qualified Control.Monad.State.Strict as CMS
-import qualified Data.BinarySymbols as BinSym
 import qualified Data.BitVector.Sized as BVS
 import qualified Data.ByteString as BS
 import           Data.Char as C
 import qualified Data.Foldable as F
-import qualified Data.IntMap as IM
 import qualified Data.List as List
-import qualified Data.List.NonEmpty as NEL
 import qualified Data.Map.Strict as Map
-import           Data.Maybe ( fromMaybe, isJust )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.List as PL
 import qualified Data.Parameterized.Map as MapF
 import           Data.Parameterized.Some ( Some(..) )
-import qualified Data.Parameterized.TraversableFC as FC
-import           Data.Proxy ( Proxy(..) )
 import qualified Data.Text as DT
 import qualified Data.Traversable as Trav
 import qualified Data.Vector as DV
-import qualified Data.Vector.NonEmpty as NEV
 import           GHC.TypeNats ( KnownNat, type (<=) )
 import qualified Lang.Crucible.CFG.Core as LCCC
 import qualified Lumberjack as LJ
-import qualified Prettyprinter as PP
-import qualified System.FilePath as SF
 import qualified System.IO as IO
 
 import qualified Data.Macaw.Architecture.Info as DMA
 import qualified Data.Macaw.BinaryLoader as DMB
-import qualified Data.Macaw.BinaryLoader.ELF as DMBE
 import qualified Data.Macaw.CFG as DMC
 import qualified Data.Macaw.Memory as DMM
 import qualified Data.Macaw.Symbolic as DMS
-import qualified Data.Macaw.Symbolic.Memory as DMSM
 import qualified Data.Macaw.Types as DMT
 import qualified Lang.Crucible.Analysis.Postdom as LCAP
 import qualified Lang.Crucible.Backend as LCB
@@ -72,50 +59,34 @@ import qualified Lang.Crucible.LLVM.Bytes as LCLB
 import qualified Lang.Crucible.LLVM.DataLayout as LCLD
 import qualified Lang.Crucible.LLVM.Intrinsics as LCLI
 import qualified Lang.Crucible.LLVM.MemModel as LCLM
-import qualified Lang.Crucible.LLVM.MemModel.Pointer as LCLMP
 import qualified Lang.Crucible.LLVM.MemType as LCLMT
 import qualified Lang.Crucible.LLVM.SymIO as LCLS
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Lang.Crucible.Simulator.EvalStmt as LCSEv
 import qualified Lang.Crucible.Simulator.ExecutionTree as LCSE
 import qualified Lang.Crucible.Simulator.GlobalState as LCSG
-import qualified Lang.Crucible.Simulator.OverrideSim as LCSO
-import qualified Lang.Crucible.SymIO as LCSy
-import qualified Lang.Crucible.SymIO.Loader as LCSL
 import qualified Lang.Crucible.Types as LCT
 import qualified What4.BaseTypes as WT
 import qualified What4.Expr as WE
 import qualified What4.Interface as WI
-import qualified What4.ProgramLoc as WP
 import qualified What4.Protocol.Online as WPO
-import qualified What4.Symbol as WSym
 
 import qualified Stubs.Diagnostic as AD
 import qualified Stubs.Discovery as ADi
 import qualified Stubs.Exception as AE
 import qualified Stubs.Extensions as AExt
-import qualified Stubs.Extensions.Memory as AEM
 import qualified Stubs.FunctionOverride as AF
 import qualified Stubs.FunctionOverride.Extension.Types as AFET
 import qualified Stubs.Lift as ALi
 import qualified Stubs.Loader.BinaryConfig as ALB
-import qualified Stubs.Loader.LoadOptions as ALL
-import qualified Stubs.Loader.Relocations as ALR
-import qualified Stubs.Loader.Versioning as ALV
-import qualified Stubs.Memory as AM
 import qualified Stubs.Panic as AP
 import qualified Stubs.Solver as AS
-import qualified Stubs.Syscall as ASy
-import qualified Stubs.Verifier.Concretize as AVC
 import qualified Stubs.Translate as ST
 import qualified Stubs.Wrapper as SW
 import qualified Stubs.Translate.Core as STC
 import qualified Stubs.Preamble as SPR
 import qualified Stubs.Common as SC
 import qualified Stubs.Memory as SM
-import qualified Data.Parameterized.NatRepr as PN
-import qualified Lang.Crucible.LLVM.Extension as DMX
-import qualified Data.Macaw.X86 as DMX
 import qualified Stubs.Memory.X86_64.Linux ()
 import qualified Stubs.Memory.AArch32.Linux ()
 import qualified Lang.Crucible.LLVM.Errors as LCLE
@@ -124,6 +95,7 @@ import qualified Lang.Crucible.LLVM.MemModel.CallStack as LCLMC
 import Stubs.Memory.Common
 import qualified Stubs.Extensions as SE
 import Data.Data (Typeable)
+import Control.Lens ((^.), set)
 
 data SymbolicExecutionConfig arch sym = SymbolicExecutionConfig
   { secSolver :: AS.Solver
@@ -141,21 +113,6 @@ data SymbolicExecutionResult arch sym mem=  (SM.IsStubsMemoryModel mem arch) => 
                                             (LCS.RegEntry sym (DMS.ArchRegStruct arch))
  -- ^ Crucible execution result
   }
-
-
-class (SM.IsStubsMemoryModel DMS.LLVMMemory arch
-  , STC.StubsArch arch
-  , SPR.Preamble arch
-  , SM.PtrType DMS.LLVMMemory arch ~ LCLM.LLVMPointerType (DMC.ArchAddrWidth arch)
-  , SM.MemType DMS.LLVMMemory arch ~ LCLM.Mem
-  , Typeable arch
-  ,SM.VerifierState sym DMS.LLVMMemory arch ~ SE.AmbientSimulatorState sym arch
-  ,WI.IsExprBuilder sym, WI.IsSymExprBuilder sym,forall scope st fs. sym ~ WE.ExprBuilder scope st fs
-  , 1 <= (DMC.ArchAddrWidth arch)
-  , DMM.MemWidth (DMC.ArchAddrWidth arch)
-  , 16 <= DMC.ArchAddrWidth arch
-  ,forall bak . LCB.IsSymBackend sym bak) => TestableStubsArch sym arch
-
 
 -- | The stack size in bytes
 stackSize :: Integer
@@ -490,7 +447,7 @@ simulateFunction
   , Typeable arch
   ,SM.VerifierState sym DMS.LLVMMemory arch ~ SE.AmbientSimulatorState sym arch
   ,WI.IsExprBuilder sym, WI.IsSymExprBuilder sym
-  , 1 <= (DMC.ArchAddrWidth arch)
+  , 1 <= DMC.ArchAddrWidth arch
   , DMM.MemWidth (DMC.ArchAddrWidth arch)
   , 16 <= DMC.ArchAddrWidth arch
      )
@@ -504,11 +461,6 @@ simulateFunction
   -> SM.InitialMemory sym DMS.LLVMMemory arch
   -> DMC.ArchSegmentOff arch
   -- ^ The address of the entry point function
-  -> Maybe FilePath
-  -- ^ Path to the symbolic filesystem.  If this is 'Nothing', the file system
-  -- will be empty
-  -> Maybe FilePath
-  -- ^ Optional path to the file to log function calls to
   -> ALB.BinaryConfig arch binFmt
   -- ^ Information about the loaded binaries
   -> ABIConfig arch sym p DMS.LLVMMemory
@@ -519,7 +471,7 @@ simulateFunction
   -- ^ The user-supplied environment variables
   -> [ST.CrucibleProgram arch]
   -> m (SymbolicExecutionResult arch sym DMS.LLVMMemory)
-simulateFunction logAction bak execFeatures halloc archInfo archVals seConf initialMem entryPointAddr mFsRoot mFnCallLog binConf fnConf cliArgs envVars crProgs = do
+simulateFunction logAction bak execFeatures halloc archInfo archVals seConf initialMem entryPointAddr binConf fnConf cliArgs envVars crProgs = do
   let sym = LCB.backendGetSym bak
   let symArchFns = DMS.archFunctions archVals
   let crucRegTypes = DMS.crucArchRegTypes symArchFns
@@ -530,18 +482,12 @@ simulateFunction logAction bak execFeatures halloc archInfo archVals seConf init
   -- Put the stack pointer in the middle of our allocated stack so that both sides can be addressed
   initialRegs <- liftIO $ DMS.macawAssignToCrucM (mkInitialRegVal symArchFns sym) (DMS.crucGenRegAssignment symArchFns)
   stackInitialOffset <- liftIO $ WI.bvLit sym WI.knownRepr (BVS.mkBV WI.knownRepr stackOffset)
-  sp <- liftIO $ SM.genStackPtr @DMS.LLVMMemory @arch @_ @sym (AM.imStackBasePtr initialMem) stackInitialOffset (SC.Sym sym bak)
+  sp <- liftIO $ SM.genStackPtr @DMS.LLVMMemory @arch @_ @sym (SM.imStackBasePtr initialMem) stackInitialOffset (SC.Sym sym bak)
   let initialRegsEntry = LCS.RegEntry regsRepr initialRegs
   let regsWithStack = SM.insertStackPtr archVals sp initialRegsEntry
 
-  -- Initialize the file system
-  fileContents <- liftIO $
-    case mFsRoot of
-      Nothing -> return LCSy.emptyInitialFileSystemContents
-      Just fsRoot -> LCSL.loadInitialFiles sym fsRoot
   let ?ptrWidth = WI.knownRepr
-  (fs, globals0, LCLS.SomeOverrideSim initFSOverride) <- liftIO $
-    LCLS.initialLLVMFileSystem halloc sym WI.knownRepr fileContents [] (AM.imGlobals initialMem)
+  let globals0 = SM.imGlobals initialMem
 
   environGlob <- liftIO $
     LCCC.freshGlobalVar halloc
@@ -563,11 +509,11 @@ simulateFunction logAction bak execFeatures halloc archInfo archVals seConf init
                                      ovs
                                      [Some environGlob]
 
-  let mem0 = case LCSG.lookupGlobal (AM.imMemVar initialMem) globals0 of
+  let mem0 = case LCSG.lookupGlobal (SM.imMemVar initialMem) globals0 of
                Just mem -> mem
                Nothing  -> AP.panic AP.FunctionOverride "simulateFunction"
                              [ "Failed to find global variable for memory: "
-                               ++ show (LCCC.globalName (AM.imMemVar initialMem)) ]
+                               ++ show (LCCC.globalName (SM.imMemVar initialMem)) ]
   (mainReg0, mainReg1, mainReg2) <-
     case SM.functionIntegerArgumentRegisters functionABI of
       (reg0:reg1:reg2:_) -> pure (reg0, reg1, reg2)
@@ -575,7 +521,7 @@ simulateFunction logAction bak execFeatures halloc archInfo archVals seConf init
              [ "Not enough registers for the main() function" ]
   (mainArgVals, regsWithMainArgs, mem1) <- liftIO $
     initMainArguments bak mem0 archVals mainReg0 mainReg1 mainReg2 cliArgs envVars regsWithStack
-  let globals2 = LCSG.insertGlobal (AM.imMemVar initialMem) mem1 $
+  let globals2 = LCSG.insertGlobal (SM.imMemVar initialMem) mem1 $
                  LCSG.insertGlobal environGlob (envpVal mainArgVals) globals0
   let arguments = LCS.RegMap (Ctx.singleton regsWithMainArgs)
 
@@ -585,7 +531,6 @@ simulateFunction logAction bak execFeatures halloc archInfo archVals seConf init
                                                  (DMS.archFunctions archVals) discoveredEntry
   let simAction = LCS.runOverrideSim regsRepr $ do
                     -- First, initialize the symbolic file system...
-                    initFSOverride
 
                     -- ...then simulate any startup overrides...
                     F.traverse_ (\ov -> AF.functionOverride ov
@@ -641,7 +586,7 @@ simulateFunction logAction bak execFeatures halloc archInfo archVals seConf init
     let executionFeatures = [sbsRecorder | secLogBranches seConf] ++ fmap LCS.genericToExecutionFeature execFeatures
 
     res <- liftIO $ LCS.executeCrucible executionFeatures s0
-    return $ SymbolicExecutionResult (AM.imMemVar initialMem)
+    return $ SymbolicExecutionResult (SM.imMemVar initialMem)
                                      res
   where
     -- Syntax overrides cannot make use of variadic arguments, so if this
@@ -678,7 +623,7 @@ symbolicallyExecute
   , Typeable arch
   ,SM.VerifierState sym DMS.LLVMMemory arch ~ SE.AmbientSimulatorState sym arch
   ,WI.IsExprBuilder sym, WI.IsSymExprBuilder sym
-  , 1 <= (DMC.ArchAddrWidth arch)
+  , 1 <= DMC.ArchAddrWidth arch
   , DMM.MemWidth (DMC.ArchAddrWidth arch)
   , 16 <= DMC.ArchAddrWidth arch
      )
@@ -691,14 +636,6 @@ symbolicallyExecute
   -> [LCS.GenericExecutionFeature sym]
   -> DMC.ArchSegmentOff arch
   -- ^ The address of the entry point function
-  -> AM.MemoryModel ()
-  -- ^ Which memory model configuration to use
-  -- ^ Function to initialize special global variables needed for 'arch'
-  -> Maybe FilePath
-  -- ^ Path to the symbolic filesystem.  If this is 'Nothing', the file system
-  -- will be empty
-  -> Maybe FilePath
-  -- ^ Optional path to the file to log function calls to
   -> ALB.BinaryConfig arch binFmt
   -- ^ Information about the loaded binaries
   -> ABIConfig arch sym (SE.AmbientSimulatorState sym arch) DMS.LLVMMemory
@@ -709,6 +646,6 @@ symbolicallyExecute
   -- ^ The user-supplied environment variables
   -> [ST.CrucibleProgram arch]
   -> m (SymbolicExecutionResult arch sym DMS.LLVMMemory)
-symbolicallyExecute logAction bak halloc archInfo archVals seConf execFeatures entryPointAddr memModel mFsRoot mFnCallLog binConf fnConf cliArgs envVars crucProgs= do
+symbolicallyExecute logAction bak halloc archInfo archVals seConf execFeatures entryPointAddr binConf fnConf cliArgs envVars crucProgs= do
   initialMem <- SM.initMem (SC.Sym (LCB.backendGetSym bak) bak) archInfo stackSize binConf halloc
-  simulateFunction logAction bak execFeatures halloc archInfo archVals seConf initialMem entryPointAddr mFsRoot mFnCallLog binConf fnConf cliArgs envVars crucProgs
+  simulateFunction logAction bak execFeatures halloc archInfo archVals seConf initialMem entryPointAddr binConf fnConf cliArgs envVars crucProgs
