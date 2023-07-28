@@ -64,10 +64,6 @@ import qualified Lang.Crucible.LLVM.MemModel.Pointer as LCLMP
 import qualified Data.Macaw.BinaryLoader.ELF as DMBE
 import qualified Stubs.Loader.LoadOptions as SLL
 import qualified Data.Foldable as F
-import qualified Data.Macaw.Symbolic.Backend as DMSB
-import qualified Data.Macaw.Symbolic.MemOps as DMSMO
-import qualified Stubs.Extensions.Memory as AEM
-import qualified Data.BitVector.Sized as BV
 import qualified Data.Macaw.Symbolic.Memory as DMSM
 import qualified Data.BinarySymbols as BinSym
 import qualified Data.ByteString as BS
@@ -764,7 +760,7 @@ insertFunctionOverrideReferences ::
   LCF.FnHandleMap (LCS.FnState p sym ext) ->
   LCSG.SymGlobalState sym ->
   IO (LCF.FnHandleMap (LCS.FnState p sym ext), LCSG.SymGlobalState sym)
-insertFunctionOverrideReferences bak abi = go
+insertFunctionOverrideReferences _ abi = go
   where
     go :: forall args' ret'.
       AF.FunctionOverride p sym args' arch ret' ->

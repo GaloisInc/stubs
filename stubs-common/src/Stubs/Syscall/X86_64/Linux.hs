@@ -8,7 +8,6 @@
 
 module Stubs.Syscall.X86_64.Linux ( x86_64LinuxSyscallABI ) where
 
-import qualified Data.Map.Strict as Map
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as PN
 
@@ -20,13 +19,11 @@ import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Lang.Crucible.LLVM.MemModel as LCLM
 import qualified Lang.Crucible.Types as LCT
-import qualified What4.FunctionName as WF
 import qualified What4.Interface as WI
 
 import qualified Stubs.Extensions as AE
 import qualified Stubs.Override as AO
 import qualified Stubs.Panic as AP
-import qualified Stubs.Syscall as AS
 import qualified Stubs.Syscall.Names.X86_64.Linux as SN
 import qualified Stubs.Memory as SM
 

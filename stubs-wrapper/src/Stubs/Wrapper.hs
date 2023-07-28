@@ -134,24 +134,24 @@ crucibleProgramToFunctionOverride sym prog = do
 -- | Generate overrides for functions marked as init hooks - these are intended to run before symbolic execution of a binary
 -- All init hooks have the signature Unit -> Unit
 genInitHooks ::(STC.StubsArch arch, SPR.Preamble arch) =>SC.Sym sym -> ST.CrucibleProgram arch -> IO [SF.FunctionOverride p sym Ctx.EmptyCtx arch LCT.UnitType ]
-genInitHooks sym prog = do 
+genInitHooks sym prog = do
       -- Translate preambles into bindings
       let wrappedPre = ST.crFnHandleMap prog
       let preambleBindings = map (wrappedPreambleToBinding sym) wrappedPre
        -- Haskell Overrides to bindings 
       let wrappedHovs = ST.crOvHandleMap prog
       let ovBindings = map (wrappedOverrideToBinding sym) wrappedHovs
-      let (inits, _) = List.partition (isInitPoint (ST.crInit prog)) (ST.crCFGs prog) 
+      let (inits, _) = List.partition (isInitPoint (ST.crInit prog)) (ST.crCFGs prog)
       mapM (acfgToInitOverride preambleBindings ovBindings) inits
 
 -- | Similar to genInitHooks, but for init hooks of override modules
 genInitOvHooks :: (STC.StubsArch arch, SPR.Preamble arch) =>SC.Sym sym -> ST.CrucibleProgram arch -> IO [SF.FunctionOverride p sym Ctx.EmptyCtx arch LCT.UnitType]
-genInitOvHooks sym prog = do 
+genInitOvHooks sym prog = do
     let (inits, _) = List.partition (isInitOv (ST.crOvInits prog)) (ST.crOvHandleMap prog)
     mapM (wrappedOverrideToInitOv sym) inits
 
 acfgToInitOverride ::  (STC.StubsArch arch, SPR.Preamble arch) =>  [LCS.FnBinding p sym (DMS.MacawExt arch)] -> [LCS.FnBinding p sym (DMS.MacawExt arch)] -> LCSC.ACFG (DMS.MacawExt arch) -> IO  (SF.FunctionOverride p sym Ctx.EmptyCtx arch LCT.UnitType)
-acfgToInitOverride preambleBindings ovBindings (LCSC.ACFG Ctx.Empty LCT.UnitRepr cfg) = do 
+acfgToInitOverride preambleBindings ovBindings (LCSC.ACFG Ctx.Empty LCT.UnitRepr cfg) = do
   let name = LCF.handleName (LCCR.cfgHandle cfg)
   let argMap = SFA.bitvectorArgumentMapping Ctx.Empty
       (ptrTypes, ptrTypeMapping) = SFA.pointerArgumentMappping argMap
@@ -165,7 +165,7 @@ acfgToInitOverride preambleBindings ovBindings (LCSC.ACFG Ctx.Empty LCT.UnitRepr
                     SF.functionReturnType=retRepr,
                     SF.functionAuxiliaryFnBindings=preambleBindings++ovBindings, --Should have preamble + overrides here
                     SF.functionForwardDeclarations=mempty,
-                    SF.functionOverride= \bak args _ _ -> do 
+                    SF.functionOverride= \bak args _ _ -> do
                         pointerArgs <- liftIO $ SFA.buildFunctionOverrideArgs bak argMap ptrTypeMapping args
                         userRes <- LCS.callCFG ssaCFG (LCS.RegMap pointerArgs)
                         SF.OverrideResult [] . LCS.regValue <$> liftIO (SFA.convertBitvector bak retRepr userRes)
@@ -173,7 +173,7 @@ acfgToInitOverride preambleBindings ovBindings (LCSC.ACFG Ctx.Empty LCT.UnitRepr
 acfgToInitOverride _ _ (LCSC.ACFG _ _ cfg)= fail ("Attempted to generate init override with invalid signature: " ++ show (LCCR.cfgHandle cfg))
 
 wrappedOverrideToInitOv :: (STC.StubsArch arch, SPR.Preamble arch) => SC.Sym sym -> ST.SomeWrappedOverride arch -> IO  (SF.FunctionOverride p sym Ctx.EmptyCtx arch LCT.UnitType)
-wrappedOverrideToInitOv sym (ST.SomeWrappedOverride (ST.WrappedOverride ovf (STC.StubHandle Ctx.Empty SA.StubsUnitRepr n))) = do 
+wrappedOverrideToInitOv sym (ST.SomeWrappedOverride (ST.WrappedOverride ovf (STC.StubHandle Ctx.Empty SA.StubsUnitRepr n))) = do
     let argMap = SFA.bitvectorArgumentMapping Ctx.Empty
         (ptrTypes, ptrTypeMapping) = SFA.pointerArgumentMappping argMap
         retRepr = SFA.promoteBVToPtr LCT.UnitRepr
@@ -183,15 +183,15 @@ wrappedOverrideToInitOv sym (ST.SomeWrappedOverride (ST.WrappedOverride ovf (STC
                     SF.functionExterns=mempty,
                     SF.functionArgTypes=ptrTypes,
                     SF.functionReturnType=retRepr,
-                    SF.functionAuxiliaryFnBindings=[], --Should have preamble + overrides here
+                    SF.functionAuxiliaryFnBindings=[],
                     SF.functionForwardDeclarations=mempty,
-                    SF.functionOverride= \bak args _ _ -> do 
+                    SF.functionOverride= \bak args _ _ -> do
                         pointerArgs <- liftIO $ SFA.buildFunctionOverrideArgs bak argMap ptrTypeMapping args
                         userRes <- LCS.callOverride n (ovf sym) (LCS.RegMap pointerArgs)
                         SF.OverrideResult [] . LCS.regValue <$> liftIO (SFA.convertBitvector bak retRepr userRes)
                   })
 
-wrappedOverrideToInitOv _ (ST.SomeWrappedOverride (ST.WrappedOverride a (STC.StubHandle _ _ n))) = fail ("Attempted to generate init override with invalid signature: " ++ (show $ LCF.handleName n))
+wrappedOverrideToInitOv _ (ST.SomeWrappedOverride (ST.WrappedOverride _ (STC.StubHandle _ _ n))) = fail ("Attempted to generate init override with invalid signature: " ++ show (LCF.handleName n))
 
 
 -- | Convert a 'LCSC.ParsedProgram' at a the given 'FilePath' to a function
@@ -223,11 +223,11 @@ isEntryPoint :: String -> LCSC.ACFG ext -> Bool
 isEntryPoint path acfg =
   acfgHandleName acfg == DS.fromString path
 
-isInitPoint :: [String] -> LCSC.ACFG ext -> Bool 
-isInitPoint initNames acfg = List.elem (show $ acfgHandleName acfg) initNames
+isInitPoint :: [String] -> LCSC.ACFG ext -> Bool
+isInitPoint initNames acfg = show (acfgHandleName acfg) `elem` initNames
 
-isInitOv :: [String] -> ST.SomeWrappedOverride arch -> Bool 
-isInitOv initNames (ST.SomeWrappedOverride (ST.WrappedOverride o (STC.StubHandle _ _ hdl) )) = List.elem (show $ LCF.handleName hdl) initNames
+isInitOv :: [String] -> ST.SomeWrappedOverride arch -> Bool
+isInitOv initNames (ST.SomeWrappedOverride (ST.WrappedOverride _ (STC.StubHandle _ _ hdl) )) = show (LCF.handleName hdl) `elem` initNames
 
 -- | Retrieve the 'WF.FunctionName' in the handle in a 'LCSC.ACFG'.
 acfgHandleName :: LCSC.ACFG ext -> WF.FunctionName
@@ -282,8 +282,8 @@ acfgToFnBinding (LCSC.ACFG _ _ g) =
       LCS.FnBinding (LCCR.cfgHandle g)
                     (LCS.UseCFG ssa (LCAP.postdomInfo ssa))
 
-wrappedPreambleToBinding :: SC.Sym sym -> ST.SomePreambleOverride arch -> LCS.FnBinding p sym (DMS.MacawExt arch) 
+wrappedPreambleToBinding :: SC.Sym sym -> ST.SomePreambleOverride arch -> LCS.FnBinding p sym (DMS.MacawExt arch)
 wrappedPreambleToBinding (SC.Sym _ bak) (ST.SomePreambleOverride (ST.PreambleOverride ovf (STC.StubHandle _ _ hdl) )) = LCS.FnBinding hdl (LCS.UseOverride (ovf bak))
 
-wrappedOverrideToBinding :: SC.Sym sym -> ST.SomeWrappedOverride arch -> LCS.FnBinding p sym (DMS.MacawExt arch) 
+wrappedOverrideToBinding :: SC.Sym sym -> ST.SomeWrappedOverride arch -> LCS.FnBinding p sym (DMS.MacawExt arch)
 wrappedOverrideToBinding sym (ST.SomeWrappedOverride (ST.WrappedOverride ovf (STC.StubHandle _ _ hdl))) = LCS.FnBinding hdl (LCS.UseOverride (ovf sym))

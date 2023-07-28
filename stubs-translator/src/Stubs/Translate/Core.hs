@@ -37,17 +37,12 @@ import qualified Stubs.AST as SA
 import GHC.TypeNats (Nat, KnownNat)
 import qualified Data.Parameterized as P
 import Unsafe.Coerce (unsafeCoerce)
-import qualified Lang.Crucible.FunctionHandle as LCCR
 import qualified Lang.Crucible.CFG.Common as LCCC
-import qualified What4.Protocol.Online as WPO
-import qualified Lang.Crucible.Backend.Online as LCBO
-import qualified What4.Expr as WE
-import qualified Lang.Crucible.Backend as LCB
-import qualified What4.Interface as WI
 import qualified Data.Data as Data
+import Data.Kind (Type)
 
 -- | Type family to map a list of Stubs types to a corresponding list of Crucible types
-type family ArchTypeMatchCtx (arch :: *) (stubTy :: Ctx SA.StubsType) = (crucTy :: Ctx LCT.CrucibleType) where
+type family ArchTypeMatchCtx (arch :: Type) (stubTy :: Ctx SA.StubsType) = (crucTy :: Ctx LCT.CrucibleType) where
     ArchTypeMatchCtx arch 'EmptyCtx = 'EmptyCtx
     ArchTypeMatchCtx arch (a ::> k) = ArchTypeMatchCtx arch a ::> ArchTypeMatch arch k
 

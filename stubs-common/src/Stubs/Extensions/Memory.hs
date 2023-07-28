@@ -44,7 +44,6 @@ import qualified Lang.Crucible.Simulator as LCS
 import qualified What4.Interface as WI
 
 import qualified Stubs.Panic as AP
-import qualified Stubs.Memory as SM
 
 -- | An index of all of the (statically) mapped memory in a program, suitable
 -- for pointer translation. This is much like the @MemPtrTable@ in

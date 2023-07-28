@@ -15,19 +15,13 @@ module Stubs.Syscall (
   ) where
 
 import qualified Data.Kind as Kind
-import qualified Data.Map.Strict as Map
-import qualified Data.IntMap as IM
-import qualified Data.Text as DT
 import qualified Data.Parameterized.Classes as PC
 import qualified Data.Parameterized.Context as Ctx
 
-import qualified Data.Macaw.CFG as DMC
 import           Data.Macaw.X86.Symbolic ()
 import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Lang.Crucible.FunctionHandle as LCF
-import qualified Lang.Crucible.LLVM.MemModel as LCLM
-import qualified Lang.Crucible.LLVM.SymIO as LCLS
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Lang.Crucible.Types as LCT
 import qualified What4.Expr as WE

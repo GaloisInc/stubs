@@ -11,16 +11,12 @@ import qualified Data.Map.Strict as Map
 import           Data.Parameterized.Some ( Some(..) )
 
 import qualified Data.Macaw.CFG as DMC
-import qualified Lang.Crucible.LLVM.MemModel as LCLM
-import qualified Lang.Crucible.LLVM.SymIO as LCLS
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Lang.Crucible.Syntax.Atoms as LCSA
 import qualified What4.FunctionName as WF
 
 import qualified Stubs.Extensions as AE
 import qualified Stubs.FunctionOverride as AF
-import qualified Stubs.Memory as AM
-import qualified Stubs.Memory as SM
 
 -- | Compute a pair of maps, where the first element contains a mapping from
 -- function names to overrides, and the second element contains a mapping from

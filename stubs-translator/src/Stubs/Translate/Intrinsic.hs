@@ -20,7 +20,6 @@ import qualified Data.Macaw.Symbolic as DMS
 import qualified Data.Parameterized as P
 import qualified Lang.Crucible.Types as LCT
 import qualified Data.Parameterized.Context as Ctx
-import qualified Stubs.Preamble as SPR
 import Control.Monad.IO.Class (MonadIO)
 
 -- | Declaration of an Intrinsic type. These are similar to Opaques, but map directly into a Crucible type instead of a Stubs type

@@ -18,8 +18,6 @@ module Stubs.FunctionOverride (
   , FunctionOverrideContext(..)
   ) where
 
-import           Control.Monad.IO.Class ( MonadIO(liftIO) )
-import qualified Data.List.NonEmpty as NEL
 import qualified Data.Map.Strict as Map
 import qualified Data.Parameterized.Context as Ctx
 import           Data.Parameterized.Some ( Some )
@@ -31,7 +29,6 @@ import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Lang.Crucible.FunctionHandle as LCF
 import qualified Lang.Crucible.LLVM.MemModel as LCLM
-import qualified Lang.Crucible.LLVM.SymIO as LCLS
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Lang.Crucible.Syntax.Atoms as LCSA
 import qualified Lang.Crucible.Types as LCT
@@ -219,7 +216,7 @@ syscallToFunctionOverride ::
   -- ^ In what context is this override being run?
   AS.Syscall p sym args (DMS.MacawExt arch) ret ->
   FunctionOverride p sym args arch ret
-syscallToFunctionOverride fovCtx syscallOv = FunctionOverride
+syscallToFunctionOverride _ syscallOv = FunctionOverride
   { functionName = name
   , functionGlobals = Map.empty
   , functionExterns = Map.empty

@@ -52,7 +52,6 @@ import qualified Data.Map.Strict as Map
 import           Data.Maybe ( fromMaybe, isNothing )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
-import           Data.Parameterized.Some ( Some )
 import qualified Data.Sequence as Seq
 import qualified Data.Vector as DV
 import           Data.Word ( Word8 )
@@ -82,18 +81,14 @@ import qualified What4.Protocol.Online as WPO
 
 import qualified Stubs.Exception as AE
 import qualified Stubs.Extensions.Memory as AEM
---import qualified Stubs.FunctionOverride as AF
 import qualified Stubs.Memory.SharedMemory as AMS
---import qualified Stubs.Syscall as ASy
 import qualified Stubs.Verifier.Concretize as AVC
 import qualified Stubs.Syscall as ASy
 import qualified Stubs.FunctionOverride as AF
-import qualified Stubs.Memory as SM
 import qualified Lang.Crucible.LLVM.MemModel.CallStack
 import qualified Lang.Crucible.LLVM.MemModel.Partial as LCLMP
 import qualified Lang.Crucible.LLVM.Errors as LCLE
---import qualified Stubs.Memory as SM
-
+import qualified Stubs.Memory as SM
 -- | Return @ambient-verifier@ extension evaluation functions.
 ambientExtensions ::
      forall sym arch bak scope st fs solver w. ( LCB.IsSymInterface sym

@@ -25,7 +25,6 @@ module Stubs.Memory (
   , SyscallABI(..)
   , BuildFunctionABI(..)
   , BuildSyscallABI(..)
-  , VerifierState
   ) where
 
 import qualified Control.Applicative as App
