@@ -143,7 +143,7 @@ withSupportedPointerReadWriteTypes tp bvK ptrK =
 -- simplifies the use site.
 extensionParser :: forall s m ext arch w
                  . ( ExtensionParser m ext s
-                   , ext ~ (DMS.MacawExt arch)
+                   , ext ~ DMS.MacawExt arch
                    , w ~ DMC.ArchAddrWidth arch
                    , 1 <= w
                    , KnownNat w
@@ -285,7 +285,7 @@ wrapPointerAdd = ExtensionWrapper
   { extName = LCSA.AtomName "pointer-add"
   , extArgTypes = Ctx.empty Ctx.:> LCLM.LLVMPointerRepr LCT.knownNat
                             Ctx.:> LCT.BVRepr LCT.knownNat
-  , extWrapper = \args -> Ctx.uncurryAssignment (binopRhsBvToPtr DMS.PtrAdd) args }
+  , extWrapper = Ctx.uncurryAssignment (binopRhsBvToPtr DMS.PtrAdd) }
 
 -- | Wrapper for the 'DMS.PtrSub' syntax extension that enables users to
 -- subtract integer offsets from pointers:
@@ -307,7 +307,7 @@ wrapPointerSub = ExtensionWrapper
   { extName = LCSA.AtomName "pointer-sub"
   , extArgTypes = Ctx.empty Ctx.:> LCLM.LLVMPointerRepr LCT.knownNat
                             Ctx.:> LCT.BVRepr LCT.knownNat
-  , extWrapper = \args -> Ctx.uncurryAssignment (binopRhsBvToPtr (DMS.PtrSub . DMM.addrWidthRepr)) args }
+  , extWrapper = Ctx.uncurryAssignment (binopRhsBvToPtr (DMS.PtrSub . DMM.addrWidthRepr)) }
 
 -- | Compute the difference between two pointers in bytes using 'DMS.PtrSub'
 pointerDiff :: ( w ~ DMC.ArchAddrWidth arch
@@ -343,7 +343,7 @@ wrapPointerDiff = ExtensionWrapper
   { extName = LCSA.AtomName "pointer-diff"
   , extArgTypes = Ctx.empty Ctx.:> LCLM.LLVMPointerRepr LCT.knownNat
                             Ctx.:> LCLM.LLVMPointerRepr LCT.knownNat
-  , extWrapper = \args -> Ctx.uncurryAssignment pointerDiff args }
+  , extWrapper = Ctx.uncurryAssignment pointerDiff }
 
 -- | Wrapper for 'DMS.MacawNullPtr' to construct a null pointer.
 --
@@ -380,7 +380,7 @@ wrapPointerEq = ExtensionWrapper
  { extName = LCSA.AtomName "pointer-eq"
  , extArgTypes = Ctx.empty Ctx.:> LCLM.LLVMPointerRepr LCT.knownNat
                            Ctx.:> LCLM.LLVMPointerRepr LCT.knownNat
- , extWrapper = \args -> Ctx.uncurryAssignment (binop (DMS.PtrEq . DMM.addrWidthRepr)) args }
+ , extWrapper = Ctx.uncurryAssignment (binop (DMS.PtrEq . DMM.addrWidthRepr)) }
 
 -- | Wrapper for the 'DMS.MacawReadMem' syntax extension that enables users to
 -- read through a pointer to retrieve data at the underlying memory location.
@@ -400,8 +400,7 @@ buildPointerReadWrapper
 buildPointerReadWrapper tp endianness = ExtensionWrapper
   { extName = LCSA.AtomName "pointer-read"
   , extArgTypes = Ctx.empty Ctx.:> LCLM.LLVMPointerRepr LCT.knownNat
-  , extWrapper =
-      \args -> Ctx.uncurryAssignment (pointerRead tp endianness) args }
+  , extWrapper =Ctx.uncurryAssignment (pointerRead tp endianness)}
 
 -- | Read through a pointer using 'DMS.MacawReadMem'.
 pointerRead :: ( w ~ DMC.ArchAddrWidth arch
@@ -446,8 +445,7 @@ buildPointerWriteWrapper tp endianness = ExtensionWrapper
   { extName = LCSA.AtomName "pointer-write"
   , extArgTypes = Ctx.empty Ctx.:> LCLM.LLVMPointerRepr LCT.knownNat
                             Ctx.:> tp
-  , extWrapper =
-      \args -> Ctx.uncurryAssignment (pointerWrite tp endianness) args }
+  , extWrapper = Ctx.uncurryAssignment (pointerWrite tp endianness) }
 
 -- | Read through a pointer using 'DMS.MacawWriteMem'.
 pointerWrite :: ( w ~ DMC.ArchAddrWidth arch
@@ -493,7 +491,7 @@ buildBvTypedLitWrapper
 buildBvTypedLitWrapper tp = ExtensionWrapper
   { extName = LCSA.AtomName "bv-typed-literal"
   , extArgTypes = Ctx.empty Ctx.:> LCT.IntegerRepr
-  , extWrapper = \args -> Ctx.uncurryAssignment (bvTypedLit tp) args }
+  , extWrapper = Ctx.uncurryAssignment (bvTypedLit tp)  }
 
 -- | Create a bitvector literal matching the size of an 'LCT.BVRepr'
 bvTypedLit :: forall s ext w m

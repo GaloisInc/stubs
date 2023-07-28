@@ -67,7 +67,6 @@ import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Stubs.Preamble as SPR
 import qualified Stubs.Translate.Core as STC
-import Stubs.AST (stubsLibDefs)
 import qualified Data.List as List
 import qualified Data.Graph as Graph
 import qualified Data.Set as Set
@@ -382,7 +381,7 @@ translateProgram ng halloc ovs prog = do
 
     let env = STC.StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) tyMap intrinsicMap
     -- Topological sort of module/lib graph
-    let dependencyList = map (\ lib -> (lib,filter (\olib -> not $ List.null $ List.intersect (stubsLibDefs olib) (SA.externSigs lib))
+    let dependencyList = map (\ lib -> (lib,filter (\olib -> not $ List.null $ List.intersect (SA.stubsLibDefs olib) (SA.externSigs lib))
                  libs)) libs
     let libMapping = fst $ foldr (\lib (acc,idx) -> (Map.insert lib idx acc,idx+1)  ) (Map.empty,0) libs
     v <- mapM (\(l, deps) -> do

@@ -9,7 +9,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE ImpredicativeTypes#-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE TypeApplications #-}
 
 {-|
 Description: Definition of Core typeclasses, monads, and constraints for translation
@@ -22,7 +21,7 @@ import qualified Lang.Crucible.Types as LCT
 import qualified Data.Macaw.CFG as DMC
 
 import qualified Data.Parameterized.NatRepr as PN
-import Data.Parameterized.Context as Ctx
+import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Map as Map
 import qualified Data.Macaw.Symbolic as DMS
@@ -30,7 +29,7 @@ import qualified Data.Macaw.Symbolic as DMS
 import qualified Lang.Crucible.CFG.Generator as LCCG
 import qualified Lang.Crucible.CFG.Expr as LCCE
 import qualified Lang.Crucible.CFG.Reg as LCCR
-import Control.Monad.RWS
+import Control.Monad.RWS ( MonadReader(ask), MonadState(get) )
 import Control.Monad.Reader (ReaderT)
 import qualified Lang.Crucible.FunctionHandle as LCF
 import qualified Stubs.AST as SA
@@ -42,9 +41,9 @@ import qualified Data.Data as Data
 import Data.Kind (Type)
 
 -- | Type family to map a list of Stubs types to a corresponding list of Crucible types
-type family ArchTypeMatchCtx (arch :: Type) (stubTy :: Ctx SA.StubsType) = (crucTy :: Ctx LCT.CrucibleType) where
-    ArchTypeMatchCtx arch 'EmptyCtx = 'EmptyCtx
-    ArchTypeMatchCtx arch (a ::> k) = ArchTypeMatchCtx arch a ::> ArchTypeMatch arch k
+type family ArchTypeMatchCtx (arch :: Type) (stubTy :: Ctx.Ctx SA.StubsType) = (crucTy :: Ctx.Ctx LCT.CrucibleType) where
+    ArchTypeMatchCtx arch 'Ctx.EmptyCtx = 'Ctx.EmptyCtx
+    ArchTypeMatchCtx arch (a Ctx.::> k) = ArchTypeMatchCtx arch a Ctx.::> ArchTypeMatch arch k
 
 -- | Type class for defining a valid architecture for translation
 class (DMS.SymArchConstraints arch, 
@@ -96,8 +95,8 @@ data StubsState arch ret args s = forall ret2 . (ret ~ ArchTypeMatch arch ret2) 
 -- | Map Assignment of StubsTypeRepr into matching Crucible reprs
 toCrucibleTyCtx :: forall ctx arch m. (StubsArch arch, HasStubsEnv arch m) => Ctx.Assignment SA.StubsTypeRepr ctx -> m (Ctx.Assignment LCT.TypeRepr (ArchTypeMatchCtx arch ctx))
 toCrucibleTyCtx assign = case alist of
-        AssignEmpty -> return Ctx.empty
-        AssignExtend a b -> do
+        Ctx.AssignEmpty -> return Ctx.empty
+        Ctx.AssignExtend a b -> do
             bc <- toCrucibleTy b
             ac <- toCrucibleTyCtx a
             return $ Ctx.extend ac bc
@@ -162,7 +161,7 @@ data StubAtom arch s (a::SA.StubsType) = forall tp . (tp ~ ArchTypeMatch arch a)
 data CrucibleGlobal arch (a::LCT.CrucibleType) = CrucibleGlobal (LCCC.GlobalVar a) (LCT.TypeRepr a)
 
 -- | A function handle, wrapped with the corresponding Stubs type information
-data StubHandle arch (a::Ctx SA.StubsType) (r::SA.StubsType) = forall args ret . (args ~ ArchTypeMatchCtx arch a, ret ~ ArchTypeMatch arch r) => StubHandle (Ctx.Assignment SA.StubsTypeRepr a) (SA.StubsTypeRepr r) (LCF.FnHandle args ret)
+data StubHandle arch (a::Ctx.Ctx SA.StubsType) (r::SA.StubsType) = forall args ret . (args ~ ArchTypeMatchCtx arch a, ret ~ ArchTypeMatch arch r) => StubHandle (Ctx.Assignment SA.StubsTypeRepr a) (SA.StubsTypeRepr r) (LCF.FnHandle args ret)
 
 -- | A wrapped StubHandle, to be kept in collections
 data SomeHandle arch = forall a b . SomeHandle (StubHandle arch a b)

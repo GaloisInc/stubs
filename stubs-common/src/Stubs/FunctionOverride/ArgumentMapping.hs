@@ -34,7 +34,7 @@ import qualified Lang.Crucible.LLVM.MemModel as LCLM
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Lang.Crucible.Types as LCT
 
-import qualified Stubs.Panic as AP
+import qualified Stubs.Panic as SP
 
 -- | Map user-provided override types to their corresponding types in the macaw
 -- translation.
@@ -182,7 +182,7 @@ convertBitvector bak to_tp re =
           return (LCS.RegEntry (LCLM.LLVMPointerRepr w1) ptr)
     (from_tp, _)
       | Just PC.Refl <- PC.testEquality to_tp from_tp -> return re
-      | otherwise -> AP.panic AP.Override "buildFunctionOverrideArg" [ "Type mismatch in override arguments:"
+      | otherwise -> SP.panic SP.Override "buildFunctionOverrideArg" [ "Type mismatch in override arguments:"
                                                                      , " override expected: " ++ show to_tp
                                                                      , " actual argument type: " ++ show from_tp
                                                                      ]

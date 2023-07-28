@@ -24,8 +24,8 @@ import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Lang.Crucible.Types as LCT
 import qualified Data.Parameterized.Context as Ctx
-import Control.Monad.IO.Class
-import Data.Text
+import Control.Monad.IO.Class ( MonadIO(..) )
+import Data.Text ( Text )
 import qualified Stubs.Translate.Core as STC
 import qualified Data.Parameterized.NatRepr as PN
 import GHC.TypeLits (KnownNat)

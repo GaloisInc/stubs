@@ -35,7 +35,7 @@ import qualified Lang.Crucible.Syntax.ExprParse as LCSE
 import qualified Lang.Crucible.Types as LCT
 import qualified What4.ProgramLoc as WP
 
-import qualified Stubs.FunctionOverride as AF
+import qualified Stubs.FunctionOverride as SF
 
 -- | The additional types ambient-verifier supports beyond those built into
 -- crucible-syntax.
@@ -78,16 +78,16 @@ data SomeExtensionWrapper arch =
 -- | The overrides in a user-specified @--overrides@ directory that have gone
 -- through a light round of validation checks.
 data CrucibleSyntaxOverrides w p sym arch = CrucibleSyntaxOverrides
-  { csoAddressOverrides :: Map.Map (AF.FunctionAddrLoc w)
-                                   (NEL.NonEmpty (AF.SomeFunctionOverride p sym arch))
+  { csoAddressOverrides :: Map.Map (SF.FunctionAddrLoc w)
+                                   (NEL.NonEmpty (SF.SomeFunctionOverride p sym arch))
     -- ^ A map of @function address overrides@. These have been checked to
     --   ensure that every override that appears in the domain of the map
     --   corresponds to a @.cbl@ file.
-  , csoStartupOverrides :: [AF.FunctionOverride p sym Ctx.EmptyCtx arch LCT.UnitType]
+  , csoStartupOverrides :: [SF.FunctionOverride p sym Ctx.EmptyCtx arch LCT.UnitType]
     -- ^ A list of @startup overrides@ in the order in which they should be
     --   executed at the start of simulation. These have been validated such
     --   that we know each override has no arguments and returns @Unit@.
-  , csoNamedOverrides :: [AF.SomeFunctionOverride p sym arch]
+  , csoNamedOverrides :: [SF.SomeFunctionOverride p sym arch]
     -- ^ An override for each @<name>.cbl@'s function of the corresponding
     --   @<name>@. These have been checked to ensure that the @.cbl@ file
     --   contents are valid and that there are no duplicate names.
