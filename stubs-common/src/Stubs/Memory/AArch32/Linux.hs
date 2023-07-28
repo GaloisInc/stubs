@@ -7,6 +7,10 @@
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE InstanceSigs #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
+
+{-| Description: IsStubsMemoryModel instance for LLVMMemory with AArch32
+
+-}
 module Stubs.Memory.AArch32.Linux (
     aarch32LinuxInitGlobals
   , aarch32LinuxStmtExtensionOverride

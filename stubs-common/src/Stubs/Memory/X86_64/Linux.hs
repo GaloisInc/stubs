@@ -12,6 +12,8 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE FlexibleContexts #-}
 
+{-| Description: IsStubsMemoryModel instance for LLVMMemory with X86_64
+-}
 module Stubs.Memory.X86_64.Linux (
     x86_64LinuxStmtExtensionOverride
   , x86_64LinuxInitGlobals

@@ -6,7 +6,10 @@
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ImplicitParams #-}
+
+-- | Memory definitions useful in several architectures
 module Stubs.Memory.Common where 
+  
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Data.Parameterized.Ctx as Ctx
 import qualified Data.Parameterized.Context as Ctx

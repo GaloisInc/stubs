@@ -28,12 +28,9 @@ import qualified What4.Expr as WE
 import qualified What4.FunctionName as WF
 import qualified What4.Protocol.Online as WPO
 
-
-
 -------------------------------------------------------------------------------
 -- System Call Overrides
 -------------------------------------------------------------------------------
-
 
 -- | Syscall captures an override and type information about how to call it
 data Syscall p sym args ext ret =

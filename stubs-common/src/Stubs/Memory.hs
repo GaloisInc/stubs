@@ -84,6 +84,10 @@ data MainArgVals sym mem arch w = (IsStubsMemoryModel mem arch) => MainArgVals
   , envpVal :: PtrVal sym mem arch
   }
 
+-- | Core typeclass for memory model implementations 
+-- In order to have a more reusable simulation pipeline, this typeclass defines core requirements of a memory model
+-- NOTE: This abstraction was initially built from code that used LLVMMemory explicitly, so in future some tweaks may be necessary to support 
+-- significantly different models.
 class (DMS.IsMemoryModel mem, DMS.SymArchConstraints arch) => IsStubsMemoryModel mem arch where
   type PtrType mem arch :: LCT.CrucibleType
   type MemType mem arch :: LCT.CrucibleType
@@ -101,6 +105,7 @@ class (DMS.IsMemoryModel mem, DMS.SymArchConstraints arch) => IsStubsMemoryModel
 
   insertStackPtr :: (WI.IsExprBuilder sym, LCB.IsSymInterface sym) => DMS.GenArchVals mem arch -> PtrVal sym mem arch -> LCS.RegEntry sym (LCT.StructType (DMS.CtxToCrucibleType (DMS.ArchRegContext arch))) ->LCS.RegEntry sym (LCT.StructType (DMS.CtxToCrucibleType (DMS.ArchRegContext arch)))
 
+  -- ExtensionImpl defines how to handle Macaw memory operations
   genExtImpl :: (DMB.BinaryLoader
                       arch binfmt, Monad m, MonadIO m) => SC.Sym sym-> InitialMemory sym mem arch 
     -> DMS.MacawArchEvalFn (VerifierState sym mem arch) sym (MemType mem arch) arch 

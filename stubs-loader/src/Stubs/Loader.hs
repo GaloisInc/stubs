@@ -88,9 +88,7 @@ data FunABIExt arch = FunABIExt {
 --
 -- Note that the @sym@ parameter is only required to avoid a proxy.
 --
--- NOTE: We are currently fixing the memory model here. We will almost certainly
--- want to change that in the future (either to another fixed value or to make
--- it configurable)
+-- NOTE: The memory model here is fixed to LLVMMemory. In future, this should be configurable in some way.
 withBinary
   :: forall m sym a
    . ( CMC.MonadThrow m
