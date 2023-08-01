@@ -30,6 +30,7 @@ common shared
         containers,
         exceptions,
         filepath,
+        language-c,
         Glob,
         lens >= 4 && < 6,
         lumberjack >= 1 && < 1.1,
