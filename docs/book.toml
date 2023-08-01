@@ -1,0 +1,6 @@
+[book]
+authors = ["Christian Fontenot"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Stubs"

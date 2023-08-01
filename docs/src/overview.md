@@ -1,0 +1,3 @@
+# Overview
+
+This document is intended to provide comprehensive documentation of the Stubs language, and infrastructure necessary to produce and execute overrides for binaries using the language. While much of the project has Haddock comments for specific structures and important functions, this document is intended to focus on more of the "big picture," namely how components fit together, and explanations of key design decisions. 
