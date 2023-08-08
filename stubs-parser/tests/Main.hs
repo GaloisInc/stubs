@@ -9,9 +9,9 @@ import Stubs.Token as ST
 import Stubs.ConcreteParser as SCP
 import qualified Stubs.WeakAST as SWA
 import qualified Stubs.AST as SA
-import qualified Stubs.Lower as SLow
 import Control.Monad.Except
 import qualified Stubs.Parser.Exception as SPE
+import qualified Stubs.Parser as SP
 
 globalDeclTest :: TestTree 
 globalDeclTest = testCase "some global decls" $ do 
@@ -39,24 +39,26 @@ moduleParseTest = testCase "can parse a simple module" $ do
 
 moduleLowerTest :: TestTree
 moduleLowerTest = testCase "can lower a self-contained module" $ do 
-    input <- SCP.parseFile "./tests/test-data/counter.stb"
-    Right res <- runExceptT $ SLow.lowerModule input []
-    assertEqual "Some functions not lowered" (length $ SA.fnDecls res) 3 
-    assertEqual "Type declaration discarded" (length $ SA.tyDecls res) 1
-    assertEqual "Global lost" (length $ SA.globalDecls res) 1
-    -- todo : IMPROVE acceptance criteria, equality and show instances missing from lots of AST, so some confidence is lost
-
+    Right res <- runExceptT $ SP.parseStubsOverrides ["./tests/test-data/counter.stb"]
+    assertEqual "Some functions not lowered" (length $ SA.fnDecls $ head res) 3 
+    assertEqual "Type declaration discarded" (length $ SA.tyDecls $ head res) 1
+    assertEqual "Global lost" (length $ SA.globalDecls  $ head res) 1
 
 lowerFailUndeclared :: TestTree 
 lowerFailUndeclared = testCase "Should fail with undeclared variable usage" $ do 
-    input <- SCP.parseFile "./tests/test-data/broken.stb"
-    res <- runExceptT $ SLow.lowerModule input []
+    res <- runExceptT $  SP.parseStubsOverrides ["./tests/test-data/broken.stb"]
     case res of 
         Left (SPE.MissingVariable _ _) -> pure ()
         Left _ -> assertFailure "Caught different error"
         Right _ -> assertFailure "Did not catch undeclared variable"
 
+counterClientTest :: TestTree 
+counterClientTest = testCase "Successfully compile and lower multiple modules" $ do 
+    res <-runExceptT $  SP.parseStubsOverrides ["./tests/test-data/counter.stb", "./tests/test-data/counterClient.stb"]
+    case res of 
+        Left ex -> assertFailure (show ex)
+        Right _ -> pure ()
 
 main :: IO ()
 main = defaultMain $ do
-    testGroup "Concrete Syntax Tests" [globalDeclTest,fnLexTest,moduleParseTest,moduleLowerTest,lowerFailUndeclared]
+    testGroup "Concrete Syntax Tests" [globalDeclTest,fnLexTest,moduleParseTest,moduleLowerTest,lowerFailUndeclared, counterClientTest]

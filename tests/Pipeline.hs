@@ -49,7 +49,19 @@ import Stubs.Memory.X86_64.Linux()
 import Stubs.Memory.AArch32.Linux()
 import qualified Stubs.Logging as SLg
 import qualified Lang.Crucible.Simulator.CallFrame as LCSCF
+import qualified Stubs.Parser as SP
+import Control.Monad.Except
 
+
+parserCorePipeline :: FilePath -> [FilePath] -> [String] -> [String] -> IO (Maybe Integer)
+parserCorePipeline path progs entries inits = do 
+    i <- runExceptT (SP.parseStubsOverrides progs)
+    case i of 
+        Left err -> fail (show err)
+        Right progs -> do 
+            let prog = SA.StubsProgram{ SA.stubsModules=progs, SA.stubsEntryPoints=entries, SA.stubsInitFns=inits}
+            corePipeline path [prog]
+            
 corePipeline :: FilePath -> [SA.StubsProgram] -> IO (Maybe Integer)
 corePipeline path stubProgs = do
     contents <- B.readFile path

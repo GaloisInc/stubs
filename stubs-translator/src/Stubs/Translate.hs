@@ -32,7 +32,7 @@ module Stubs.Translate (
  SomePreambleOverride(..),
  PreambleOverride(..),
  SomeWrappedOverride(..),
- WrappedOverride(..),
+ WrappedOverride(..)
 ) where
 
 import Stubs.Translate.Core
@@ -374,10 +374,15 @@ translateProgram ng halloc ovs prog = do
     let expectedSigs = Set.difference (Set.fromList $ concatMap SA.externSigs libs) (Set.union (Set.fromList SPR.stubsPreamble) (Set.fromList ovSigs))
     let definedSigs = Set.fromList $ concatMap SA.stubsLibDefs libs
     let undefinedSigs = Set.toList $ Set.difference expectedSigs definedSigs
-    Control.Monad.RWS.when (not (null undefinedSigs)) $ fail ("Missing signatures: " ++ show undefinedSigs)
+
+    --TODO: handle opaque issues separate 
+    let tys = concatMap SA.tyDecls libs
+    t <- mapM (\sig -> SO.reifySig sig tys) undefinedSigs
+    let missingSigs = Set.toList $ Set.difference (Set.fromList t) (Set.union (Set.union (Set.fromList SPR.stubsPreamble) (Set.fromList ovSigs)) definedSigs)
+    Control.Monad.RWS.when (not (null missingSigs)) $ fail ("Missing signatures: " ++ show missingSigs) --Note: This shows the types after removing opaques, so may be unhelpful. The parser is intended to catch this sort of thing
 
     -- Collect aliases/opaques
-    let tyMap = foldr (\(SA.SomeStubsTyDecl (SA.StubsTyDecl s t)) acc -> MapF.insert s (STC.coerceToAlias s t) acc) MapF.empty ( concatMap SA.tyDecls libs)
+    let tyMap = foldr (\(SA.SomeStubsTyDecl (SA.StubsTyDecl s t)) acc -> MapF.insert s (STC.coerceToAlias s t) acc) MapF.empty tys
 
     let env = STC.StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) tyMap intrinsicMap
     -- Topological sort of module/lib graph

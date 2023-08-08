@@ -16,14 +16,14 @@ import qualified Stubs.Opaque as SO
 import qualified Stubs.Parser.Exception as SPE
 import Control.Monad.Except
 
-lowerModule :: SW.SModule -> [SA.SomeStubsGlobalDecl] -> StubsLowerM SA.StubsModule 
-lowerModule smod externGlobals = do 
+lowerModule :: SW.SModule -> [SA.SomeStubsGlobalDecl] -> [SA.SomeStubsSignature]-> StubsParserM SA.StubsModule 
+lowerModule smod externGlobals declaredSigs = do 
     types <- lowerTyDecls (SW.tys smod)
     globals <- lowerGlobals (SW.globals smod)
-    fns <- lowerFns (SW.fns smod) (externGlobals ++ globals) types
+    fns <- lowerFns (SW.fns smod) (externGlobals ++ globals) declaredSigs types
     return $ SA.mkStubsModule (SW.moduleName smod) fns types globals
 
-lowerTyDecls :: [SW.STyDecl] -> StubsLowerM [SA.SomeStubsTyDecl]
+lowerTyDecls :: [SW.STyDecl] -> StubsParserM [SA.SomeStubsTyDecl]
 lowerTyDecls tys = do 
     (decls, _) <- foldM (\(decls, m) (SW.STyDecl v t) -> case t of
         SW.SCustom s -> do 
@@ -38,16 +38,16 @@ lowerTyDecls tys = do
         ) (mempty,mempty) tys
     return decls
 
-lowerGlobals :: [SW.SGlobalDecl] -> StubsLowerM [SA.SomeStubsGlobalDecl] 
+lowerGlobals :: [SW.SGlobalDecl] -> StubsParserM [SA.SomeStubsGlobalDecl] 
 lowerGlobals = mapM (\(SW.SGlobalDecl (SW.Var s t)) -> do 
             Some ty <- lowerType t 
             return $ SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl s ty)
          ) 
 
-genSigs :: [SW.SFn] -> StubsLowerM [SA.SomeStubsSignature]
+genSigs :: [SW.SFn] -> StubsParserM [SA.SomeStubsSignature]
 genSigs = mapM genSig
 
-genSig :: SW.SFn -> StubsLowerM SA.SomeStubsSignature 
+genSig :: SW.SFn -> StubsParserM SA.SomeStubsSignature 
 genSig (SW.SFn n args ret _) = do 
     Some params <- foldM (\(Some ctx) (SW.Var _ t) -> do 
                         Some ty <- lowerType t
@@ -56,12 +56,11 @@ genSig (SW.SFn n args ret _) = do
     Some rety <- lowerType ret 
     return (SA.SomeStubsSignature (SA.StubsSignature n params rety )) 
 
-lowerFns :: [SW.SFn] -> [SA.SomeStubsGlobalDecl] -> [SA.SomeStubsTyDecl] -> StubsLowerM [SA.SomeStubsFunction]
-lowerFns fns globs tys = do 
-    fnSigs <- genSigs fns 
-    mapM (\fn -> lowerFn fn (SPR.stubsPreamble ++ fnSigs) globs tys) fns 
+lowerFns :: [SW.SFn] -> [SA.SomeStubsGlobalDecl] -> [SA.SomeStubsSignature]-> [SA.SomeStubsTyDecl] -> StubsParserM [SA.SomeStubsFunction]
+lowerFns fns globs declaredSigs tys = do 
+    mapM (\fn -> lowerFn fn (SPR.stubsPreamble ++ declaredSigs) globs tys) fns 
 
-lowerFn :: SW.SFn -> [SA.SomeStubsSignature] -> [SA.SomeStubsGlobalDecl] -> [SA.SomeStubsTyDecl] -> StubsLowerM SA.SomeStubsFunction
+lowerFn :: SW.SFn -> [SA.SomeStubsSignature] -> [SA.SomeStubsGlobalDecl] -> [SA.SomeStubsTyDecl] -> StubsParserM SA.SomeStubsFunction
 lowerFn (SW.SFn n params ret body) sigs globs tys = do
     let state = LowerState {globals=globs, types=tys,knownSigs=sigs, arguments=params, inScopeVars=[],currentFn=n}
     (sbody,_) <- runStateT (lowerStmts body) state
@@ -142,7 +141,7 @@ exprToTy e = do
                 Nothing -> do -- could be due to aliases 
                     -- need to reify assignment
                     knownTys <- gets types
-                    Some rt <- liftIO $ reifyAssignmentTys (Some t) knownTys
+                    Some rt <- liftIO $ SO.reifyAssignmentTys (Some t) knownTys
                     case lookupFn sigs f rt of
                         Just (SA.SomeStubsSignature (SA.StubsSignature _ _ r)) -> return (stubsTyToWeakTy (Some r))
                         Nothing -> do 
@@ -169,16 +168,6 @@ exprToTy e = do
                                     fnName <- gets currentFn 
                                     throwError $ SPE.MissingVariable fnName v
 
-reifyAssignmentTys :: Some (Ctx.Assignment SA.StubsTypeRepr) -> [SA.SomeStubsTyDecl] -> IO ( Some (Ctx.Assignment SA.StubsTypeRepr))
-reifyAssignmentTys (Some ctx) tys = case alist of 
-        Ctx.AssignEmpty -> pure $ Some Ctx.empty
-        Ctx.AssignExtend a b -> do 
-            Some ctx' <- reifyAssignmentTys (Some a) tys
-            case SO.reifyType b tys of 
-                SA.SomeStubsTypeRepr s -> do 
-                    return $ Some (Ctx.extend ctx' s)  
-    where alist = Ctx.viewAssign ctx
-
 lowerExpr :: SW.Expr -> StubsLowerSM (Some SA.StubsExpr)
 lowerExpr e = do 
     case e of 
@@ -198,7 +187,7 @@ lowerExpr e = do
                 Nothing -> do -- could be due to aliases 
                     -- need to reify assignment
                     knownTys <- gets types
-                    Some rt <- liftIO $ reifyAssignmentTys (Some t) knownTys
+                    Some rt <- liftIO $ SO.reifyAssignmentTys (Some t) knownTys
                     case lookupFn sigs f rt of
                         Just (SA.SomeStubsSignature (SA.StubsSignature _ _ r)) -> return $ Some (SA.AppExpr f sargs r)
                         Nothing -> do 
@@ -238,7 +227,7 @@ lookupFn ((SA.SomeStubsSignature (SA.StubsSignature v params r)):sigs) name args
         _ -> lookupFn sigs name args
 
 
-lowerType :: SW.SType -> StubsLowerM (Some SA.StubsTypeRepr)
+lowerType :: SW.SType -> StubsParserM (Some SA.StubsTypeRepr)
 lowerType t = case t of 
     SW.SInt -> pure $ Some SA.StubsIntRepr
     SW.SBool -> pure $ Some SA.StubsBoolRepr
@@ -278,5 +267,5 @@ data LowerState = LowerState {
     currentFn :: String -- useful for exception handling
 }
 
-type StubsLowerM = (ExceptT SPE.ParserException IO)
-type StubsLowerSM = (StateT LowerState StubsLowerM)
+type StubsParserM = (ExceptT SPE.ParserException IO)
+type StubsLowerSM = (StateT LowerState StubsParserM)

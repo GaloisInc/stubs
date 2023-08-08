@@ -9,7 +9,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Stubs.Parser (parseCrucibleOverrides) where 
+module Stubs.Parser (parseCrucibleOverrides, parseStubsOverrides) where 
 
 import qualified Control.Monad.Catch as CMC
 
@@ -45,6 +45,11 @@ import qualified Stubs.Exception as SE
 import           Stubs.FunctionOverride.Extension.Types
 import qualified What4.FunctionName as WF
 import qualified Data.Text as DT
+import qualified Stubs.WeakAST as SWA
+import qualified Stubs.ConcreteParser as SCP
+import qualified Stubs.AST as SA
+import qualified Stubs.Lower as SLow
+import Control.Monad.Error (MonadIO(..))
 
 parseCrucibleOverrides :: LCCE.IsSyntaxExtension ext => FilePath
                             -> Nonce.NonceGenerator IO s
@@ -180,4 +185,17 @@ parseCrucibleSyntaxOverride path contents ovLang ng halloc hooks = do
       case eAcfgs of
         Left err -> CMC.throwM (SE.CrucibleSyntaxExprParseFailure ovLang contents err)
         Right parsedProg -> pure parsedProg
+
+parseStubsOverrides :: [FilePath] -> SLow.StubsParserM [SA.StubsModule]
+parseStubsOverrides paths = do 
+  weakModules <- liftIO $ mapM SCP.parseFile paths
+  sigL <- mapM (\smod -> do 
+      SLow.genSigs (SWA.fns smod)
+    ) weakModules
+  let allSigs = concat sigL
+  globL <- mapM (\smod -> do 
+      SLow.lowerGlobals (SWA.globals smod)
+    ) weakModules 
+  let allGlobals = concat globL
+  mapM (\smod -> SLow.lowerModule smod allGlobals allSigs) weakModules
 

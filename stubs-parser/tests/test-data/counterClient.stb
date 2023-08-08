@@ -1,0 +1,16 @@
+fn unit j(){
+    init();
+    inc();
+    return ();
+}
+
+fn unit g(){
+    inc();
+    inc();
+    return ();
+}
+
+fn int f(){
+    inc();
+    return asInt();
+}

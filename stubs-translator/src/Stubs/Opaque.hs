@@ -8,12 +8,15 @@ This module implements a type-checking pass to ensure that the opaqueness of ali
 -}
 module Stubs.Opaque(
     satOpaque,
-    reifyType
+    reifyType,
+    reifySig,
+    reifyAssignmentTys
 ) where
 
 import qualified Stubs.AST as SA
 import qualified Data.Parameterized as P
 import qualified Data.Parameterized.Context as Ctx
+import Data.Parameterized (Some (Some))
 
 -- | Check if module satisifies the opaqueness requirement
 satOpaque :: SA.StubsModule -> Bool
@@ -34,6 +37,23 @@ reifyType (SA.StubsAliasRepr s) tys = case symbolLookup s tys of
         Nothing -> SA.SomeStubsTypeRepr (SA.StubsAliasRepr s)
 reifyType i _ = SA.SomeStubsTypeRepr i -- only aliases might change 
 
+reifySig :: SA.SomeStubsSignature -> [SA.SomeStubsTyDecl] -> IO SA.SomeStubsSignature
+reifySig (SA.SomeStubsSignature (SA.StubsSignature n args ret)) tys = do 
+    (SA.SomeStubsTypeRepr rr) <- pure $ reifyType ret tys
+    (Some ctx) <- reifyAssignmentTys (Some args) tys 
+    pure (SA.SomeStubsSignature (SA.StubsSignature n ctx rr))
+
+
+reifyAssignmentTys :: Some (Ctx.Assignment SA.StubsTypeRepr) -> [SA.SomeStubsTyDecl] -> IO ( Some (Ctx.Assignment SA.StubsTypeRepr))
+reifyAssignmentTys (Some ctx) tys = case alist of 
+        Ctx.AssignEmpty -> pure $ Some Ctx.empty
+        Ctx.AssignExtend a b -> do 
+            Some ctx' <- reifyAssignmentTys (Some a) tys
+            case reifyType b tys of 
+                SA.SomeStubsTypeRepr s -> do 
+                    return $ Some (Ctx.extend ctx' s)  
+    where alist = Ctx.viewAssign ctx
+    
 opaqueStmt :: [SA.SomeStubsTyDecl] -> SA.StubsSignature args ret -> SA.StubsStmt -> Bool
 opaqueStmt tys sig (SA.Return e) = reifyType (SA.sigFnRetTy sig) tys == exprToReifyTy e tys && opaqueExpr tys sig e
 opaqueStmt tys sig (SA.GlobalAssignment (SA.StubsVar _ vt) e) = reifyType vt tys == exprToReifyTy e tys && opaqueExpr tys sig e 

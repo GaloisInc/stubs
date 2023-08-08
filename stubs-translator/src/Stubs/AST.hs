@@ -359,7 +359,7 @@ stubsLibDefs :: StubsModule -> [SomeStubsSignature]
 stubsLibDefs lib = map (\(SomeStubsFunction f) -> SomeStubsSignature (stubFnSig f)) (fnDecls lib)
 
 -- Given a list of functions, generate its external dependencies, for easier library construction
-extractLibDeps :: [SomeStubsFunction] -> [SomeStubsSignature]
+extractLibDeps :: [SomeStubsFunction] ->  [SomeStubsSignature]
 extractLibDeps fns =
         let int_sigs = Set.fromList $ map (\(SomeStubsFunction(StubsFunction sig _) )-> SomeStubsSignature sig) fns in
             let sigs = Set.fromList $ concatMap (\(SomeStubsFunction (StubsFunction _ stmts)) -> extractSigsStmts stmts) fns in
