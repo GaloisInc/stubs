@@ -20,7 +20,6 @@ import qualified Data.ByteString as BS
 
 import qualified Data.Parameterized.Nonce as Nonce
 
-import qualified Data.Text as DT
 import qualified Data.Text.IO as DTI
 import qualified Data.Traversable as Trav
 import qualified Data.Vector as DV
@@ -45,8 +44,7 @@ import qualified Stubs.Exception as SE
 
 import           Stubs.FunctionOverride.Extension.Types
 import qualified What4.FunctionName as WF
-import qualified Language.C.Parser as CParser
-import qualified Language.C as C
+import qualified Data.Text as DT
 
 parseCrucibleOverrides :: LCCE.IsSyntaxExtension ext => FilePath
                             -> Nonce.NonceGenerator IO s
@@ -183,42 +181,3 @@ parseCrucibleSyntaxOverride path contents ovLang ng halloc hooks = do
         Left err -> CMC.throwM (SE.CrucibleSyntaxExprParseFailure ovLang contents err)
         Right parsedProg -> pure parsedProg
 
-parseCModule :: FilePath -> IO C.CTranslUnit
-parseCModule path = do 
-  contents <- BS.readFile path
-  case CParser.parseC contents (C.initPos path) of 
-    Left err -> fail $ show err
-    Right b -> return b
-
-type GlobDecl = forall a . (C.CTypeSpecifier a, String)
-
-isInlineAsm :: C.CExternalDeclaration a -> Bool 
-isInlineAsm (C.CAsmExt _ _) = True 
-isInlineAsm _ = False
-
-isValidFunction :: C.CExternalDeclaration a -> Bool 
-isValidFunction (C.CFDefExt (C.CFunDef specs dec args body _) ) = isValidCStmt body
-isValidFunction _ = True 
-
-isValidCExpr :: C.CExpression a -> Bool
-isValidCExpr expr = True
-
-isValidCStmt :: C.CStatement a -> Bool 
-isValidCStmt stmt = case stmt of 
-  C.CExpr mE _ -> maybe False isValidCExpr mE  -- expr discarding value
-  C.CIf _ _ _ _ -> True 
-  C.CWhile _ _ _ _ -> True  -- while loop. TODO: We could transform for loops into while loops to support them
-  C.CReturn _ _ -> True
-  C.CCompound _ _ _ -> True
-  _ -> False -- Gotos, labels, switch and cases,break, continue, for loop (see above), and assembly
-
-validateCSubset :: C.CTranslUnit -> IO Bool 
-validateCSubset (C.CTranslUnit decls _) = do 
-  -- first ensure no inlined assembly
-  if any isInlineAsm decls
-    then return False 
-    else return True
-
--- TODO:
--- Strip unneccessary parts of global decls 
--- Validate function definitions

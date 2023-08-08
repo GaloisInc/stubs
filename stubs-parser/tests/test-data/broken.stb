@@ -1,0 +1,3 @@
+fn int f(){
+    return x;
+}

@@ -1,0 +1,16 @@
+type counter = int; 
+counter c; 
+
+fn unit init(){
+    c = 5;
+    return ();
+}
+
+fn unit inc(){
+    c=plus(c,1);
+    return ();
+}
+
+fn int asInt(){
+    return c;
+}

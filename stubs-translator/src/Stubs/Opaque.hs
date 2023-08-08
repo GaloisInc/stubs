@@ -7,7 +7,8 @@ Description: Opaqueness Enforcement
 This module implements a type-checking pass to ensure that the opaqueness of aliases is properly enforced, as the translation phase cannot do this.  
 -}
 module Stubs.Opaque(
-    satOpaque
+    satOpaque,
+    reifyType
 ) where
 
 import qualified Stubs.AST as SA
