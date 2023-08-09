@@ -1,6 +1,11 @@
 {-# LANGUAGE ExplicitNamespaces #-}
 {-# LANGUAGE GADTs #-}
--- | This module handles the lowering of the Parser's output into a Stubs AST
+{-|
+Description: Lowering from Parser produced AST to Stubs AST 
+
+
+This module defines a 'lowering' step, which transforms the highlevel AST produced from parsing into a more precise AST, with more type information
+-}
 module Stubs.Lower where 
 
 import qualified Stubs.AST as SA
@@ -16,7 +21,7 @@ import qualified Stubs.Opaque as SO
 import qualified Stubs.Parser.Exception as SPE
 import Control.Monad.Except
 
--- return lowered modules, + init function names
+-- | Top level : Given a module, known globals, and known signatures, generate a StubsModule, and all init fns
 lowerModule :: SW.SModule -> [SA.SomeStubsGlobalDecl] -> [SA.SomeStubsSignature]-> StubsParserM (SA.StubsModule, [String]) 
 lowerModule smod externGlobals declaredSigs = do 
     types <- lowerTyDecls (SW.tys smod)
@@ -25,6 +30,7 @@ lowerModule smod externGlobals declaredSigs = do
     fns <- lowerFns (SW.fns smod) (externGlobals ++ globals) (declaredSigs++extSigs) types
     return (SA.mkStubsModule (SW.moduleName smod) fns types globals, map (\(SW.SFn n _ _ _ _) -> n) $ filter (\(SW.SFn _ _ _ _ f) -> f) (SW.fns smod) ) 
 
+-- | Lower type declarations 
 lowerTyDecls :: [SW.STyDecl] -> StubsParserM [SA.SomeStubsTyDecl]
 lowerTyDecls tys = do 
     (decls, _) <- foldM (\(decls, m) (SW.STyDecl v t) -> case t of
@@ -40,11 +46,13 @@ lowerTyDecls tys = do
         ) (mempty,mempty) tys
     return decls
 
+-- | Lower global variable definitions
 lowerGlobals :: [SW.SGlobalDecl] -> StubsParserM [SA.SomeStubsGlobalDecl] 
 lowerGlobals = mapM (\(SW.SGlobalDecl (SW.Var s t)) -> do 
             Some ty <- lowerType t 
             return $ SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl s ty)
          ) 
+
 
 genSigs :: [SW.SFn] -> StubsParserM [SA.SomeStubsSignature]
 genSigs = mapM genSig
@@ -52,6 +60,7 @@ genSigs = mapM genSig
 genExtSigs :: [SW.SExternDecl] -> StubsParserM [SA.SomeStubsSignature]
 genExtSigs = mapM genExtSig
 
+-- | Given a parsed function, produce the equivalent signature
 genSig :: SW.SFn -> StubsParserM SA.SomeStubsSignature 
 genSig (SW.SFn n args ret _ _) = do 
     Some params <- foldM (\(Some ctx) (SW.Var _ t) -> do 
@@ -61,6 +70,7 @@ genSig (SW.SFn n args ret _ _) = do
     Some rety <- lowerType ret 
     return (SA.SomeStubsSignature (SA.StubsSignature n params rety )) 
 
+-- | Given an extern declaration, produce the equivalent signature
 genExtSig :: SW.SExternDecl -> StubsParserM SA.SomeStubsSignature 
 genExtSig (SW.SExternDecl n ret args) = do 
     Some params <- foldM (\(Some ctx) (SW.Var _ t) -> do 
@@ -86,6 +96,11 @@ lowerFn (SW.SFn n params ret body f) sigs globs tys = do
 
 lowerStmts :: [SW.Stmt] -> StubsLowerSM [SA.StubsStmt]
 lowerStmts = mapM lowerStmt
+
+-- | Lower a single statement. This alongside lowerExpr is the core of the translation
+-- Assignments in the 'weak' AST are less precise than in Stubs' AST, as globals, locals, and arguments need to be handled differently.  
+-- Thus, we need to identify the kind of variable in question, to determine what to produce.
+-- Additionally, StubsExprs are typed, whereas the weak Expr is untyped, so some type checking is necessary.
 lowerStmt :: SW.Stmt -> StubsLowerSM SA.StubsStmt
 lowerStmt stmt = do 
     lst <- get 
@@ -182,6 +197,8 @@ exprToTy e = do
                                     fnName <- gets currentFn 
                                     throwError $ SPE.MissingVariable fnName v
 
+-- | Lower a single expression 
+-- Calls and Variables are the interesting cases, as we need to lookup return types, and determine if the variable is a global, a local, or a parameter.
 lowerExpr :: SW.Expr -> StubsLowerSM (Some SA.StubsExpr)
 lowerExpr e = do 
     case e of 
@@ -241,6 +258,7 @@ lookupFn ((SA.SomeStubsSignature (SA.StubsSignature v params r)):sigs) name args
         _ -> lookupFn sigs name args
 
 
+-- Translate Types to TypeRepr, as the Stubs AST has typed expressions
 lowerType :: SW.SType -> StubsParserM (Some SA.StubsTypeRepr)
 lowerType t = case t of 
     SW.SInt -> pure $ Some SA.StubsIntRepr
@@ -258,6 +276,7 @@ lowerType t = case t of
         Some sy <- return $ someSymbol $ DT.pack s 
         pure $ Some (SA.StubsIntrinsicRepr sy)
 
+-- | Reverse Type matching
 stubsTyToWeakTy :: Some SA.StubsTypeRepr -> SW.SType 
 stubsTyToWeakTy (Some sty) = case sty of 
     SA.StubsIntRepr -> SW.SInt 
@@ -269,7 +288,7 @@ stubsTyToWeakTy (Some sty) = case sty of
     SA.StubsUnitRepr -> SW.SUnit
     SA.StubsBoolRepr -> SW.SBool 
     SA.StubsAliasRepr s -> SW.SCustom $ show s
-    SA.StubsIntrinsicRepr s -> SW.SIntrinsic $ show s --TODO: Need an SIntrinsic to disambiguate
+    SA.StubsIntrinsicRepr s -> SW.SIntrinsic $ show s
     
 -- | State needed for lowering of functions
 data LowerState = LowerState {

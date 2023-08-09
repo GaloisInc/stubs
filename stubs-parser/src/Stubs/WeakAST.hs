@@ -19,9 +19,13 @@ data SType where
     SIntrinsic :: String -> SType
     deriving (Eq,Ord,Show)
 
+-- | Typed Variable
 data Var = Var String SType
     deriving (Eq,Ord,Show)
 
+
+-- | Simple untyped Expressions. Operations like addition are calls, just as internally. 
+-- Syntactic Sugar for common binary operations can be done in the parser itself.
 data Expr where 
     IntLit :: Integer -> Expr 
     ShortLit :: Integer -> Expr 
@@ -35,6 +39,7 @@ data Expr where
     Call :: String -> [Expr] -> Expr
     deriving (Eq,Ord,Show)
 
+-- | Stmt type corresponding to StubsStmt, with less type enforcement
 data Stmt where 
     Assignment :: String -> Expr -> Stmt 
     Return :: Expr -> Stmt 
@@ -55,6 +60,7 @@ data STyDecl = STyDecl String SType
 data SGlobalDecl = SGlobalDecl Var
     deriving (Eq,Ord,Show)
 
+-- | Extern declarations allow for type checking of code that may be linked in from OverrideModules (not present in a source file)
 data SExternDecl = SExternDecl {
     extName :: String ,
     extRet :: SType , 
