@@ -1,0 +1,11 @@
+fn int g(int x, int acc) {
+    if lt(x,2) {
+        return acc;
+    } else {
+        return g(minus(x,1),mult(acc,x));
+    }
+}
+
+fn int f(int x) {
+    return g(x,1);
+}

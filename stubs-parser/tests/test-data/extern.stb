@@ -1,0 +1,6 @@
+extern @Pointer malloc(int x);
+
+fn int f(int x){
+    ptr = malloc(x);
+    return x;
+}

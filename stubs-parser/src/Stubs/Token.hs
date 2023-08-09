@@ -24,6 +24,7 @@ data Token = INT
             | RETURN
             | AT
             | FN
+            | EXTERN
             | VAR String 
             | INTLIT Integer 
             | SHORTLIT Integer

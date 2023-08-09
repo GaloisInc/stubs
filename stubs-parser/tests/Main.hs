@@ -34,7 +34,7 @@ moduleParseTest = testCase "can parse a simple module" $ do
     \}"
     let res = SCP.stubsParser input
     let exp = SWA.SModule {SWA.moduleName="", SWA.fns = [SWA.SFn "initialize" [] SWA.SUnit [SWA.Assignment "c" (SWA.IntLit 0), SWA.Return SWA.UnitLit]  False], 
-        SWA.tys=[], SWA.globals= [SWA.SGlobalDecl (SWA.Var "c" SWA.SInt)]}
+        SWA.tys=[], SWA.globals= [SWA.SGlobalDecl (SWA.Var "c" SWA.SInt)], SWA.externs=[]}
     assertEqual "failed to properly parse" res exp
 
 moduleLowerTest :: TestTree
@@ -52,20 +52,28 @@ lowerFailUndeclared = testCase "Should fail with undeclared variable usage" $ do
         Left _ -> assertFailure "Caught different error"
         Right _ -> assertFailure "Did not catch undeclared variable"
 
-counterClientTest :: TestTree 
-counterClientTest = testCase "Successfully compile and lower multiple modules" $ do 
-    res <-runExceptT $  SP.parseStubsOverrides ["./tests/test-data/counter.stb", "./tests/test-data/counterClient.stb"] ["f"]
+parseableTest :: TestName -> [FilePath] -> [String] -> TestTree 
+parseableTest tag stubs entries = testCase tag $ do 
+    res <- runExceptT $  SP.parseStubsOverrides stubs entries 
     case res of 
         Left ex -> assertFailure (show ex)
         Right _ -> pure ()
 
+counterClientTest :: TestTree 
+counterClientTest = parseableTest "Successfully compile and lower multiple modules" ["./tests/test-data/counter.stb", "./tests/test-data/counterClient.stb"] ["f"]
+
 initFnTest :: TestTree 
-initFnTest = testCase "Successfully parse and lower init hooks" $ do 
-    res <-runExceptT $  SP.parseStubsOverrides ["./tests/test-data/init.stb"] ["f"]
-    case res of 
-        Left ex -> assertFailure (show ex)
-        Right _ -> pure ()
+initFnTest = parseableTest "Successfully parse and lower init hooks" ["./tests/test-data/init.stb"] ["f"]
+
+externDeclTest :: TestTree 
+externDeclTest = parseableTest "Successfully parse and lower code with an extern"  ["./tests/test-data/extern.stb"] ["f"]
+
+loopFactorialTest :: TestTree 
+loopFactorialTest = parseableTest "Can parse / lower loops"  ["./tests/test-data/loopFactorial.stb"] ["f"]
+
+ifElseChainTest :: TestTree 
+ifElseChainTest = parseableTest "Nested if/else" ["./tests/test-data/evenOdd.stb"] ["even", "odd"]
 
 main :: IO ()
 main = defaultMain $ do
-    testGroup "Concrete Syntax Tests" [globalDeclTest,fnLexTest,moduleParseTest,moduleLowerTest,lowerFailUndeclared, counterClientTest, initFnTest]
+    testGroup "Concrete Syntax Tests" [globalDeclTest,fnLexTest,moduleParseTest,moduleLowerTest,lowerFailUndeclared, counterClientTest, initFnTest,externDeclTest,loopFactorialTest,ifElseChainTest]

@@ -1,0 +1,23 @@
+fn bool odd(int x){
+    if eq(x,0) {
+        return false;
+    } else {
+        if even(minus(x,1)) {
+            return true; 
+        } else {
+            return false;
+        }
+    }
+}
+
+fn bool even(int x){
+    if eq(x,0){
+        return true;
+    } else {
+        if odd(minus(x,1)){
+            return true;
+        } else {
+            return false;
+        }
+    }
+}

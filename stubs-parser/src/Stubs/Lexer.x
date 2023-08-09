@@ -30,6 +30,7 @@ tokens :-
     return                { token ST.RETURN }
     fn                    { token ST.FN }
     init                  { token ST.INIT }
+    extern                { token ST.EXTERN }
 
     [=]                   { token ST.ASSIGNMENT }
     [\{]                  { token ST.LBRACE }

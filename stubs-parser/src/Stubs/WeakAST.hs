@@ -55,11 +55,18 @@ data STyDecl = STyDecl String SType
 data SGlobalDecl = SGlobalDecl Var
     deriving (Eq,Ord,Show)
 
+data SExternDecl = SExternDecl {
+    extName :: String ,
+    extRet :: SType , 
+    extParams :: [Var]
+} deriving (Eq, Ord, Show)
+
 data SModule = SModule {
     moduleName :: String, 
     fns :: [SFn],
     tys :: [STyDecl],
-    globals :: [SGlobalDecl]
+    globals :: [SGlobalDecl],
+    externs :: [SExternDecl]
 }
     deriving (Eq,Ord,Show)
 

@@ -31,6 +31,7 @@ import qualified System.FilePath as SF
       COMMA  { ST.COMMA  }
       AT     { ST.AT }
       FN     { ST.FN }
+      extern { ST.EXTERN }
       ASSIGN { ST.ASSIGNMENT }
       SEMICOLON   { ST.SEMICOLON }
       INTLIT { ST.INTLIT $$ }
@@ -47,7 +48,14 @@ import qualified System.FilePath as SF
 
 %% 
 
-Module : TyDecls GlobalDecls Fns {SWA.SModule{SWA.moduleName="", SWA.fns=$3, SWA.tys=$1, SWA.globals=$2}}
+Module : ExternDecls TyDecls GlobalDecls Fns {SWA.SModule{SWA.moduleName="", SWA.fns=$4, SWA.tys=$2, SWA.globals=$3, SWA.externs=$1}}
+
+ExternDecl : extern Type VAR UINTLIT SEMICOLON {SWA.SExternDecl{SWA.extName=$3, SWA.extRet=$2, SWA.extParams=[]}}
+           | extern Type VAR LPAREN Params RPAREN SEMICOLON {SWA.SExternDecl{SWA.extName=$3, SWA.extRet=$2, SWA.extParams=$5}}
+
+ExternDecls : {- empty -} {[]}
+            | ExternDecl {[$1]}
+            | ExternDecls ExternDecl {$2 : $1}
 
 Fn : FN Type VAR UNITLIT LBRACE Stmts RBRACE {SWA.SFn $3 [] $2 $6 False} 
    | FN Type VAR LPAREN Params RPAREN LBRACE Stmts RBRACE {SWA.SFn $3 $5 $2 $8 False}

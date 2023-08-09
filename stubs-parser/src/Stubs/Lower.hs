@@ -21,8 +21,9 @@ lowerModule :: SW.SModule -> [SA.SomeStubsGlobalDecl] -> [SA.SomeStubsSignature]
 lowerModule smod externGlobals declaredSigs = do 
     types <- lowerTyDecls (SW.tys smod)
     globals <- lowerGlobals (SW.globals smod)
-    fns <- lowerFns (SW.fns smod) (externGlobals ++ globals) declaredSigs types
-    return $ (SA.mkStubsModule (SW.moduleName smod) fns types globals, map (\(SW.SFn n _ _ _ _) -> n) $ filter (\(SW.SFn _ _ _ _ f) -> f) (SW.fns smod) ) 
+    extSigs <- genExtSigs (SW.externs smod)
+    fns <- lowerFns (SW.fns smod) (externGlobals ++ globals) (declaredSigs++extSigs) types
+    return (SA.mkStubsModule (SW.moduleName smod) fns types globals, map (\(SW.SFn n _ _ _ _) -> n) $ filter (\(SW.SFn _ _ _ _ f) -> f) (SW.fns smod) ) 
 
 lowerTyDecls :: [SW.STyDecl] -> StubsParserM [SA.SomeStubsTyDecl]
 lowerTyDecls tys = do 
@@ -48,8 +49,20 @@ lowerGlobals = mapM (\(SW.SGlobalDecl (SW.Var s t)) -> do
 genSigs :: [SW.SFn] -> StubsParserM [SA.SomeStubsSignature]
 genSigs = mapM genSig
 
+genExtSigs :: [SW.SExternDecl] -> StubsParserM [SA.SomeStubsSignature]
+genExtSigs = mapM genExtSig
+
 genSig :: SW.SFn -> StubsParserM SA.SomeStubsSignature 
 genSig (SW.SFn n args ret _ _) = do 
+    Some params <- foldM (\(Some ctx) (SW.Var _ t) -> do 
+                        Some ty <- lowerType t
+                        return $ Some $ Ctx.extend ctx ty
+                    ) (Some Ctx.Empty) args
+    Some rety <- lowerType ret 
+    return (SA.SomeStubsSignature (SA.StubsSignature n params rety )) 
+
+genExtSig :: SW.SExternDecl -> StubsParserM SA.SomeStubsSignature 
+genExtSig (SW.SExternDecl n ret args) = do 
     Some params <- foldM (\(Some ctx) (SW.Var _ t) -> do 
                         Some ty <- lowerType t
                         return $ Some $ Ctx.extend ctx ty

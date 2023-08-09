@@ -18,4 +18,10 @@ counterParsedTest = genIntegrationTest ["./stubs-parser/tests/test-data/counter.
 
 initParsedTest :: TestTree 
 initParsedTest = genIntegrationTest ["./stubs-parser/tests/test-data/init.stb"] "./tests/test-data/a.out" ["f"] "Working init hook" 9
-parserTests = [counterParsedTest, initParsedTest]
+
+externParsedTest :: TestTree 
+externParsedTest = genIntegrationTest ["./stubs-parser/tests/test-data/extern.stb"] "./tests/test-data/a.out" ["f"] "Working override modules" 5
+
+tailRecFactorialTest :: TestTree 
+tailRecFactorialTest = genIntegrationTest ["./stubs-parser/tests/test-data/factorial.stb"] "./tests/test-data/a.out" ["f"] "Tail Recursive Factorial (Concrete)" 120
+parserTests = [counterParsedTest, initParsedTest, externParsedTest, tailRecFactorialTest]
