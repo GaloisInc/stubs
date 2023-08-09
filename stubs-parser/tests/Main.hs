@@ -29,24 +29,24 @@ moduleParseTest :: TestTree
 moduleParseTest = testCase "can parse a simple module" $ do 
     let input = "int c;\
     \\
-    \fn unit init(){\
+    \fn unit initialize(){\
     \c=0;\nreturn ();\
     \}"
     let res = SCP.stubsParser input
-    let exp = SWA.SModule {SWA.moduleName="", SWA.fns = [SWA.SFn "init" [] SWA.SUnit [SWA.Assignment "c" (SWA.IntLit 0), SWA.Return SWA.UnitLit] ], 
+    let exp = SWA.SModule {SWA.moduleName="", SWA.fns = [SWA.SFn "initialize" [] SWA.SUnit [SWA.Assignment "c" (SWA.IntLit 0), SWA.Return SWA.UnitLit]  False], 
         SWA.tys=[], SWA.globals= [SWA.SGlobalDecl (SWA.Var "c" SWA.SInt)]}
     assertEqual "failed to properly parse" res exp
 
 moduleLowerTest :: TestTree
 moduleLowerTest = testCase "can lower a self-contained module" $ do 
-    Right res <- runExceptT $ SP.parseStubsOverrides ["./tests/test-data/counter.stb"]
-    assertEqual "Some functions not lowered" (length $ SA.fnDecls $ head res) 3 
-    assertEqual "Type declaration discarded" (length $ SA.tyDecls $ head res) 1
-    assertEqual "Global lost" (length $ SA.globalDecls  $ head res) 1
+    Right res <- runExceptT $ SP.parseStubsOverrides ["./tests/test-data/counter.stb"] []
+    assertEqual "Some functions not lowered" (length $ (SA.fnDecls . head . SA.stubsModules ) res) 3 
+    assertEqual "Type declaration discarded" (length $ (SA.tyDecls . head . SA.stubsModules ) res) 1
+    assertEqual "Global lost" (length $ (SA.globalDecls  . head . SA.stubsModules ) res) 1
 
 lowerFailUndeclared :: TestTree 
 lowerFailUndeclared = testCase "Should fail with undeclared variable usage" $ do 
-    res <- runExceptT $  SP.parseStubsOverrides ["./tests/test-data/broken.stb"]
+    res <- runExceptT $  SP.parseStubsOverrides ["./tests/test-data/broken.stb"] ["f"] 
     case res of 
         Left (SPE.MissingVariable _ _) -> pure ()
         Left _ -> assertFailure "Caught different error"
@@ -54,11 +54,18 @@ lowerFailUndeclared = testCase "Should fail with undeclared variable usage" $ do
 
 counterClientTest :: TestTree 
 counterClientTest = testCase "Successfully compile and lower multiple modules" $ do 
-    res <-runExceptT $  SP.parseStubsOverrides ["./tests/test-data/counter.stb", "./tests/test-data/counterClient.stb"]
+    res <-runExceptT $  SP.parseStubsOverrides ["./tests/test-data/counter.stb", "./tests/test-data/counterClient.stb"] ["f"]
+    case res of 
+        Left ex -> assertFailure (show ex)
+        Right _ -> pure ()
+
+initFnTest :: TestTree 
+initFnTest = testCase "Successfully parse and lower init hooks" $ do 
+    res <-runExceptT $  SP.parseStubsOverrides ["./tests/test-data/init.stb"] ["f"]
     case res of 
         Left ex -> assertFailure (show ex)
         Right _ -> pure ()
 
 main :: IO ()
 main = defaultMain $ do
-    testGroup "Concrete Syntax Tests" [globalDeclTest,fnLexTest,moduleParseTest,moduleLowerTest,lowerFailUndeclared, counterClientTest]
+    testGroup "Concrete Syntax Tests" [globalDeclTest,fnLexTest,moduleParseTest,moduleLowerTest,lowerFailUndeclared, counterClientTest, initFnTest]

@@ -1,7 +1,7 @@
 type counter = int; 
 counter c; 
 
-fn unit init(){
+fn unit initCounter(){
     c = 5;
     return ();
 }

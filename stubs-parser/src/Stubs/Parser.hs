@@ -186,8 +186,8 @@ parseCrucibleSyntaxOverride path contents ovLang ng halloc hooks = do
         Left err -> CMC.throwM (SE.CrucibleSyntaxExprParseFailure ovLang contents err)
         Right parsedProg -> pure parsedProg
 
-parseStubsOverrides :: [FilePath] -> SLow.StubsParserM [SA.StubsModule]
-parseStubsOverrides paths = do 
+parseStubsOverrides :: [FilePath] -> [String] -> SLow.StubsParserM SA.StubsProgram
+parseStubsOverrides paths entryPoints = do 
   weakModules <- liftIO $ mapM SCP.parseFile paths
   sigL <- mapM (\smod -> do 
       SLow.genSigs (SWA.fns smod)
@@ -197,5 +197,8 @@ parseStubsOverrides paths = do
       SLow.lowerGlobals (SWA.globals smod)
     ) weakModules 
   let allGlobals = concat globL
-  mapM (\smod -> SLow.lowerModule smod allGlobals allSigs) weakModules
+  modIL <- mapM (\smod -> SLow.lowerModule smod allGlobals allSigs) weakModules
+  let inits = concatMap snd modIL
+  let mods = map fst modIL
+  return SA.StubsProgram{SA.stubsModules=mods, SA.stubsEntryPoints=entryPoints, SA.stubsInitFns=inits}
 

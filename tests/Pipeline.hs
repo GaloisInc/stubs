@@ -14,7 +14,6 @@ module Pipeline where
 import qualified Stubs.AST as SA
 import qualified Data.ByteString as B
 import qualified Lang.Crucible.FunctionHandle as LCF
-import qualified Stubs.Translate.Intrinsic as STI
 import qualified Data.Parameterized.Nonce as PN
 import qualified Stubs.SymbolicExecution as SVS
 import qualified Lang.Crucible.LLVM.MemModel as LCLM
@@ -53,14 +52,13 @@ import qualified Stubs.Parser as SP
 import Control.Monad.Except
 
 
-parserCorePipeline :: FilePath -> [FilePath] -> [String] -> [String] -> IO (Maybe Integer)
-parserCorePipeline path progs entries inits = do 
-    i <- runExceptT (SP.parseStubsOverrides progs)
+parserCorePipeline :: FilePath -> [FilePath] -> [String]  -> IO (Maybe Integer)
+parserCorePipeline path progs entries = do 
+    i <- runExceptT (SP.parseStubsOverrides progs entries)
     case i of 
         Left err -> fail (show err)
-        Right progs -> do 
-            let prog = SA.StubsProgram{ SA.stubsModules=progs, SA.stubsEntryPoints=entries, SA.stubsInitFns=inits}
-            corePipeline path [prog]
+        Right stubProg -> do 
+            corePipeline path [stubProg]
             
 corePipeline :: FilePath -> [SA.StubsProgram] -> IO (Maybe Integer)
 corePipeline path stubProgs = do

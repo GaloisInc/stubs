@@ -1,5 +1,5 @@
 fn unit j(){
-    init();
+    initCounter();
     inc();
     return ();
 }

@@ -29,6 +29,7 @@ tokens :-
     while                 { token ST.WHILE }
     return                { token ST.RETURN }
     fn                    { token ST.FN }
+    init                  { token ST.INIT }
 
     [=]                   { token ST.ASSIGNMENT }
     [\{]                  { token ST.LBRACE }

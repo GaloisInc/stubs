@@ -43,13 +43,15 @@ import qualified System.FilePath as SF
       UNITLIT  { ST.UNITLIT }
       VAR      { ST.VAR $$ }
       TY       {ST.TY}
+      INIT     {ST.INIT}
 
 %% 
 
 Module : TyDecls GlobalDecls Fns {SWA.SModule{SWA.moduleName="", SWA.fns=$3, SWA.tys=$1, SWA.globals=$2}}
 
-Fn : FN Type VAR UNITLIT LBRACE Stmts RBRACE {SWA.SFn $3 [] $2 $6} 
-   | FN Type VAR LPAREN Params RPAREN LBRACE Stmts RBRACE {SWA.SFn $3 $5 $2 $8}
+Fn : FN Type VAR UNITLIT LBRACE Stmts RBRACE {SWA.SFn $3 [] $2 $6 False} 
+   | FN Type VAR LPAREN Params RPAREN LBRACE Stmts RBRACE {SWA.SFn $3 $5 $2 $8 False}
+   | INIT FN unit VAR UNITLIT LBRACE Stmts RBRACE {SWA.SFn $4 [] SWA.SUnit $7 True} 
 Fns : {- empty -} {[]}
     | Fn {[$1]}
     | Fns Fn {$2 : $1 }

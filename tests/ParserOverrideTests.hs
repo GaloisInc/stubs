@@ -1,0 +1,21 @@
+module ParserOverrideTests(parserTests) where 
+
+import Test.Tasty
+import Test.Tasty.HUnit
+import qualified Pipeline as STP
+
+
+genIntegrationTest :: [FilePath] -> FilePath -> [String] -> TestName -> Integer -> TestTree
+genIntegrationTest stubs path entries tag exp = testCase tag $ do
+    res <- STP.parserCorePipeline path stubs entries
+    case res of
+        Just n -> assertEqual "Unexpected value returned" exp n
+        Nothing -> assertFailure "Failed to get return value"
+
+
+counterParsedTest :: TestTree 
+counterParsedTest = genIntegrationTest ["./stubs-parser/tests/test-data/counter.stb","./stubs-parser/tests/test-data/counterClient.stb"] "./tests/test-data/mult.out" ["f","g","j"] "Full integration" 9
+
+initParsedTest :: TestTree 
+initParsedTest = genIntegrationTest ["./stubs-parser/tests/test-data/init.stb"] "./tests/test-data/a.out" ["f"] "Working init hook" 9
+parserTests = [counterParsedTest, initParsedTest]

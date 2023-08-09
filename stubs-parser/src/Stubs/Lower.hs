@@ -16,12 +16,13 @@ import qualified Stubs.Opaque as SO
 import qualified Stubs.Parser.Exception as SPE
 import Control.Monad.Except
 
-lowerModule :: SW.SModule -> [SA.SomeStubsGlobalDecl] -> [SA.SomeStubsSignature]-> StubsParserM SA.StubsModule 
+-- return lowered modules, + init function names
+lowerModule :: SW.SModule -> [SA.SomeStubsGlobalDecl] -> [SA.SomeStubsSignature]-> StubsParserM (SA.StubsModule, [String]) 
 lowerModule smod externGlobals declaredSigs = do 
     types <- lowerTyDecls (SW.tys smod)
     globals <- lowerGlobals (SW.globals smod)
     fns <- lowerFns (SW.fns smod) (externGlobals ++ globals) declaredSigs types
-    return $ SA.mkStubsModule (SW.moduleName smod) fns types globals
+    return $ (SA.mkStubsModule (SW.moduleName smod) fns types globals, map (\(SW.SFn n _ _ _ _) -> n) $ filter (\(SW.SFn _ _ _ _ f) -> f) (SW.fns smod) ) 
 
 lowerTyDecls :: [SW.STyDecl] -> StubsParserM [SA.SomeStubsTyDecl]
 lowerTyDecls tys = do 
@@ -48,7 +49,7 @@ genSigs :: [SW.SFn] -> StubsParserM [SA.SomeStubsSignature]
 genSigs = mapM genSig
 
 genSig :: SW.SFn -> StubsParserM SA.SomeStubsSignature 
-genSig (SW.SFn n args ret _) = do 
+genSig (SW.SFn n args ret _ _) = do 
     Some params <- foldM (\(Some ctx) (SW.Var _ t) -> do 
                         Some ty <- lowerType t
                         return $ Some $ Ctx.extend ctx ty
@@ -61,10 +62,10 @@ lowerFns fns globs declaredSigs tys = do
     mapM (\fn -> lowerFn fn (SPR.stubsPreamble ++ declaredSigs) globs tys) fns 
 
 lowerFn :: SW.SFn -> [SA.SomeStubsSignature] -> [SA.SomeStubsGlobalDecl] -> [SA.SomeStubsTyDecl] -> StubsParserM SA.SomeStubsFunction
-lowerFn (SW.SFn n params ret body) sigs globs tys = do
+lowerFn (SW.SFn n params ret body f) sigs globs tys = do
     let state = LowerState {globals=globs, types=tys,knownSigs=sigs, arguments=params, inScopeVars=[],currentFn=n}
     (sbody,_) <- runStateT (lowerStmts body) state
-    (SA.SomeStubsSignature sig) <- genSig (SW.SFn n params ret body)
+    (SA.SomeStubsSignature sig) <- genSig (SW.SFn n params ret body f)
     return $ SA.SomeStubsFunction (SA.StubsFunction{
         SA.stubFnSig= sig,
         SA.stubFnBody=sbody
@@ -136,7 +137,7 @@ exprToTy e = do
         SW.Call f args -> do 
             Some sargs <- lowerExprs args
             let t = SA.stubsAssignmentToTys sargs
-            sigs <- gets knownSigs 
+            sigs <- gets knownSigs
             case lookupFn sigs f t of 
                 Nothing -> do -- could be due to aliases 
                     -- need to reify assignment
@@ -146,7 +147,7 @@ exprToTy e = do
                         Just (SA.SomeStubsSignature (SA.StubsSignature _ _ r)) -> return (stubsTyToWeakTy (Some r))
                         Nothing -> do 
                             fnName <- gets currentFn 
-                            throwError $ SPE.MissingFunction fnName f 
+                            throwError $ SPE.MissingFunction fnName f t
                 Just (SA.SomeStubsSignature (SA.StubsSignature _ _ r)) -> return (stubsTyToWeakTy (Some r))
         SW.StVar v -> do 
             -- need to find out what v is in order to pull a type
@@ -192,7 +193,7 @@ lowerExpr e = do
                         Just (SA.SomeStubsSignature (SA.StubsSignature _ _ r)) -> return $ Some (SA.AppExpr f sargs r)
                         Nothing -> do 
                             fnName <- gets currentFn 
-                            throwError $ SPE.MissingFunction fnName f
+                            throwError $ SPE.MissingFunction fnName f t
                 Just (SA.SomeStubsSignature (SA.StubsSignature _ _ r)) -> return $ Some (SA.AppExpr f sargs r)
         SW.StVar v -> do 
             -- Is v an argument, global, or local? if none, error out

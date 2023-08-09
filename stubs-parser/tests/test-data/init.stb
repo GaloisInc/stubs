@@ -1,0 +1,11 @@
+int c;
+
+fn int f(int x){
+    c = plus(c,x);
+    return c;
+}
+
+init fn unit g(){
+    c = 4;
+    return ();
+}

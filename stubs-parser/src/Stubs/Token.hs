@@ -13,6 +13,7 @@ data Token = INT
             | LPAREN 
             | RPAREN 
             | LBRACE 
+            | INIT
             | RBRACE 
             | SEMICOLON 
             | COMMA

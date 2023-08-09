@@ -42,7 +42,13 @@ data Stmt where
     ITE :: Expr -> [Stmt] -> [Stmt] -> Stmt
     deriving (Eq,Ord,Show) 
 
-data SFn = SFn String [Var] SType [Stmt]
+data SFn = SFn {
+    fnName::String,
+    fnParams::[Var],
+    fnRet :: SType,
+    fnBody :: [Stmt],
+    isInit :: Bool
+}
     deriving (Eq,Ord,Show)
 data STyDecl = STyDecl String SType
     deriving (Eq,Ord,Show)
