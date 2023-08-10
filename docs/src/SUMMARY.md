@@ -1,13 +1,15 @@
 # Summary
 
-- [Overview](./overview.md)
+[Overview](./overview.md)
+- [Quickstart](./quickstart.md)
 - [Language](./language.md)
 - [Architecture](./architecture.md)
+    - [Parser](./architecture/parser.md)
     - [Loader](./architecture/loader.md)
     - [Translation](./architecture/translation.md)
     - [Wrapper](./architecture/wrapper.md)
     - [Core](./architecture/core.md)
     - [Key Typeclasses](./architecture/tyclass.md)
 - [Code Samples](./examples.md)
-    - [Simple Id Override](./ex/simple_ex.md)
+    - [Simple Example](./ex/simple_ex.md)
     - [Opaque Type Example](./ex/opaque_ex.md)
