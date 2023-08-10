@@ -13,7 +13,7 @@ fn counter initCounter(){
 }
 
 fn counter inc(counter c){
-    d=plus(c,1);
+    counter d=plus(c,1);
     return d;
 }
 
@@ -26,7 +26,7 @@ Note that the only way for another module to get the value in a counter is throu
 
 ```c
 fn int f(){
-    t = initCounter();
+    counter t = initCounter();
     t = inc(inc(t));
     return asInt(t);
 }

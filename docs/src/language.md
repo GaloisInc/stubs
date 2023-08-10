@@ -91,6 +91,7 @@ The core of Stubs is its statements and expressions, which define the actual all
 
 Legal statements are:
 - Variable Assignment (including globals): `x = 5;`
+- Declarations : `int x = 2;`
 - Loops: `while b { x = 5; }`
 - If-Then-Else `if b { x = 5; } else {x = 6;}`
 - Return statements `return true;`
@@ -127,8 +128,8 @@ type num = int;
 num t;
 
 fn int f(int y){
-    i = g();
-    c = 5U;
+    int i = g();
+    uint c = 5U;
     while  gt(int(c),0) {
         i = plus(i,i);
     }
