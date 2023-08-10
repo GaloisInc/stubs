@@ -24,7 +24,7 @@ overrideTests = [corePipelinePreambleTest,corePipelineOpaqueTest,corePipelineMod
 
 corePipelinePreambleTest :: TestTree
 corePipelinePreambleTest = testCase "Core Pipeline Preamble Check" $ do
-    i <- STP.corePipeline "./tests/test-data/a.out" sProgs
+    i <- STP.corePipeline "./tests/test-data/basic.out" sProgs
     case i of
         Just n -> assertEqual "Unexpected value returned" n 20
         Nothing -> assertFailure "Failed to get return value"
@@ -45,7 +45,7 @@ corePipelinePreambleTest = testCase "Core Pipeline Preamble Check" $ do
 
 corePipelineModuleTest :: TestTree
 corePipelineModuleTest = testCase "Core Pipeline Module Check" $ do
-    i <- STP.corePipeline "./tests/test-data/a.out" sProgs
+    i <- STP.corePipeline "./tests/test-data/basic.out" sProgs
     case i of
         Just n -> assertEqual "Unexpected value returned" n 20
         Nothing -> assertFailure "Failed to get return value"
@@ -120,7 +120,7 @@ corePipelineOpaqueTest = genCoreTestIO (do
             ] [] []
         ],
         SA.stubsInitFns = []   }]
-    ) "./tests/test-data/a.out" "Core Pipeline Opaque Check" 1
+    ) "./tests/test-data/basic.out" "Core Pipeline Opaque Check" 1
 
 mallocOvTest :: TestTree
 mallocOvTest = testCase "Malloc Intrinsic Test" $ do
@@ -141,7 +141,7 @@ mallocOvTest = testCase "Malloc Intrinsic Test" $ do
         ],
         SA.stubsInitFns = []
     }
-    i <- STP.corePipeline "./tests/test-data/a.out" [sprog] --[STI.BuildOverrideModule (\_ -> mallocOv ptr)]
+    i <- STP.corePipeline "./tests/test-data/basic.out" [sprog]
     case i of
         Just n -> assertEqual "Unexpected value returned" n 20
         Nothing -> assertFailure "Failed to get return value"
@@ -212,7 +212,7 @@ corePipelineGlobalTest = genCoreTestIO (do
                 SA.stubsInitFns = []
             }
             ]
-    ) "./tests/test-data/mult.out" "Core Pipeline Global Data" 2
+    ) "./tests/test-data/multiple_ov.out" "Core Pipeline Global Data" 2
 
 corePipelineGlobalITest :: TestTree
 corePipelineGlobalITest = genCoreTestIO (do
@@ -279,7 +279,7 @@ corePipelineGlobalITest = genCoreTestIO (do
                 SA.stubsInitFns = []
             }
             ]
-    ) "./tests/test-data/mult_i.out" "Core Pipeline Global Data (with intermediate variable return)" 2
+    ) "./tests/test-data/multiple_ov_i.out" "Core Pipeline Global Data (with intermediate variable return)" 2
 
 corePipelineMultipleOverrideTest :: TestTree
 corePipelineMultipleOverrideTest = genCoreTestIO (do
@@ -309,5 +309,5 @@ corePipelineMultipleOverrideTest = genCoreTestIO (do
         ],
         SA.stubsInitFns=[]
     }]
-    ) "./tests/test-data/two.out" "Core Pipeline with multiple overrides (no sharing)" 2
+    ) "./tests/test-data/two_override.out" "Core Pipeline with multiple overrides (no sharing)" 2
 
