@@ -86,7 +86,10 @@ lowerFns fns globs declaredSigs tys = do
 
 lowerFn :: SW.SFn -> [SA.SomeStubsSignature] -> [SA.SomeStubsGlobalDecl] -> [SA.SomeStubsTyDecl] -> StubsParserM SA.SomeStubsFunction
 lowerFn (SW.SFn n params ret body f) sigs globs tys = do
-    let state = LowerState {globals=globs, types=tys,knownSigs=sigs, arguments=params, inScopeVars=[],currentFn=n}
+    let args = map (\(idx, var ) -> ParamVar var idx) $ zip [0..] params 
+    let globals = map (\(SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl n t)) -> GlobalVar $ SW.Var  n $ stubsTyToWeakTy (Some t)  ) globs
+    let initialScope = args:[globals] 
+    let state = LowerState {types=tys,knownSigs=sigs,currentFn=n, nonce=0, varScope = initialScope}
     (sbody,_) <- runStateT (lowerStmts body) state
     (SA.SomeStubsSignature sig) <- genSig (SW.SFn n params ret body f)
     return $ SA.SomeStubsFunction (SA.StubsFunction{
@@ -97,54 +100,73 @@ lowerFn (SW.SFn n params ret body f) sigs globs tys = do
 lowerStmts :: [SW.Stmt] -> StubsLowerSM [SA.StubsStmt]
 lowerStmts = mapM lowerStmt
 
+bumpNonce :: StubsLowerSM String
+bumpNonce = do 
+    lst <- get
+    i <- gets nonce 
+    put lst{nonce=i+1}
+    return $  "_"++ show i
+
 -- | Lower a single statement. This alongside lowerExpr is the core of the translation
 -- Assignments in the 'weak' AST are less precise than in Stubs' AST, as globals, locals, and arguments need to be handled differently.  
 -- Thus, we need to identify the kind of variable in question, to determine what to produce.
 -- Additionally, StubsExprs are typed, whereas the weak Expr is untyped, so some type checking is necessary.
 lowerStmt :: SW.Stmt -> StubsLowerSM SA.StubsStmt
 lowerStmt stmt = do 
-    lst <- get 
+    lst <- get
     case stmt of 
         SW.Return e -> do 
             Some le <- lowerExpr e 
             return (SA.Return le)
         SW.ITE c t e -> do 
             Some cle <- lowerExpr c 
-            Just Refl <- return $ testEquality SA.StubsBoolRepr (SA.stubsExprToTy cle)
-            ct <- lowerStmts t 
-            ce <- lowerStmts e 
-            return (SA.ITE cle ct ce)
+            let isBool =  testEquality SA.StubsBoolRepr (SA.stubsExprToTy cle)
+            case isBool of 
+                Just Refl -> do 
+                    put lst{varScope=extendScope(varScope lst)}
+                    cthen <- lowerStmts t
+                    put lst{varScope=extendScope(varScope lst)}
+                    celse <- lowerStmts e 
+                    put lst{varScope=varScope lst} -- restore
+                    return (SA.ITE cle cthen celse)
+                Nothing -> do 
+                    actual <- exprToTy c
+                    throwError $ SPE.TypeMismatch c SW.SBool actual
         SW.Loop c body -> do 
-            Some cle <- lowerExpr c 
-            Just Refl <- return $ testEquality SA.StubsBoolRepr (SA.stubsExprToTy cle)
-            cb <- lowerStmts body 
-            return (SA.Loop cle cb)
+            Some cle <- lowerExpr c
+            let isBool = testEquality SA.StubsBoolRepr (SA.stubsExprToTy cle)
+            case isBool of 
+                Just Refl -> do 
+                    put lst{varScope=extendScope(varScope lst)}
+                    cb <- lowerStmts body 
+                    put lst{varScope=varScope lst} -- restore
+                    return (SA.Loop cle cb)
+                Nothing -> do 
+                    actual <- exprToTy c
+                    throwError $ SPE.TypeMismatch c SW.SBool actual
+        SW.Assignment s e | "_" <- s -> do 
+            Some cle <- lowerExpr e
+            wc <- bumpNonce
+            return (SA.Assignment (SA.StubsVar wc (SA.stubsExprToTy cle) ) cle )
         SW.Assignment s e -> do 
             Some cle <- lowerExpr e
-            -- lookup s: argument? global? local? new?
-            let args = arguments lst 
-            let m = List.findIndex (\(SW.Var n _) -> n == s ) args
-            case m of 
-                Just _ -> do 
-                    let fnName = currentFn lst
-                    throwError (SPE.ArgumentAssignment fnName s)
-                Nothing -> do -- not an argument
-                    let globs = globals lst 
-                    let m = List.find (\(SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl n _ )) -> n == s) globs
-                    case m of 
-                        Just (SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl n t)) -> do 
-                            return (SA.GlobalAssignment (SA.StubsVar n t) cle)
-                        Nothing -> do 
-                            let knownVars = inScopeVars lst
-                            let m = List.find (\(SW.Var n _) -> n == s) knownVars
-                            case m of 
-                                Just _ -> return (SA.Assignment (SA.StubsVar s (SA.stubsExprToTy cle) ) cle )
-                                Nothing -> do 
-                                    -- update state then return
-                                    lt <- exprToTy e
-                                    let nst = lst{inScopeVars = (SW.Var s lt):knownVars}
-                                    put nst
-                                    return (SA.Assignment (SA.StubsVar s (SA.stubsExprToTy cle) ) cle )
+            -- lookup s: argument? global? local?
+            case lookupVar s (varScope lst) of 
+                Nothing -> throwError $ SPE.MissingVariable (currentFn lst) s
+                Just (ParamVar _ _) -> throwError (SPE.ArgumentAssignment (currentFn lst) s)
+                Just (GlobalVar (SW.Var _ t)) -> do 
+                    Some ty <- lift $ lowerType t
+                    return (SA.GlobalAssignment (SA.StubsVar s ty) cle)
+                Just (LocalVar (SW.Var _ t)) -> do 
+                    Some ty <- lift $ lowerType t
+                    return (SA.Assignment (SA.StubsVar s ty) cle)
+        SW.Declaration s t e -> do 
+            let nsc = insertScope (LocalVar (SW.Var s t)) (varScope lst)
+            Some cle <- lowerExpr e
+            put lst{varScope=nsc}
+            Some ty <- lift $ lowerType t
+            return (SA.Assignment (SA.StubsVar s ty) cle)
+            
 
 lowerExprs :: [SW.Expr] -> StubsLowerSM (Some (Ctx.Assignment SA.StubsExpr))
 lowerExprs exprs = do 
@@ -153,6 +175,7 @@ lowerExprs exprs = do
             return$ Some $ Ctx.extend ctx ce) (Some Ctx.empty) exprs 
 exprToTy :: SW.Expr -> StubsLowerSM SW.SType 
 exprToTy e = do
+    lst <- get
     case e of 
         SW.IntLit _ -> pure SW.SInt 
         SW.LongLit _ -> pure SW.SLong 
@@ -179,28 +202,17 @@ exprToTy e = do
                 Just (SA.SomeStubsSignature (SA.StubsSignature _ _ r)) -> return (stubsTyToWeakTy (Some r))
         SW.StVar v -> do 
             -- need to find out what v is in order to pull a type
-            args <- gets arguments
-            let m = List.find (\(SW.Var n _) -> n == v ) args
-            case m of 
-                Just (SW.Var _ t) -> pure t
-                Nothing -> do
-                    globs <- gets globals 
-                    let m = List.find (\(SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl n _ )) -> n == v) globs
-                    case m of 
-                        Just (SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl _ t)) -> pure (stubsTyToWeakTy $ Some t) 
-                        Nothing -> do 
-                            knownVars <- gets inScopeVars
-                            let m = List.find (\(SW.Var n _) -> n == v) knownVars
-                            case m of 
-                                Just (SW.Var _ t) -> pure t
-                                Nothing -> do 
-                                    fnName <- gets currentFn 
-                                    throwError $ SPE.MissingVariable fnName v
+            case lookupVar v (varScope lst) of 
+                Nothing -> throwError $ SPE.MissingVariable (currentFn lst) v
+                Just (ParamVar (SW.Var _ t) _) -> pure t
+                Just (LocalVar (SW.Var _ t)) -> pure t 
+                Just (GlobalVar (SW.Var _ t)) -> pure t
 
 -- | Lower a single expression 
 -- Calls and Variables are the interesting cases, as we need to lookup return types, and determine if the variable is a global, a local, or a parameter.
 lowerExpr :: SW.Expr -> StubsLowerSM (Some SA.StubsExpr)
 lowerExpr e = do 
+    lst <- get
     case e of 
         SW.IntLit i -> return $ Some (SA.LitExpr (SA.IntLit i))
         SW.BoolLit b -> return $ Some (SA.LitExpr (SA.BoolLit b))
@@ -227,28 +239,17 @@ lowerExpr e = do
                 Just (SA.SomeStubsSignature (SA.StubsSignature _ _ r)) -> return $ Some (SA.AppExpr f sargs r)
         SW.StVar v -> do 
             -- Is v an argument, global, or local? if none, error out
-            args <- gets arguments
-            let m = (List.findIndex (\(SW.Var n _) -> n == v ) args,List.find (\(SW.Var n _) -> n == v ) args)
-            case m of 
-                (Just i, Just (SW.Var _ t)) -> do 
+            case lookupVar v (varScope lst) of 
+                Nothing -> throwError $ SPE.MissingVariable (currentFn lst) v
+                Just (ParamVar (SW.Var _ t) i) -> do 
                     Some st <- lift $ lowerType t
                     return $ Some (SA.ArgLit (SA.StubsArg i st))
-                _ -> do -- not an argument, check globals next 
-                        globs <- gets globals 
-                        let m = List.find (\(SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl n _ )) -> n == v) globs
-                        case m of 
-                            (Just (SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl n t))) -> do 
-                                return $ Some (SA.GlobalVarLit (SA.StubsVar n t))
-                            Nothing -> do -- check locals 
-                                localVars <- gets inScopeVars
-                                let m = List.find (\(SW.Var n _) -> n ==v ) localVars
-                                case m of 
-                                    Just (SW.Var n t) -> do 
-                                        Some st <- lift $ lowerType t
-                                        return $ Some (SA.VarLit (SA.StubsVar n st))
-                                    Nothing ->  do 
-                                        fnName <- gets currentFn 
-                                        throwError $ SPE.MissingVariable fnName v
+                Just (LocalVar (SW.Var _ t)) -> do 
+                    Some st <- lift $ lowerType t
+                    return $ Some (SA.VarLit (SA.StubsVar v st))
+                Just (GlobalVar (SW.Var _ t)) -> do 
+                    Some st <- lift $ lowerType t
+                    return $ Some (SA.GlobalVarLit (SA.StubsVar v st))
     
 lookupFn :: [SA.SomeStubsSignature] -> String -> Ctx.Assignment SA.StubsTypeRepr args -> Maybe SA.SomeStubsSignature 
 lookupFn [] _ _ = Nothing 
@@ -292,13 +293,43 @@ stubsTyToWeakTy (Some sty) = case sty of
     
 -- | State needed for lowering of functions
 data LowerState = LowerState {
-    globals :: [SA.SomeStubsGlobalDecl],
     types :: [SA.SomeStubsTyDecl],
-    arguments :: [SW.Var],
-    inScopeVars :: [SW.Var],
+    varScope :: LowerScope,
     knownSigs :: [SA.SomeStubsSignature],
+    nonce :: Int, -- for code gen with wildcards
     currentFn :: String -- useful for exception handling
 }
+
+data VarType where 
+    LocalVar :: SW.Var -> VarType
+    GlobalVar :: SW.Var -> VarType
+    ParamVar :: SW.Var -> Int -> VarType
+
+type LowerScope = [[VarType]]
+
+-- TODO: define lookup, cleanup other stuff
+
+matchesVar :: VarType -> String  -> Bool 
+matchesVar (LocalVar (SW.Var s _)) v = s == v 
+matchesVar (GlobalVar (SW.Var s _)) v = s == v 
+matchesVar (ParamVar (SW.Var s _) _) v = s == v
+
+lookupVar :: String -> LowerScope -> Maybe VarType 
+lookupVar _ [] = Nothing 
+lookupVar s (scope:scopes) = case List.find (\x -> matchesVar x s) scope of 
+        Nothing -> lookupVar s scopes 
+        Just a -> Just a
+    where 
+        matchesVar (LocalVar (SW.Var s _)) v = s == v 
+        matchesVar (GlobalVar (SW.Var s _)) v = s == v 
+        matchesVar (ParamVar (SW.Var s _) _) v = s == v 
+
+extendScope :: LowerScope -> LowerScope
+extendScope s = []:s  
+
+insertScope v (x:xs) = (v:x):xs -- partial, assume an initial scope exists (non-empty)
+
+popScope (_:xs) = xs --partial, fails on empty scope
 
 type StubsParserM = (ExceptT SPE.ParserException IO)
 type StubsLowerSM = (StateT LowerState StubsParserM)

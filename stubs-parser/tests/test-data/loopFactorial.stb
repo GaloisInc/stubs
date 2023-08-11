@@ -1,6 +1,6 @@
 fn int f(int x){
-    res = x;
-    rem = x;
+    int res = x;
+    int rem = x;
     while gt(rem,1) {
         rem = minus(rem,1);
         res = mult(res,rem);

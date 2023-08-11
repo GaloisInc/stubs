@@ -95,6 +95,7 @@ Stmt : VAR ASSIGN Expr SEMICOLON {SWA.Assignment $1 $3}
      | while Expr LBRACE Stmts RBRACE {SWA.Loop $2 $4}
      | if Expr LBRACE Stmts RBRACE else LBRACE Stmts RBRACE {SWA.ITE $2 $4 $8}
      | FnCall SEMICOLON {SWA.Assignment "_" $1}
+     | Type VAR ASSIGN Expr SEMICOLON {SWA.Declaration $2 $1 $4}
 
 Stmts : {- empty -} {[]}
       | Stmt {[$1]}

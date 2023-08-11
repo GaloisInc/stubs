@@ -45,6 +45,7 @@ data Stmt where
     Return :: Expr -> Stmt 
     Loop :: Expr -> [Stmt] -> Stmt 
     ITE :: Expr -> [Stmt] -> [Stmt] -> Stmt
+    Declaration :: String -> SType -> Expr -> Stmt
     deriving (Eq,Ord,Show) 
 
 data SFn = SFn {
