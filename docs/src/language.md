@@ -102,6 +102,8 @@ Legal Expressions are:
 - Literals
 - Variables
 - Function calls
+- Tuple expressions 
+- Tuple access: `t.0`, where t is some expression evaluating to a tuple. the index can be any unsigned integer, as long as the tuple has a corresponding field.
 
 | Type   | Literal |
 |--------|---------|
@@ -154,6 +156,7 @@ Stubs has a relatively simple type system, for ease of use as well as ease of tr
 - Primitves/Builtins, such as Int, Bool, etc.
 - Opaque types
 - Intrinsic types
+- Tuple/Record types
 
 ### Primitive/Builtin Types
 The core of Stubs' type system is a set of builtin types, corresponding to C integer types, and other basic types.
@@ -170,6 +173,11 @@ Modules may declare their own types, which are opaque to other modules reliant o
 
 ### Intrinsic Types
 Intrinsics are similar to Opaque types, but are declared by override modules rather than Stubs-level modules. As override modules (see below) work with Haskell directly, they can return arbitrary Crucible types which may not map to a Stubs type directly. For instance, an override module for memory may define a `Pointer` type, which internally is a bitvector, or a special struct of some kind, but can only be used at the Stubs-level through the override's interface. Syntactically, `Pointer` is denoted as `@Pointer`, to distinguish it from an opaque type.
+
+### Tuples 
+
+Custom types exist in the form of tuples, such as `(int,int)` denoting a pair of `int`s. These can be nested, and of abritrary lengths, allowing for complex data to be passed around more 
+conveniently.
 
 ### Override Modules
 In order to more easily model complex behavior like memory access, file systems, or IO, `OverrideModule`s can be defined in order to model behavior directly as Crucible overrides, allowing arbitrary Haskell to be used. These modules are defined on a per-architecture basis, and are intended to be linked in during translation and execution.
