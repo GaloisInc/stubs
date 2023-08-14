@@ -32,20 +32,7 @@ import GHC.Natural (naturalToInteger)
 import qualified Data.Parameterized.Map as MapF
 import qualified Stubs.Translate.Intrinsic as STI
 
-instance STC.TupleArch SAA.AArch32 ctx where
-
 instance STC.StubsArch SAA.AArch32 where 
-    type instance ArchTypeMatch SAA.AArch32 'SA.StubsInt = LCT.BVType (STC.ArchIntSize SAA.AArch32)
-    type instance ArchTypeMatch SAA.AArch32 'SA.StubsUInt = LCT.BVType (STC.ArchIntSize SAA.AArch32)
-    type instance ArchTypeMatch SAA.AArch32 'SA.StubsLong = LCT.BVType (STC.ArchLongSize SAA.AArch32)
-    type instance ArchTypeMatch SAA.AArch32 'SA.StubsShort = LCT.BVType (STC.ArchShortSize SAA.AArch32)
-    type instance ArchTypeMatch SAA.AArch32 'SA.StubsULong = LCT.BVType (STC.ArchLongSize SAA.AArch32)
-    type instance ArchTypeMatch SAA.AArch32 'SA.StubsUShort = LCT.BVType (STC.ArchShortSize SAA.AArch32)
-    type instance ArchTypeMatch SAA.AArch32 'SA.StubsBool = LCT.BoolType
-    type instance ArchTypeMatch SAA.AArch32 'SA.StubsUnit = LCT.UnitType
-    type instance ArchTypeMatch SAA.AArch32 ('SA.StubsAlias s) = STC.ArchTypeMatch SAA.AArch32 (SA.ResolveAlias s)
-    type instance ArchTypeMatch SAA.AArch32 ('SA.StubsIntrinsic s) = SA.ResolveIntrinsic s
-    type instance ArchTypeMatch SAA.AArch32 ('SA.StubsTuple c) = LCT.StructType (STC.ArchTypeMatchCtx SAA.AArch32 c)
 
     type instance ArchIntSize SAA.AArch32 = 32
     type instance ArchShortSize SAA.AArch32 =16

@@ -36,20 +36,7 @@ import qualified Stubs.Common as SC
 import qualified Lang.Crucible.Simulator as LCS
 import Control.Monad.IO.Class (MonadIO)
 
-instance STC.TupleArch DMX.X86_64 ctx where
-
 instance STC.StubsArch DMX.X86_64 where
-    type instance ArchTypeMatch DMX.X86_64 'SA.StubsInt = LCT.BVType (STC.ArchIntSize DMX.X86_64)
-    type instance ArchTypeMatch DMX.X86_64 'SA.StubsUInt = LCT.BVType (STC.ArchIntSize DMX.X86_64)
-    type instance ArchTypeMatch DMX.X86_64 'SA.StubsLong = LCT.BVType (STC.ArchLongSize DMX.X86_64)
-    type instance ArchTypeMatch DMX.X86_64 'SA.StubsShort = LCT.BVType (STC.ArchShortSize DMX.X86_64)
-    type instance ArchTypeMatch DMX.X86_64 'SA.StubsULong = LCT.BVType (STC.ArchLongSize DMX.X86_64)
-    type instance ArchTypeMatch DMX.X86_64 'SA.StubsUShort = LCT.BVType (STC.ArchShortSize DMX.X86_64)
-    type instance ArchTypeMatch DMX.X86_64 'SA.StubsBool = LCT.BoolType
-    type instance ArchTypeMatch DMX.X86_64 'SA.StubsUnit = LCT.UnitType
-    type instance ArchTypeMatch DMX.X86_64 ('SA.StubsAlias s) = STC.ArchTypeMatch DMX.X86_64 (SA.ResolveAlias s)
-    type instance ArchTypeMatch DMX.X86_64 ('SA.StubsIntrinsic s) = SA.ResolveIntrinsic s
-    type instance ArchTypeMatch DMX.X86_64 ('SA.StubsTuple c) = LCT.StructType (STC.ArchTypeMatchCtx DMX.X86_64 c)
 
     type instance ArchIntSize DMX.X86_64 = 32
     type instance ArchShortSize DMX.X86_64 = 16

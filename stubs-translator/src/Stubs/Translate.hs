@@ -160,7 +160,7 @@ translateExpr' e = do
                 Nothing -> fail $ "call to unknown function: " ++ f -- Top level translation prevents this, but invoking something more internal could cause this
         SA.TupleExpr (tupl::Ctx.Assignment SA.StubsExpr ctx) -> do 
             struct <- translateTuple tupl
-            useTupleArch @ctx @arch $ LCCG.mkAtom struct
+            LCCG.mkAtom struct
         _ -> do
             ce <- translateExpr'' e
             LCCG.mkAtom ce
@@ -175,7 +175,7 @@ translateExpr' e = do
                 SA.AppExpr {} -> fail "internal translateExpr called on AppExpr"
                 SA.GlobalVarLit _ -> fail "internal translateExpr called on GlobalVarLit"
                 SA.TupleExpr _ -> fail "internal translateExpr called on TupleExpr"
-        translateTuple :: forall arch ctx a. (STC.TupleArch arch ctx, STC.ArchTypeMatchCtx arch ctx ~ a, STC.StubsArch arch) => Ctx.Assignment SA.StubsExpr ctx -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s (LCT.StructType a))
+        translateTuple :: forall arch ctx a. (STC.ArchTypeMatchCtx arch ctx ~ a, STC.StubsArch arch) => Ctx.Assignment SA.StubsExpr ctx -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s (LCT.StructType a))
         translateTuple tupl = do 
             env <- gets stStubsenv
             internals <- translateExprs tupl 

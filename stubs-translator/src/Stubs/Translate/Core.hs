@@ -47,30 +47,27 @@ type family ArchTypeMatchCtx (arch :: Type) (stubTy :: Ctx.Ctx SA.StubsType) = (
     ArchTypeMatchCtx arch 'Ctx.EmptyCtx = 'Ctx.EmptyCtx
     ArchTypeMatchCtx arch (a Ctx.::> k) = ArchTypeMatchCtx arch a Ctx.::> ArchTypeMatch arch k
 
-class ArchTypeMatch arch (SA.StubsTuple c) ~ LCT.StructType (ArchTypeMatchCtx arch c) => TupleArch arch c
-
-useTupleArch :: forall c arch a. TupleArch arch c => (ArchTypeMatch arch (SA.StubsTuple c) ~ LCT.StructType (ArchTypeMatchCtx arch c) => a) -> a
-useTupleArch a = a
+type family ArchTypeMatch arch (stubType :: SA.StubsType) :: LCT.CrucibleType
+type instance ArchTypeMatch arch 'SA.StubsBool = LCT.BoolType
+type instance ArchTypeMatch arch 'SA.StubsUnit = LCT.UnitType
+type instance ArchTypeMatch arch 'SA.StubsInt = LCT.BVType (ArchIntSize arch)
+type instance ArchTypeMatch arch 'SA.StubsUInt = LCT.BVType (ArchIntSize arch)
+type instance ArchTypeMatch arch 'SA.StubsShort = LCT.BVType (ArchShortSize arch)
+type instance ArchTypeMatch arch 'SA.StubsUShort = LCT.BVType (ArchShortSize arch)
+type instance ArchTypeMatch arch 'SA.StubsLong = LCT.BVType (ArchLongSize arch)
+type instance ArchTypeMatch arch 'SA.StubsULong = LCT.BVType (ArchLongSize arch)
+type instance ArchTypeMatch arch ('SA.StubsIntrinsic s) = SA.ResolveIntrinsic s
+type instance ArchTypeMatch arch ('SA.StubsTuple c) = LCT.StructType (ArchTypeMatchCtx arch c)
 
 -- | Type class for defining a valid architecture for translation
 class (DMS.SymArchConstraints arch,
         Data.Typeable arch,
-        ArchTypeMatch arch 'SA.StubsBool ~ LCT.BoolType, -- Bool must translate to bool, for loops and conditionals (enforced by crucible's Generator)
-        ArchTypeMatch arch 'SA.StubsInt ~ LCT.BVType (ArchIntSize arch),
-        ArchTypeMatch arch 'SA.StubsUInt ~ LCT.BVType (ArchIntSize arch),
-        ArchTypeMatch arch 'SA.StubsShort ~ LCT.BVType (ArchShortSize arch),
-        ArchTypeMatch arch 'SA.StubsUShort ~ LCT.BVType (ArchShortSize arch),
-        ArchTypeMatch arch 'SA.StubsLong ~ LCT.BVType (ArchLongSize arch),
-        ArchTypeMatch arch 'SA.StubsULong ~ LCT.BVType (ArchLongSize arch),
-        forall c. TupleArch arch c,
         -- forall c. ArchTypeMatch arch (SA.StubsTuple c) ~ LCT.StructType (ArchTypeMatchCtx arch c),
         -- 16 taken from previous constraints imposed on arch
         16 PN.<= ArchIntSize arch, 1 PN.<= ArchIntSize arch, KnownNat (ArchIntSize arch),
         16 PN.<= ArchShortSize arch, 1 PN.<= ArchShortSize arch, KnownNat (ArchShortSize arch),
         16 PN.<= ArchLongSize arch, 1 PN.<= ArchLongSize arch, KnownNat (ArchLongSize arch)) => StubsArch arch where 
 
-    -- | Mapping of Stubs types to Crucible types
-    type ArchTypeMatch arch (stubType :: SA.StubsType) :: LCT.CrucibleType
     -- | Integer width in bits
     type ArchIntSize arch :: Nat
     -- | Short integer width in bits
