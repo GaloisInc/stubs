@@ -22,28 +22,32 @@ import Data.Parameterized (Some (Some))
 satOpaque :: SA.StubsModule -> Bool
 satOpaque lib = all (opaqueFn (SA.tyDecls lib)) (SA.fnDecls lib)
 
+-- | A function satisfies opaqueness if all statements in the body do too.
 opaqueFn :: [SA.SomeStubsTyDecl] -> SA.SomeStubsFunction -> Bool
 opaqueFn tys (SA.SomeStubsFunction (SA.StubsFunction sig body)) = all (opaqueStmt tys sig) body
 
+-- Lookup helper for SymbolReprs
 symbolLookup :: P.SymbolRepr s -> [SA.SomeStubsTyDecl] -> Maybe SA.SomeStubsTypeRepr
 symbolLookup _ [] = Nothing
 symbolLookup sy ((SA.SomeStubsTyDecl (SA.StubsTyDecl s ty)):tys) = case P.testEquality s sy of
         Just P.Refl -> Just $ SA.SomeStubsTypeRepr ty
         _ -> symbolLookup sy tys
 
+-- | Given a type and all known type declarations, what does the type simplify to?
 reifyType :: SA.StubsTypeRepr a -> [SA.SomeStubsTyDecl] -> SA.SomeStubsTypeRepr
 reifyType (SA.StubsAliasRepr s) tys = case symbolLookup s tys of
         Just sty -> sty
         Nothing -> SA.SomeStubsTypeRepr (SA.StubsAliasRepr s)
 reifyType i _ = SA.SomeStubsTypeRepr i -- only aliases might change 
 
+-- | Simplify an entire type signature. Monadic due to type variables escaping scope otherwise.
 reifySig :: SA.SomeStubsSignature -> [SA.SomeStubsTyDecl] -> IO SA.SomeStubsSignature
 reifySig (SA.SomeStubsSignature (SA.StubsSignature n args ret)) tys = do 
     (SA.SomeStubsTypeRepr rr) <- pure $ reifyType ret tys
     (Some ctx) <- reifyAssignmentTys (Some args) tys 
     pure (SA.SomeStubsSignature (SA.StubsSignature n ctx rr))
 
-
+-- Simplify an Assignment (Useful in signatures, and anywhere else they may appear)
 reifyAssignmentTys :: Some (Ctx.Assignment SA.StubsTypeRepr) -> [SA.SomeStubsTyDecl] -> IO ( Some (Ctx.Assignment SA.StubsTypeRepr))
 reifyAssignmentTys (Some ctx) tys = case alist of 
         Ctx.AssignEmpty -> pure $ Some Ctx.empty
@@ -54,6 +58,10 @@ reifyAssignmentTys (Some ctx) tys = case alist of
                     return $ Some (Ctx.extend ctx' s)  
     where alist = Ctx.viewAssign ctx
     
+-- | Does a statement satisfy opaqueness:
+-- For returns, does the returned expression match, under the know type declarations?
+-- For assignments, do the variable types match?
+-- For all, do underlying expressions satisfy opaqueness
 opaqueStmt :: [SA.SomeStubsTyDecl] -> SA.StubsSignature args ret -> SA.StubsStmt -> Bool
 opaqueStmt tys sig (SA.Return e) = reifyType (SA.sigFnRetTy sig) tys == exprToReifyTy e tys && opaqueExpr tys sig e
 opaqueStmt tys sig (SA.GlobalAssignment (SA.StubsVar _ vt) e) = reifyType vt tys == exprToReifyTy e tys && opaqueExpr tys sig e 
@@ -68,6 +76,7 @@ opaqueExpr tys sig (SA.ArgLit (SA.StubsArg i t)) = case Ctx.intIndex i (Ctx.size
     Just (P.Some idx) -> reifyType (SA.sigFnArgTys sig Ctx.! idx) tys == reifyType t tys
 opaqueExpr _ _ _= True
 
+-- Turn expr to type, then simplify/reify
 exprToReifyTy :: SA.StubsExpr a -> [SA.SomeStubsTyDecl] -> SA.SomeStubsTypeRepr
 exprToReifyTy (SA.LitExpr l) _ = SA.SomeStubsTypeRepr $ SA.stubsExprToTy (SA.LitExpr l)
 exprToReifyTy (SA.VarLit (SA.StubsVar _ t)) tys = reifyType t tys

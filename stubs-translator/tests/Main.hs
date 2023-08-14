@@ -23,7 +23,7 @@ import qualified Lang.Crucible.CFG.Core as LCCC
 import qualified Data.Parameterized.NatRepr as PN
 import Lang.Crucible.CFG.Reg as LCCR
 import qualified Data.Parameterized.Map as MapF
-import Stubs.Preamble.X86 ()
+import Stubs.Arch.X86 ()
 import qualified Stubs.Opaque as SO
 import qualified Stubs.Translate.Core as STC
 import qualified Data.Macaw.CFG as DMC
