@@ -160,7 +160,7 @@ translateExpr' e = do
                 Nothing -> fail $ "call to unknown function: " ++ f -- Top level translation prevents this, but invoking something more internal could cause this
         SA.TupleExpr (tupl::Ctx.Assignment SA.StubsExpr ctx) -> do 
             struct <- translateTuple tupl
-            LCCG.mkAtom struct
+            useTupleArch @ctx @arch $ LCCG.mkAtom struct
         _ -> do
             ce <- translateExpr'' e
             LCCG.mkAtom ce

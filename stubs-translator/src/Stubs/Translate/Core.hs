@@ -47,6 +47,11 @@ type family ArchTypeMatchCtx (arch :: Type) (stubTy :: Ctx.Ctx SA.StubsType) = (
     ArchTypeMatchCtx arch 'Ctx.EmptyCtx = 'Ctx.EmptyCtx
     ArchTypeMatchCtx arch (a Ctx.::> k) = ArchTypeMatchCtx arch a Ctx.::> ArchTypeMatch arch k
 
+class ArchTypeMatch arch (SA.StubsTuple c) ~ LCT.StructType (ArchTypeMatchCtx arch c) => TupleArch arch c
+
+useTupleArch :: forall c arch a. TupleArch arch c => (ArchTypeMatch arch (SA.StubsTuple c) ~ LCT.StructType (ArchTypeMatchCtx arch c) => a) -> a
+useTupleArch a = a
+
 -- | Type class for defining a valid architecture for translation
 class (DMS.SymArchConstraints arch,
         Data.Typeable arch,
@@ -57,7 +62,8 @@ class (DMS.SymArchConstraints arch,
         ArchTypeMatch arch 'SA.StubsUShort ~ LCT.BVType (ArchShortSize arch),
         ArchTypeMatch arch 'SA.StubsLong ~ LCT.BVType (ArchLongSize arch),
         ArchTypeMatch arch 'SA.StubsULong ~ LCT.BVType (ArchLongSize arch),
-        forall c. ArchTypeMatch arch (SA.StubsTuple c) ~ LCT.StructType (ArchTypeMatchCtx arch c),
+        forall c. TupleArch arch c,
+        -- forall c. ArchTypeMatch arch (SA.StubsTuple c) ~ LCT.StructType (ArchTypeMatchCtx arch c),
         -- 16 taken from previous constraints imposed on arch
         16 PN.<= ArchIntSize arch, 1 PN.<= ArchIntSize arch, KnownNat (ArchIntSize arch),
         16 PN.<= ArchShortSize arch, 1 PN.<= ArchShortSize arch, KnownNat (ArchShortSize arch),

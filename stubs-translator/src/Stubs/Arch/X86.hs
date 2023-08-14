@@ -9,6 +9,8 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE UndecidableInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-|
 Description: Preamble Instance for X86_64
 -}
@@ -33,6 +35,8 @@ import qualified Data.Parameterized as P
 import qualified Stubs.Common as SC 
 import qualified Lang.Crucible.Simulator as LCS
 import Control.Monad.IO.Class (MonadIO)
+
+instance STC.TupleArch DMX.X86_64 ctx where
 
 instance STC.StubsArch DMX.X86_64 where
     type instance ArchTypeMatch DMX.X86_64 'SA.StubsInt = LCT.BVType (STC.ArchIntSize DMX.X86_64)
