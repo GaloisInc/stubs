@@ -20,6 +20,7 @@ import qualified Data.List as List
 import qualified Stubs.Opaque as SO
 import qualified Stubs.Parser.Exception as SPE
 import Control.Monad.Except
+import Unsafe.Coerce (unsafeCoerce)
 
 -- | Top level : Given a module, known globals, and known signatures, generate a StubsModule, and all init fns
 lowerModule :: SW.SModule -> [SA.SomeStubsGlobalDecl] -> [SA.SomeStubsSignature]-> StubsParserM (SA.StubsModule, [String]) 
@@ -173,6 +174,7 @@ lowerExprs exprs = do
     foldM (\(Some ctx) e -> do 
             Some ce <- lowerExpr e  
             return$ Some $ Ctx.extend ctx ce) (Some Ctx.empty) exprs 
+
 exprToTy :: SW.Expr -> StubsLowerSM SW.SType 
 exprToTy e = do
     lst <- get
@@ -207,7 +209,32 @@ exprToTy e = do
                 Just (ParamVar (SW.Var _ t) _) -> pure t
                 Just (LocalVar (SW.Var _ t)) -> pure t 
                 Just (GlobalVar (SW.Var _ t)) -> pure t
-
+        SW.TupleExpr t -> do 
+            tys <-  mapM exprToTy t
+            return $ SW.STuple tys
+        SW.TupleAccessExpr t idx -> do 
+            tupty <- exprToTy t 
+            case tupty of  
+                SW.STuple internal -> do 
+                    if idx >= length internal || idx < 0 then throwError $ SPE.TupleIndexOutOfBounds tupty idx else do 
+                        return (internal !! idx)
+                SW.SCustom alias -> do  -- Lookup custom types
+                    Some stubsTy <- lift $ lowerType tupty
+                    SA.SomeStubsTypeRepr rt <- pure $ SO.reifyType stubsTy (types lst)
+                    case rt of 
+                        SA.StubsTupleRepr c -> do 
+                            let sctx = assignmentToList (Some c)
+                            if idx >= length sctx || idx <0 then throwError $ SPE.TupleIndexOutOfBounds tupty idx else do
+                                let i =  sctx !! idx
+                                return $ stubsTyToWeakTy i
+                        _ -> throwError $ SPE.ExpectedTuple (SW.SCustom alias) (currentFn lst)
+                other -> throwError $ SPE.ExpectedTuple other (currentFn lst)
+    where  
+        assignmentToList = reverse . assignmentToListR
+        assignmentToListR :: Some (Ctx.Assignment SA.StubsTypeRepr) -> [Some SA.StubsTypeRepr] 
+        assignmentToListR (Some ctx) = case Ctx.viewAssign ctx of 
+            Ctx.AssignEmpty -> []
+            Ctx.AssignExtend a b -> Some b: assignmentToListR (Some a)
 -- | Lower a single expression 
 -- Calls and Variables are the interesting cases, as we need to lookup return types, and determine if the variable is a global, a local, or a parameter.
 lowerExpr :: SW.Expr -> StubsLowerSM (Some SA.StubsExpr)
@@ -250,6 +277,36 @@ lowerExpr e = do
                 Just (GlobalVar (SW.Var _ t)) -> do 
                     Some st <- lift $ lowerType t
                     return $ Some (SA.GlobalVarLit (SA.StubsVar v st))
+        SW.TupleExpr texprs -> do 
+            Some stexprs <- lowerExprs texprs 
+            return (Some $ SA.TupleExpr stexprs)
+        SW.TupleAccessExpr tup idx -> do 
+            tupty <- exprToTy tup 
+            case tupty of 
+                SW.STuple internalTys -> do 
+                    if idx >= length internalTys || idx < 0 then throwError $ SPE.TupleIndexOutOfBounds tupty idx else do 
+                        Some struct <- lowerExpr tup
+                        Some accessSTy <- lift $ lowerType (internalTys !! idx)
+                        --TODO: May need type family in order to remove unsafeCoerce here
+                        return (Some $ SA.TupleAccessExpr (unsafeCoerce struct) (fromIntegral idx) accessSTy)
+                SW.SCustom alias -> do  -- Lookup custom types
+                    Some stubsTy <- lift $ lowerType tupty
+                    SA.SomeStubsTypeRepr rt <- pure $ SO.reifyType stubsTy (types lst)
+                    case rt of 
+                        SA.StubsTupleRepr c -> do
+                            Some struct <- lowerExpr tup
+                            let sctx = assignmentToList (Some c)
+                            if idx >= length sctx || idx <0 then throwError $ SPE.TupleIndexOutOfBounds tupty idx else do
+                                Some i <- pure $ sctx !! idx
+                                return (Some $ SA.TupleAccessExpr (unsafeCoerce struct) idx i)
+                        _ -> throwError $ SPE.ExpectedTuple (SW.SCustom alias) (currentFn lst)
+                other -> throwError $ SPE.ExpectedTuple other (currentFn lst)
+    where  
+        assignmentToList = reverse . assignmentToListR
+        assignmentToListR :: Some (Ctx.Assignment SA.StubsTypeRepr) -> [Some SA.StubsTypeRepr] 
+        assignmentToListR (Some ctx) = case Ctx.viewAssign ctx of 
+            Ctx.AssignEmpty -> []
+            Ctx.AssignExtend a b -> Some b: assignmentToListR (Some a)
     
 lookupFn :: [SA.SomeStubsSignature] -> String -> Ctx.Assignment SA.StubsTypeRepr args -> Maybe SA.SomeStubsSignature 
 lookupFn [] _ _ = Nothing 
@@ -276,6 +333,17 @@ lowerType t = case t of
     SW.SIntrinsic s -> do 
         Some sy <- return $ someSymbol $ DT.pack s 
         pure $ Some (SA.StubsIntrinsicRepr sy)
+    SW.STuple tuptys -> do 
+        stys <- mapM lowerType tuptys 
+        Some styCtx <- listToAssignment stys 
+        return $ Some (SA.StubsTupleRepr styCtx)
+    where 
+        listToAssignment = listToAssignmentR . reverse
+        listToAssignmentR :: [Some SA.StubsTypeRepr] -> StubsParserM (Some (Ctx.Assignment SA.StubsTypeRepr))
+        listToAssignmentR [] = pure $ Some Ctx.empty
+        listToAssignmentR (Some sty:stys) = do 
+            Some rest <- listToAssignmentR stys 
+            return (Some $ Ctx.extend rest sty)
 
 -- | Reverse Type matching
 stubsTyToWeakTy :: Some SA.StubsTypeRepr -> SW.SType 
@@ -290,6 +358,13 @@ stubsTyToWeakTy (Some sty) = case sty of
     SA.StubsBoolRepr -> SW.SBool 
     SA.StubsAliasRepr s -> SW.SCustom $ show s
     SA.StubsIntrinsicRepr s -> SW.SIntrinsic $ show s
+    SA.StubsTupleRepr stuptys -> SW.STuple $ assignToList (Some stuptys) 
+    where 
+        assignToList :: Some (Ctx.Assignment SA.StubsTypeRepr) -> [SW.SType]
+        assignToList (Some t) = case Ctx.viewAssign t of 
+            Ctx.AssignEmpty -> []
+            Ctx.AssignExtend rest h -> stubsTyToWeakTy (Some h) : assignToList (Some rest)
+
     
 -- | State needed for lowering of functions
 data LowerState = LowerState {

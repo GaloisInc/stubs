@@ -1,0 +1,10 @@
+type pt = (int,int);
+type ptt = (int, pt);
+
+fn int f(ptt x){
+    return x.1.0;
+}
+
+fn pt g(){
+    return (1,1);
+}

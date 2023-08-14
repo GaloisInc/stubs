@@ -45,6 +45,7 @@ import qualified System.FilePath as SF
       VAR      { ST.VAR $$ }
       TY       {ST.TY}
       INIT     {ST.INIT}
+      DOT      { ST.DOT }
 
 %% 
 
@@ -84,6 +85,10 @@ Type : int {SWA.SInt}
      | unit  {SWA.SUnit}
      | VAR {SWA.SCustom $1}
      | AT VAR {SWA.SIntrinsic $2}
+     | LPAREN TypeList RPAREN { SWA.STuple $2}
+
+TypeList : Type {[$1]}
+          | Type COMMA TypeList {$1 : $3}
 
 Param : Type VAR {SWA.Var $2 $1}
 Params : {- empty -} {[]}
@@ -104,9 +109,17 @@ Stmts : {- empty -} {[]}
 Expr : Literal  { $1 }
      | VAR      { SWA.StVar $1 }
      | FnCall   {$1}
+     | Tuple    {$1}
+     | TupleAccess  {$1}
 
 FnCall : VAR LPAREN ExprList RPAREN {SWA.Call $1 $3}
      | VAR UNITLIT {SWA.Call $1 []}
+
+Tuple : LPAREN ExprL RPAREN { SWA.TupleExpr $2}
+
+TupleAccess : Tuple DOT INTLIT  {SWA.TupleAccessExpr $1 (fromIntegral $3 )}
+            | VAR DOT INTLIT {SWA.TupleAccessExpr (SWA.StVar $1) (fromIntegral $3) }
+            | TupleAccess DOT INTLIT {SWA.TupleAccessExpr $1 (fromIntegral $3 )}
 
 Literal : UNITLIT {SWA.UnitLit}
      | BOOLLIT {SWA.BoolLit $1}
@@ -118,8 +131,10 @@ Literal : UNITLIT {SWA.UnitLit}
      | ULONGLIT {SWA.ULongLit $1}
 
 ExprList : {- empty -} {[]}
-         | Expr {[$1]}
-         | Expr COMMA ExprList { $1 : $3 } 
+         | ExprL {$1}
+
+ExprL : Expr {[$1]}
+       | Expr COMMA ExprList { $1 : $3 } 
 
 {
 -- TODO: Improve Error messages

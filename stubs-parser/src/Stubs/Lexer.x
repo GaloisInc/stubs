@@ -39,7 +39,8 @@ tokens :-
     [\(]                  { token ST.LPAREN }
     [\)]                  { token ST.RPAREN }
     [\,]                  { token ST.COMMA }
-    [\@]                  {token ST.AT}
+    [\@]                  { token ST.AT }
+    [\.]                  { token ST.DOT }
 
     true                  { token (ST.BOOLLIT True)}
     false                 { token (ST.BOOLLIT False)}

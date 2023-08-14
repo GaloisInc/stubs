@@ -82,7 +82,8 @@ test-suite stubs-tests
                  Stubs.SymbolicExecution,
                  Pipeline,
                  StubsStandaloneTests,
-                 StubsOverrideTests
+                 StubsOverrideTests,
+                 ParserOverrideTests
   hs-source-dirs: tests
   build-depends: stubs-common,
                  stubs-wrapper,

@@ -25,6 +25,7 @@ data Token = INT
             | AT -- symbol to prefix an intrinsic type, to distinguish from custom/opaque types 
             | FN -- need to disambiguate grammar
             | EXTERN
+            | DOT
             | VAR String 
             | INTLIT Integer 
             | SHORTLIT Integer

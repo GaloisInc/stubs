@@ -17,6 +17,7 @@ data SType where
     SBool :: SType
     SCustom :: String -> SType
     SIntrinsic :: String -> SType
+    STuple :: [SType] -> SType
     deriving (Eq,Ord,Show)
 
 -- | Typed Variable
@@ -37,6 +38,8 @@ data Expr where
     UnitLit :: Expr
     StVar :: String -> Expr 
     Call :: String -> [Expr] -> Expr
+    TupleExpr :: [Expr] -> Expr
+    TupleAccessExpr :: Expr -> Int -> Expr
     deriving (Eq,Ord,Show)
 
 -- | Stmt type corresponding to StubsStmt, with less type enforcement
