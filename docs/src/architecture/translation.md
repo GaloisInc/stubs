@@ -21,7 +21,7 @@ Each architecture supported by Stubs defines a set of core definitions needed fo
 
 ## The Translation Environment
 
-Translation at the top level sits in the `IO` monad, but the core translation (that of functions) occurs in the `StubsM` monad, which is a specialization of Crucible's `Generator` monad, which is a State monad built on top of `IO`. This monad contains a `StubsState`, which includes:
+Translation at the top level sits in a monad of typeclass `StubsTranslator`,which must implement MonadThrow and MonadIO (for now, this is IO), but the core translation (that of functions) occurs in the `StubsM` monad, which is a specialization of Crucible's `Generator` monad, which is a State monad built on top of `IO`. This monad contains a `StubsState`, which includes:
 - Type mappings for Opaque and Intrinsic types
 - Architecture address width info
 - Expected return type (as a Stubs type)
