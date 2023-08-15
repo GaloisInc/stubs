@@ -74,6 +74,8 @@ import qualified Stubs.Opaque as SO
 import qualified Stubs.Translate.Intrinsic as STI
 import qualified Stubs.Common as SC
 import qualified Lang.Crucible.Types as LCT
+import Control.Monad.Except (throwError)
+import Control.Monad.Catch (throwM)
 -- | A translated Program. Several fields are taken from crucible-syntax's ParsedProgram, for easy conversion
 data CrucibleProgram arch = CrucibleProgram {
   -- | The generated CFGs
@@ -121,17 +123,17 @@ translateExpr' e = do
                 Just (CrucReg reg _) -> do
                     t <- LCCG.readReg reg
                     LCCG.mkAtom t
-                Nothing -> fail "Undefined VarLit encountered" -- Occurs if an expression uses a variable not previously defined. Could be made unreachable by a parser. 
+                Nothing -> throwM (STC.MissingVariable n)-- Occurs if an expression uses a variable not previously defined. Could be made unreachable by a parser. 
         SA.GlobalVarLit (SA.StubsVar n vt) -> do
             vcty <- runReaderT (toCrucibleTy vt) env
             case MapF.lookup (SA.CrucibleVar n vcty) refMap of
                 Just (CrucibleGlobal globVar _) -> do
                     t <- LCCG.readGlobal globVar
                     LCCG.mkAtom t
-                Nothing -> fail "Undefined GlobalVarLit encountered"
+                Nothing -> throwM (STC.MissingVariable n)
         SA.ArgLit (SA.StubsArg i ty) -> do
             case Ctx.intIndex i (Ctx.size argmap) of
-                Nothing -> fail $ "Argument index out of bounds" ++ show i
+                Nothing -> throwM (STC.ParamIndexOutOfBounds i)
                 Just (Some idx) -> do
                     StubAtom a sty <- return $ argmap Ctx.! idx
                     -- Crucible type equality: needed in presence of opaque types
@@ -156,7 +158,7 @@ translateExpr' e = do
                     let t = LCCR.App $ LCCE.HandleLit h
                     ccall <- LCCG.call t cex
                     LCCG.mkAtom ccall
-                Nothing -> fail $ "call to unknown function: " ++ f -- Top level translation prevents this, but invoking something more internal could cause this
+                Nothing -> throwM (STC.UnknownFunctionCall f) -- Top level translation prevents this, but invoking something more internal could cause this
         SA.TupleExpr (tupl::Ctx.Assignment SA.StubsExpr ctx) -> do 
             struct <- translateTuple tupl
             LCCG.mkAtom struct
@@ -168,7 +170,7 @@ translateExpr' e = do
                     ctupty <- runReaderT (STC.toCrucibleTyCtx tupty) env 
                     let sz = Ctx.size ctupty
                     case Ctx.intIndex idx sz of 
-                        Nothing -> fail "Index out of bounds in tuple access"
+                        Nothing -> throwM (STC.TupleIndexOutOfBounds idx)
                         Just (Some idx) -> do 
                             let actual = ctupty Ctx.! idx
                             cty <- runReaderT (STC.toCrucibleTy @arch ty) env
@@ -177,7 +179,7 @@ translateExpr' e = do
                             let cactual = ctupty Ctx.! idx 
                             let acc = LCCR.App $ LCCE.GetStruct struct idx cactual
                             LCCG.mkAtom acc
-                _ -> fail "Expected tuple in tuple access expression"
+                other -> throwM (STC.ExpectedTuple (SA.SomeStubsTypeRepr other))
         _ -> do
             ce <- translateExpr'' e
             LCCG.mkAtom ce
@@ -187,12 +189,12 @@ translateExpr' e = do
             case e' of
                 SA.LitExpr l -> return $ STC.translateLit l
                 -- These should never happen, exist to satisfy match warning
-                SA.VarLit _ -> fail "internal translateExpr called on VarLit"
-                SA.ArgLit _ -> fail "internal translateExpr called on ArgLit"
-                SA.AppExpr {} -> fail "internal translateExpr called on AppExpr"
-                SA.GlobalVarLit _ -> fail "internal translateExpr called on GlobalVarLit"
-                SA.TupleExpr _ -> fail "internal translateExpr called on TupleExpr"
-                SA.TupleAccessExpr _ _ _ -> fail "internal translateExpr called on TupleAccessExpr"
+                SA.VarLit _ -> throwM (STC.UnexpectedError "internal translateExpr called on VarLit")
+                SA.ArgLit _ -> throwM (STC.UnexpectedError "internal translateExpr called on ArgLit")
+                SA.AppExpr {} -> throwM (STC.UnexpectedError "internal translateExpr called on AppExpr")
+                SA.GlobalVarLit _ -> throwM (STC.UnexpectedError "internal translateExpr called on GlobalVarLit")
+                SA.TupleExpr _ -> throwM (STC.UnexpectedError "internal translateExpr called on TupleExpr")
+                SA.TupleAccessExpr _ _ _ -> throwM (STC.UnexpectedError "internal translateExpr called on TupleAccessExpr")
         translateTuple :: forall arch ctx a. (STC.ArchTypeMatchCtx arch ctx ~ a, STC.StubsArch arch) => Ctx.Assignment SA.StubsExpr ctx -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s (LCT.StructType a))
         translateTuple tupl = do 
             env <- gets stStubsenv
@@ -260,7 +262,7 @@ translateStmt stmt = withReturn $ \retty -> do
                                 Just (CrucReg reg _) -> do
                                     _ <- LCCG.assignReg reg ce
                                     return ()
-                _ -> fail $ "Type mismatch - Expected: " ++ show vt ++ " Actual: " ++ show (SA.stubsExprToTy e)
+                _ -> throwM $ STC.TypeMismatch (SA.SomeStubsTypeRepr vt) (SA.SomeStubsTypeRepr $ SA.stubsExprToTy e)
         SA.GlobalAssignment v e -> do
             SA.StubsVar n vt <- return v
             ecty <- runReaderT (toCrucibleTy (SA.stubsExprToTy e)) env
@@ -269,11 +271,11 @@ translateStmt stmt = withReturn $ \retty -> do
                 Just PN.Refl -> do
                             ce <- translateExpr e
                             case MapF.lookup (SA.CrucibleVar n vcty) refMap of -- Is v defined?
-                                Nothing -> fail ("Assignment to nonexistent global: " ++ n)
+                                Nothing -> throwM (STC.MissingVariable n)
                                 Just (CrucibleGlobal globVar _) -> do
                                     _ <- LCCG.writeGlobal globVar ce
                                     return ()
-                _ -> fail $ "Type mismatch - Expected: " ++ show vt ++ " Actual: " ++ show (SA.stubsExprToTy e)
+                _ -> throwM $ STC.TypeMismatch (SA.SomeStubsTypeRepr vt) (SA.SomeStubsTypeRepr $ SA.stubsExprToTy e)
         SA.ITE c t e -> do
             cond <- translateExpr c
             LCCG.ifte_ cond (translateStmts @_ @_ @ret t) (translateStmts @_ @_ @ret e)
@@ -288,14 +290,14 @@ translateStmts (s:stmts) = do
     translateStmts @_ @_ @ret stmts
 
 -- | Function translation
-translateFn :: forall args ret s arch . (DMS.SymArchConstraints arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch),STC.StubsArch arch) =>
+translateFn :: forall args ret s arch m. (DMS.SymArchConstraints arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch),STC.StubsArch arch, StubsTranslator m) =>
                 PN.NonceGenerator IO s ->
                 LCF.HandleAllocator ->
                 Map.Map String (SomeHandle arch )->
                 StubHandle arch args ret ->
                 STC.StubsEnv arch ->
                 MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
-                SA.StubsFunction args ret ->  IO (LCSC.ACFG (DMS.MacawExt arch))
+                SA.StubsFunction args ret ->  m (LCSC.ACFG (DMS.MacawExt arch))
 translateFn ng _ handles hdl env gmap SA.StubsFunction{SA.stubFnSig=SA.StubsSignature{SA.sigFnArgTys=argtys, SA.sigFnRetTy=retty},SA.stubFnBody=body}= do
     -- CFG needs crucible type info
     args <- runReaderT (toCrucibleTyCtx argtys) env
@@ -306,7 +308,7 @@ translateFn ng _ handles hdl env gmap SA.StubsFunction{SA.stubFnSig=SA.StubsSign
     return $ LCSC.ACFG args cret cfg
 
 -- | Translate all declarations from a StubsLibrary
-translateDecls :: forall arch s . (STC.StubsArch arch, SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) =>
+translateDecls :: forall arch s m . (STC.StubsArch arch, SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch), StubsTranslator m) =>
         PN.NonceGenerator IO s ->
         LCF.HandleAllocator ->
         [(String, SomePreambleOverride arch)] -> -- Override mappings : needed so all modules use the same preamble handles
@@ -315,7 +317,7 @@ translateDecls :: forall arch s . (STC.StubsArch arch, SPR.Preamble arch, LCCE.I
         MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
         [(String, SomeWrappedOverride arch)] ->
         [SA.SomeStubsFunction] -> -- Functions to translate 
-        IO [(LCSC.ACFG (DMS.MacawExt arch), (String,SomeHandle arch))]
+        m [(LCSC.ACFG (DMS.MacawExt arch), (String,SomeHandle arch))]
 translateDecls ng hAlloc preMap prevHdls env gmap ovMap fns = do
 
     -- get handles for all functions before hand, for linking.
@@ -343,11 +345,11 @@ translateDecls ng hAlloc preMap prevHdls env gmap ovMap fns = do
             (Just P.Refl, Just P.Refl) -> do
                 t <- translateFn @_ @_ @s @arch ng hAlloc handles hdl env gmap f
                 return (t,(SA.sigFnName sig,SomeHandle hdl))
-            _ -> fail "Should not occur: Translating undefined function"
+            _ -> throwM $ STC.UnexpectedError "Should not occur: Translating undefined function"
         ) fns
 
 -- | Translate a single StubsLibrary
-translateLibrary :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) =>
+translateLibrary :: forall arch s m. (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch), StubsTranslator m) =>
             PN.NonceGenerator IO s ->
             LCF.HandleAllocator ->
             [(String, SomePreambleOverride arch)] ->
@@ -355,7 +357,7 @@ translateLibrary :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.
             STC.StubsEnv arch ->
             MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
                 [(String, SomeWrappedOverride arch)] ->
-            SA.StubsModule -> IO (CrucibleLibrary arch)
+            SA.StubsModule -> m (CrucibleLibrary arch)
 translateLibrary ng halloc preMap prevHdls env gmap ovMap lib = do
     cfghdls <- translateDecls ng halloc preMap prevHdls env gmap ovMap (SA.fnDecls lib)
     return CrucibleLibrary {
@@ -365,7 +367,7 @@ translateLibrary ng halloc preMap prevHdls env gmap ovMap lib = do
 
 -- | Translation of an entire StubsProgram. This is the core entry point for translation, and includes 
 -- module graph resolution, for externs in each library
-translateProgram :: forall arch s . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> [STI.OverrideModule arch]-> SA.StubsProgram -> IO [CrucibleProgram arch]
+translateProgram :: forall arch s m . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch), StubsTranslator m) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> [STI.OverrideModule arch]-> SA.StubsProgram -> m [CrucibleProgram arch]
 translateProgram ng halloc ovs prog = do
 
     -- 1. Translate Haskell Overrides
@@ -397,7 +399,7 @@ translateProgram ng halloc ovs prog = do
 
     let libs = SA.stubsModules prog
     -- Enforce Opaque Types
-    foldM_ (\_ lib -> unless (SO.satOpaque lib) $ fail ("Opaqueness check failed for library: " ++ show (SA.moduleName lib))) () libs
+    foldM_ (\_ lib -> unless (SO.satOpaque lib) $ throwM (STC.OpaquenessViolation (SA.moduleName lib))) () libs
 
     -- Verify Signatures (enforces opacity for calls as well)
     let expectedSigs = Set.difference (Set.fromList $ concatMap SA.externSigs libs) (Set.union (Set.fromList SPR.stubsPreamble) (Set.fromList ovSigs))
@@ -406,9 +408,9 @@ translateProgram ng halloc ovs prog = do
 
     --TODO: handle opaque issues separate 
     let tys = concatMap SA.tyDecls libs
-    t <- mapM (\sig -> SO.reifySig sig tys) undefinedSigs
+    t <- mapM (\sig -> liftIO $ SO.reifySig sig tys) undefinedSigs
     let missingSigs = Set.toList $ Set.difference (Set.fromList t) (Set.union (Set.union (Set.fromList SPR.stubsPreamble) (Set.fromList ovSigs)) definedSigs)
-    Control.Monad.RWS.when (not (null missingSigs)) $ fail ("Missing signatures: " ++ show missingSigs) --Note: This shows the types after removing opaques, so may be unhelpful. The parser is intended to catch this sort of thing
+    Control.Monad.RWS.when (not (null missingSigs)) $ throwM $ STC.UndefinedSignatures missingSigs --Note: This shows the types after removing opaques, so may be unhelpful. The parser is intended to catch this sort of thing
 
     -- Collect aliases/opaques
     let tyMap = foldr (\(SA.SomeStubsTyDecl (SA.StubsTyDecl s t)) acc -> MapF.insert s (STC.coerceToAlias s t) acc) MapF.empty tys
@@ -447,11 +449,11 @@ translateProgram ng halloc ovs prog = do
     let crucProgs = map (\s -> CrucibleProgram{crEntry=s,crFnHandleMap=map snd preMap, crCFGs=fst translatedLibs,crExterns=mempty, crGlobals=mempty,crFwdDecs=mempty, crOvHandleMap = map snd ovMap, crInit=(SA.stubsInitFns prog), crOvInits=ovInits}) (SA.stubsEntryPoints prog)
     return crucProgs
 
-mkHandle :: forall arch args ret . (STC.StubsArch arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCF.HandleAllocator -> SA.StubsSignature args ret -> STC.StubsEnv arch-> IO ( LCF.FnHandle (ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret))
+mkHandle :: forall arch args ret m. (STC.StubsArch arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch), StubsTranslator m) => LCF.HandleAllocator -> SA.StubsSignature args ret -> STC.StubsEnv arch-> m ( LCF.FnHandle (ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret))
 mkHandle hAlloc fn env = do
     args <- runReaderT (toCrucibleTyCtx (SA.sigFnArgTys fn)) env
     cret <- runReaderT (toCrucibleTy (SA.sigFnRetTy fn)) env
-    LCF.mkHandle' hAlloc (WF.functionNameFromText (T.pack (SA.sigFnName fn))) args cret
+    liftIO $ LCF.mkHandle' hAlloc (WF.functionNameFromText (T.pack (SA.sigFnName fn))) args cret
 
 translateFnArgs :: forall arch s args . Ctx.Assignment (LCCR.Atom s) (ArchTypeMatchCtx arch args) -> Ctx.Assignment SA.StubsTypeRepr args -> Ctx.Assignment (StubAtom arch s) args
 translateFnArgs catoms tys = case (alist,tlist) of
@@ -462,11 +464,11 @@ translateFnArgs catoms tys = case (alist,tlist) of
         tlist = Ctx.viewAssign tys
 
 -- Generate global variable ref cells 
-translateGlobals ::forall arch . (STC.StubsArch arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCF.HandleAllocator -> STC.StubsEnv arch -> [SA.SomeStubsGlobalDecl] -> IO (MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch))
+translateGlobals ::forall arch m . (STC.StubsArch arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch), StubsTranslator m) => LCF.HandleAllocator -> STC.StubsEnv arch -> [SA.SomeStubsGlobalDecl] -> m (MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch))
 translateGlobals halloc env globals = do
     foldM (\acc (SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl g ty)) -> do
             cty <- runReaderT (toCrucibleTy @arch ty) env
             let v = SA.CrucibleVar g cty
-            gvar <- LCCC.freshGlobalVar halloc (T.pack g) cty
+            gvar <- liftIO $ LCCC.freshGlobalVar halloc (T.pack g) cty
             return $ MapF.insert v (STC.CrucibleGlobal gvar cty) acc
             ) MapF.empty globals

@@ -41,6 +41,10 @@ import Unsafe.Coerce (unsafeCoerce)
 import qualified Lang.Crucible.CFG.Common as LCCC
 import qualified Data.Data as Data
 import Data.Kind (Type)
+import Control.Monad.Except (ExceptT)
+import Control.Exception
+import Control.Monad.Catch (MonadThrow)
+import Control.Monad.IO.Class (MonadIO)
 
 -- | Type family to map a list of Stubs types to a corresponding list of Crucible types
 type family ArchTypeMatchCtx (arch :: Type) (stubTy :: Ctx.Ctx SA.StubsType) = (crucTy :: Ctx.Ctx LCT.CrucibleType) where
@@ -146,15 +150,42 @@ data StubsEnv arch = StubsEnv {
 -- | Translation monad, which is a Crucible generator with a StubsState
 type StubsM arch s args ret a= (DMS.SymArchConstraints arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch)) => LCCG.Generator (DMS.MacawExt arch) s (StubsState arch ret args) ret IO a
 
+class (Monad m, MonadIO m, MonadThrow m, MonadFail m) => StubsTranslator m
+
+
+data TranslatorException where 
+    UnexpectedError :: String -> TranslatorException -- for things expected to be impossible, for diagnosis
+    OpaquenessViolation :: String -> TranslatorException  -- module name
+    UndefinedSignatures :: [SA.SomeStubsSignature] -> TranslatorException
+    MissingVariable :: String -> TranslatorException
+    ParamIndexOutOfBounds :: Int -> TranslatorException 
+    TupleIndexOutOfBounds :: Int -> TranslatorException
+    UnknownFunctionCall :: String -> TranslatorException
+    ExpectedTuple :: SA.SomeStubsTypeRepr -> TranslatorException --actual type
+    TypeMismatch ::SA.SomeStubsTypeRepr -> SA.SomeStubsTypeRepr -> TranslatorException --expected, then actual
+
+instance Show TranslatorException where 
+    show (UnexpectedError e) = "Unexpected Error: " ++ e 
+    show (OpaquenessViolation modName) = "Violated opaque type constraints in: " ++ modName
+    show (UndefinedSignatures sigs) = "Could not find the following signatures: " ++ show sigs
+    show (MissingVariable v) = "Use of undeclared variable: " ++ v 
+    show (ParamIndexOutOfBounds i) = "Parameter index out of bounds: " ++ show i 
+    show (TupleIndexOutOfBounds i) = "Tuple access index out of bounds: " ++ show i
+    show (UnknownFunctionCall f) = "Call to unknown function: " ++ f
+    show (ExpectedTuple (SA.SomeStubsTypeRepr ty)) = "Expected tuple, got expression of type: " ++ show ty
+    show (TypeMismatch (SA.SomeStubsTypeRepr exp) (SA.SomeStubsTypeRepr act)) = "Type mismatch - Expected: " ++ show exp ++ " Actual: " ++ show act
+
+instance Exception TranslatorException
+
 -- | Constraint for StubsEnv
-class (Monad m,MonadFail m) => HasStubsEnv arch m | m -> arch where
+class (Monad m,MonadThrow m) => HasStubsEnv arch m | m -> arch where
     getStubEnv :: m (StubsEnv arch)
 
-instance HasStubsEnv arch (ReaderT (StubsEnv arch) IO) where
+instance (StubsTranslator m) => HasStubsEnv arch (ReaderT (StubsEnv arch) m) where
     getStubEnv = ask
 
-instance HasStubsEnv arch (ReaderT (StubsEnv arch) (LCCG.Generator (DMS.MacawExt arch) s (StubsState arch ret args) ret IO) ) where
-    getStubEnv = ask
+instance StubsTranslator (LCCG.Generator (DMS.MacawExt arch) s (StubsState arch ret args) ret IO)
+instance StubsTranslator IO
 
 -- Common Pattern: Stub equivalent to Crucible type, so that type checking can be done at the stub level (arch-independent)
 
