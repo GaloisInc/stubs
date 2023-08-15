@@ -26,6 +26,7 @@ data Token = INT
             | FN -- need to disambiguate grammar
             | EXTERN
             | DOT
+            | PRIVATE
             | VAR String 
             | INTLIT Integer 
             | SHORTLIT Integer

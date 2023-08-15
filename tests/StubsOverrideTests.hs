@@ -38,7 +38,8 @@ corePipelinePreambleTest = testCase "Core Pipeline Preamble Check" $ do
                 SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
                 SA.sigFnRetTy=SA.StubsIntRepr
             },
-            SA.stubFnBody=[SA.Return (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.LitExpr $ SA.IntLit 4))  SA.StubsIntRepr)]
+            SA.stubFnBody=[SA.Return (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.LitExpr $ SA.IntLit 4))  SA.StubsIntRepr)],
+            SA.stubFnPrivate=False
         }
     ] [] []]
 ,SA.stubsInitFns = []}]
@@ -59,7 +60,8 @@ corePipelineModuleTest = testCase "Core Pipeline Module Check" $ do
                 SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
                 SA.sigFnRetTy=SA.StubsIntRepr
             },
-            SA.stubFnBody=[SA.Return (SA.AppExpr "g" (Ctx.extend  Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)))  SA.StubsIntRepr)]
+            SA.stubFnBody=[SA.Return (SA.AppExpr "g" (Ctx.extend  Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)))  SA.StubsIntRepr)],
+            SA.stubFnPrivate=False
         }
     ] [] [],
     SA.mkStubsModule "internal" [
@@ -69,7 +71,8 @@ corePipelineModuleTest = testCase "Core Pipeline Module Check" $ do
                 SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
                 SA.sigFnRetTy=SA.StubsIntRepr
             },
-            SA.stubFnBody=[SA.Return (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.LitExpr $ SA.IntLit 4))  SA.StubsIntRepr)]
+            SA.stubFnBody=[SA.Return (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.LitExpr $ SA.IntLit 4))  SA.StubsIntRepr)],
+            SA.stubFnPrivate=False
         }
     ] [] []
     ]
@@ -89,7 +92,8 @@ corePipelineOpaqueTest = genCoreTestIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsAliasRepr counter
                     },
-                    SA.stubFnBody=[SA.Return $  SA.LitExpr $ SA.IntLit 0]},
+                    SA.stubFnBody=[SA.Return $  SA.LitExpr $ SA.IntLit 0],
+                    SA.stubFnPrivate=False},
             SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -97,7 +101,8 @@ corePipelineOpaqueTest = genCoreTestIO (do
                     SA.sigFnArgTys=Ctx.extend Ctx.empty (SA.StubsAliasRepr counter),
                     SA.sigFnRetTy=SA.StubsAliasRepr counter
                     },
-                    SA.stubFnBody=[SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr )]},
+                    SA.stubFnBody=[SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr )],
+                    SA.stubFnPrivate=False},
             SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -105,7 +110,8 @@ corePipelineOpaqueTest = genCoreTestIO (do
                     SA.sigFnArgTys=Ctx.extend Ctx.empty (SA.StubsAliasRepr counter),
                     SA.sigFnRetTy=SA.StubsIntRepr
                     },
-                    SA.stubFnBody=[SA.Return $ SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)]}
+                    SA.stubFnBody=[SA.Return $ SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)],
+                    SA.stubFnPrivate=False}
         ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [],
             SA.mkStubsModule "core" [
                 SA.SomeStubsFunction
@@ -115,8 +121,8 @@ corePipelineOpaqueTest = genCoreTestIO (do
                     SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
                     SA.sigFnRetTy=SA.StubsIntRepr
                     },
-                    SA.stubFnBody=[SA.Return (SA.AppExpr "as_int" (Ctx.extend Ctx.empty (SA.AppExpr "inc" (Ctx.extend Ctx.empty (SA.AppExpr "init" Ctx.empty (SA.StubsAliasRepr counter))) (SA.StubsAliasRepr counter))) SA.StubsIntRepr)]
-                    }
+                    SA.stubFnBody=[SA.Return (SA.AppExpr "as_int" (Ctx.extend Ctx.empty (SA.AppExpr "inc" (Ctx.extend Ctx.empty (SA.AppExpr "init" Ctx.empty (SA.StubsAliasRepr counter))) (SA.StubsAliasRepr counter))) SA.StubsIntRepr)],
+                    SA.stubFnPrivate=False}
             ] [] []
         ],
         SA.stubsInitFns = []   }]
@@ -135,7 +141,8 @@ mallocOvTest = testCase "Malloc Intrinsic Test" $ do
                         SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
                         SA.sigFnRetTy=SA.StubsIntRepr
                     },
-                    SA.stubFnBody=[SA.Assignment (SA.StubsVar "_" (SA.StubsIntrinsicRepr ptr)) (SA.AppExpr "malloc" (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) (SA.StubsIntrinsicRepr ptr)), SA.Return (SA.LitExpr $ SA.IntLit 20)]
+                    SA.stubFnBody=[SA.Assignment (SA.StubsVar "_" (SA.StubsIntrinsicRepr ptr)) (SA.AppExpr "malloc" (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) (SA.StubsIntrinsicRepr ptr)), SA.Return (SA.LitExpr $ SA.IntLit 20)],
+                    SA.stubFnPrivate=False
                 }
             ] [] []
         ],
@@ -162,7 +169,8 @@ corePipelineGlobalTest = genCoreTestIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsUnitRepr
                     },
-                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 0),SA.Return $  SA.LitExpr SA.UnitLit]},
+                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 0),SA.Return $  SA.LitExpr SA.UnitLit],
+                    SA.stubFnPrivate=False},
             SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -170,7 +178,8 @@ corePipelineGlobalTest = genCoreTestIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsUnitRepr
                     },
-                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr),SA.Return $  SA.LitExpr SA.UnitLit]},
+                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr),SA.Return $  SA.LitExpr SA.UnitLit],
+                    SA.stubFnPrivate=False},
 
             SA.SomeStubsFunction
                 SA.StubsFunction {
@@ -179,7 +188,8 @@ corePipelineGlobalTest = genCoreTestIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsIntRepr
                     },
-                    SA.stubFnBody=[SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr]}
+                    SA.stubFnBody=[SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr],
+                    SA.stubFnPrivate=False}
 
                 ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl "i" (SA.StubsAliasRepr counter))],
                 SA.mkStubsModule "core" [
@@ -189,7 +199,8 @@ corePipelineGlobalTest = genCoreTestIO (do
                                 SA.sigFnArgTys=Ctx.empty,
                                 SA.sigFnRetTy=SA.StubsUnitRepr
                             },
-                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "init" Ctx.empty SA.StubsUnitRepr ), SA.Return $ SA.LitExpr SA.UnitLit]
+                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "init" Ctx.empty SA.StubsUnitRepr ), SA.Return $ SA.LitExpr SA.UnitLit],
+                            SA.stubFnPrivate=False
                         },
                         SA.SomeStubsFunction SA.StubsFunction {
                             SA.stubFnSig=SA.StubsSignature {
@@ -197,7 +208,8 @@ corePipelineGlobalTest = genCoreTestIO (do
                                 SA.sigFnArgTys=Ctx.empty,
                                 SA.sigFnRetTy=SA.StubsIntRepr
                             },
-                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return $ SA.LitExpr $ SA.IntLit 9]
+                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return $ SA.LitExpr $ SA.IntLit 9],
+                            SA.stubFnPrivate=False
                         },
                         SA.SomeStubsFunction SA.StubsFunction {
                             SA.stubFnSig=SA.StubsSignature {
@@ -205,7 +217,8 @@ corePipelineGlobalTest = genCoreTestIO (do
                                 SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
                                 SA.sigFnRetTy=SA.StubsIntRepr
                             },
-                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return (SA.AppExpr "get" Ctx.empty SA.StubsIntRepr )]
+                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return (SA.AppExpr "get" Ctx.empty SA.StubsIntRepr )],
+                            SA.stubFnPrivate=False
                         }
                 ] [] []
                 ],
@@ -229,7 +242,8 @@ corePipelineGlobalITest = genCoreTestIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsUnitRepr
                     },
-                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 0),SA.Return $  SA.LitExpr SA.UnitLit]},
+                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 0),SA.Return $  SA.LitExpr SA.UnitLit],
+                    SA.stubFnPrivate=False},
             SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -237,7 +251,8 @@ corePipelineGlobalITest = genCoreTestIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsUnitRepr
                     },
-                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr),SA.Return $  SA.LitExpr SA.UnitLit]},
+                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr),SA.Return $  SA.LitExpr SA.UnitLit],
+                    SA.stubFnPrivate=False},
 
             SA.SomeStubsFunction
                 SA.StubsFunction {
@@ -246,7 +261,8 @@ corePipelineGlobalITest = genCoreTestIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsIntRepr
                     },
-                    SA.stubFnBody=[SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr]}
+                    SA.stubFnBody=[SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr],
+                    SA.stubFnPrivate=False}
 
                 ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl "i" (SA.StubsAliasRepr counter))],
                 SA.mkStubsModule "core" [
@@ -256,7 +272,8 @@ corePipelineGlobalITest = genCoreTestIO (do
                                 SA.sigFnArgTys=Ctx.empty,
                                 SA.sigFnRetTy=SA.StubsUnitRepr
                             },
-                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "init" Ctx.empty SA.StubsUnitRepr ), SA.Return $ SA.LitExpr SA.UnitLit]
+                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "init" Ctx.empty SA.StubsUnitRepr ), SA.Return $ SA.LitExpr SA.UnitLit],
+                            SA.stubFnPrivate=False
                         },
                         SA.SomeStubsFunction SA.StubsFunction {
                             SA.stubFnSig=SA.StubsSignature {
@@ -264,7 +281,8 @@ corePipelineGlobalITest = genCoreTestIO (do
                                 SA.sigFnArgTys=Ctx.empty,
                                 SA.sigFnRetTy=SA.StubsIntRepr
                             },
-                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return $ SA.LitExpr $ SA.IntLit 9]
+                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return $ SA.LitExpr $ SA.IntLit 9],
+                            SA.stubFnPrivate=False
                         },
                         SA.SomeStubsFunction SA.StubsFunction {
                             SA.stubFnSig=SA.StubsSignature {
@@ -272,7 +290,8 @@ corePipelineGlobalITest = genCoreTestIO (do
                                 SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
                                 SA.sigFnRetTy=SA.StubsIntRepr
                             },
-                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return (SA.AppExpr "get" Ctx.empty SA.StubsIntRepr )]
+                            SA.stubFnBody = [SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr ), SA.Return (SA.AppExpr "get" Ctx.empty SA.StubsIntRepr )],
+                            SA.stubFnPrivate=False
                         }
                 ] [] []
                 ],
@@ -294,7 +313,8 @@ corePipelineMultipleOverrideTest = genCoreTestIO (do
                                 SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
                                 SA.sigFnRetTy=SA.StubsIntRepr
                             },
-                        SA.stubFnBody=[SA.Return (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr) )]
+                        SA.stubFnBody=[SA.Return (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr) )],
+                        SA.stubFnPrivate=False
                     },
                 SA.SomeStubsFunction
                     SA.StubsFunction {
@@ -303,7 +323,8 @@ corePipelineMultipleOverrideTest = genCoreTestIO (do
                                 SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
                                 SA.sigFnRetTy=SA.StubsIntRepr
                             },
-                        SA.stubFnBody=[SA.Return (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr) )]
+                        SA.stubFnBody=[SA.Return (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr) )],
+                        SA.stubFnPrivate=False
                     }
             ] [] []
         ],

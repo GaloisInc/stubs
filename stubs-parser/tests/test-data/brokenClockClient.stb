@@ -1,0 +1,4 @@
+fn int f(int x){
+    initialClock();
+    return time();
+}

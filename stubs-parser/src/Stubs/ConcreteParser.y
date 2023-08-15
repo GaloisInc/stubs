@@ -46,6 +46,7 @@ import qualified System.FilePath as SF
       TY       {ST.TY}
       INIT     {ST.INIT}
       DOT      { ST.DOT }
+      PRIVATE  { ST.PRIVATE }
 
 %% 
 
@@ -58,9 +59,14 @@ ExternDecls : {- empty -} {[]}
             | ExternDecl {[$1]}
             | ExternDecls ExternDecl {$2 : $1}
 
-Fn : FN Type VAR UNITLIT LBRACE Stmts RBRACE {SWA.SFn $3 [] $2 $6 False} 
-   | FN Type VAR LPAREN Params RPAREN LBRACE Stmts RBRACE {SWA.SFn $3 $5 $2 $8 False}
-   | INIT FN unit VAR UNITLIT LBRACE Stmts RBRACE {SWA.SFn $4 [] SWA.SUnit $7 True} 
+Fn : FnMeta FN Type VAR UNITLIT LBRACE Stmts RBRACE {SWA.SFn $4 [] $3 $7 $1} 
+   | FnMeta FN Type VAR LPAREN Params RPAREN LBRACE Stmts RBRACE {SWA.SFn $4 $6 $3 $9 $1}
+   | FnMeta FN unit VAR UNITLIT LBRACE Stmts RBRACE {SWA.SFn $4 [] SWA.SUnit $7 $1} 
+
+FnMeta : PRIVATE {SWA.FnMetadata False True}
+       | PRIVATE INIT {SWA.FnMetadata True True}
+       | INIT {SWA.FnMetadata True False}
+       | {- empty -} {SWA.FnMetadata False False}
 Fns : {- empty -} {[]}
     | Fn {[$1]}
     | Fns Fn {$2 : $1 }

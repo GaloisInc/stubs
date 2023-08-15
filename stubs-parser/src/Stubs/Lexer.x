@@ -31,6 +31,7 @@ tokens :-
     fn                    { token ST.FN }
     init                  { token ST.INIT }
     extern                { token ST.EXTERN }
+    private               { token ST.PRIVATE }
 
     [=]                   { token ST.ASSIGNMENT }
     [\{]                  { token ST.LBRACE }

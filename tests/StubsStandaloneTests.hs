@@ -81,14 +81,16 @@ testProg =
             SA.sigFnArgTys=Ctx.empty,
             SA.sigFnRetTy=SA.StubsIntRepr
         },
-        SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.LitExpr $ SA.IntLit 20) SA.StubsIntRepr]
+        SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.LitExpr $ SA.IntLit 20) SA.StubsIntRepr],
+        SA.stubFnPrivate=False
     } in let int_fun = SA.StubsFunction {
         SA.stubFnSig=SA.StubsSignature{
             SA.sigFnName="g",
             SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
             SA.sigFnRetTy=SA.StubsIntRepr
         },
-        SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
+        SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))],
+        SA.stubFnPrivate=False
     } in SA.StubsProgram {
         SA.stubsEntryPoints=["f"],
         SA.stubsModules=[SA.StubsModule{
@@ -104,8 +106,8 @@ linkerTest :: TestTree
 linkerTest = genTestCase ( SA.StubsProgram {
         SA.stubsModules=[SA.StubsModule{
             SA.fnDecls = [
-            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "double" (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) SA.StubsIntRepr)] ),
-            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "double" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) [SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) SA.StubsIntRepr)])
+            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "double" (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) SA.StubsIntRepr)] False),
+            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "double" (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) [SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) SA.StubsIntRepr)] False)
         ],
             SA.externSigs=[],
             SA.moduleName="",
@@ -132,11 +134,11 @@ factorialTest :: TestTree
 factorialTest = genTestCase (SA.StubsProgram {
         SA.stubsModules=[SA.StubsModule{
             SA.fnDecls = [
-            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "factorial" (Ctx.extend (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr)] ),
+            SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr) [SA.Return (SA.AppExpr "factorial" (Ctx.extend (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5)) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr)] False),
             SA.SomeStubsFunction (SA.StubsFunction (SA.StubsSignature "factorial" (Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.StubsIntRepr) SA.StubsIntRepr)
             [SA.ITE (SA.AppExpr "gt" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.LitExpr $ SA.IntLit 0) ) SA.StubsBoolRepr)
             [SA.Return (SA.AppExpr "factorial"  (Ctx.extend (Ctx.extend Ctx.empty (SA.AppExpr "minus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr ) ) (SA.AppExpr "mult" (Ctx.extend (Ctx.extend Ctx.empty  (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)))  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) SA.StubsIntRepr   )  )  SA.StubsIntRepr)   ]
-            [SA.Return (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)) ] ])
+            [SA.Return (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)) ] ] False)
         ],
         SA.externSigs = [],
         SA.moduleName="",
@@ -186,7 +188,8 @@ moduleTest = genTestCase SA.StubsProgram{
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsIntRepr
                     },
-                    SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.LitExpr $ SA.IntLit 20) SA.StubsIntRepr]}] [] [],
+                    SA.stubFnBody=[SA.Return $ SA.AppExpr "g" (Ctx.extend Ctx.empty $ SA.LitExpr $ SA.IntLit 20) SA.StubsIntRepr],
+                    SA.stubFnPrivate=False}] [] [],
         SA.mkStubsModule "internal" [SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -194,7 +197,8 @@ moduleTest = genTestCase SA.StubsProgram{
                     SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
                     SA.sigFnRetTy=SA.StubsIntRepr
                 },
-            SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))]
+            SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr)  (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)), SA.Return (SA.VarLit (SA.StubsVar "v" SA.StubsIntRepr))],
+            SA.stubFnPrivate=False
             }] [] []
      ]
 ,SA.stubsInitFns = []} check "Module Test"
@@ -226,7 +230,8 @@ opaqueTest = genTestCaseIO ( do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsAliasRepr counter
                     },
-                    SA.stubFnBody=[SA.Return $  SA.LitExpr $ SA.IntLit 0]},
+                    SA.stubFnBody=[SA.Return $  SA.LitExpr $ SA.IntLit 0],
+                    SA.stubFnPrivate=False},
             SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -234,7 +239,8 @@ opaqueTest = genTestCaseIO ( do
                     SA.sigFnArgTys=Ctx.extend Ctx.empty (SA.StubsAliasRepr counter),
                     SA.sigFnRetTy=SA.StubsAliasRepr counter
                     },
-                    SA.stubFnBody=[SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr )]},
+                    SA.stubFnBody=[SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr )],
+                    SA.stubFnPrivate=False},
             SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -242,7 +248,8 @@ opaqueTest = genTestCaseIO ( do
                     SA.sigFnArgTys=Ctx.extend Ctx.empty (SA.StubsAliasRepr counter),
                     SA.sigFnRetTy=SA.StubsIntRepr
                     },
-                    SA.stubFnBody=[SA.Return $ SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)]}
+                    SA.stubFnBody=[SA.Return $ SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)],
+                    SA.stubFnPrivate=False}
         ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [],
             SA.mkStubsModule "core" [
                 SA.SomeStubsFunction
@@ -252,7 +259,8 @@ opaqueTest = genTestCaseIO ( do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsIntRepr
                     },
-                    SA.stubFnBody=[SA.Return (SA.AppExpr "as_int" (Ctx.extend Ctx.empty (SA.AppExpr "inc" (Ctx.extend Ctx.empty (SA.AppExpr "init" Ctx.empty (SA.StubsAliasRepr counter))) (SA.StubsAliasRepr counter))) SA.StubsIntRepr)]
+                    SA.stubFnBody=[SA.Return (SA.AppExpr "as_int" (Ctx.extend Ctx.empty (SA.AppExpr "inc" (Ctx.extend Ctx.empty (SA.AppExpr "init" Ctx.empty (SA.StubsAliasRepr counter))) (SA.StubsAliasRepr counter))) SA.StubsIntRepr)],
+                    SA.stubFnPrivate=False
                     }
             ] [] []
         ]   ,SA.stubsInitFns = []}) check "Opaque Test"
@@ -283,7 +291,8 @@ globalVarTest = genTestCase SA.StubsProgram{
                             SA.sigFnArgTys=Ctx.extend Ctx.empty SA.StubsIntRepr,
                             SA.sigFnRetTy=SA.StubsUnitRepr
                         },
-                        SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) , SA.Return $ SA.LitExpr SA.UnitLit]
+                        SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr)) , SA.Return $ SA.LitExpr SA.UnitLit],
+                        SA.stubFnPrivate=False
                     }
                 )
 
@@ -296,7 +305,8 @@ globalVarTest = genTestCase SA.StubsProgram{
                             SA.sigFnArgTys=Ctx.empty,
                             SA.sigFnRetTy=SA.StubsIntRepr
                         },
-                        SA.stubFnBody=[SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "set" (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5) ) SA.StubsUnitRepr), SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr]
+                        SA.stubFnBody=[SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "set" (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 5) ) SA.StubsUnitRepr), SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr],
+                        SA.stubFnPrivate=False
                     }
                 )
             ] [] []
@@ -332,7 +342,8 @@ opaqueGlobalTest = genTestCaseIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsUnitRepr
                     },
-                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 0),SA.Return $  SA.LitExpr SA.UnitLit]},
+                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 0),SA.Return $  SA.LitExpr SA.UnitLit],
+                    SA.stubFnPrivate=False},
             SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -340,7 +351,8 @@ opaqueGlobalTest = genTestCaseIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsUnitRepr
                     },
-                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr),SA.Return $  SA.LitExpr SA.UnitLit]},
+                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr),SA.Return $  SA.LitExpr SA.UnitLit],
+                    SA.stubFnPrivate=False},
 
             SA.SomeStubsFunction
                 SA.StubsFunction {
@@ -349,7 +361,8 @@ opaqueGlobalTest = genTestCaseIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsIntRepr
                     },
-                    SA.stubFnBody=[SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr]}
+                    SA.stubFnBody=[SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr],
+                    SA.stubFnPrivate=False}
 
                 ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl "i" (SA.StubsAliasRepr counter))],
                 SA.mkStubsModule "core"  [
@@ -360,7 +373,8 @@ opaqueGlobalTest = genTestCaseIO (do
                             SA.sigFnArgTys=Ctx.empty,
                             SA.sigFnRetTy=SA.StubsIntRepr
                         },
-                        SA.stubFnBody=[SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "init" Ctx.empty SA.StubsUnitRepr),SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr), SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr),SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr), SA.Return (SA.AppExpr "get" Ctx.empty SA.StubsIntRepr)]
+                        SA.stubFnBody=[SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "init" Ctx.empty SA.StubsUnitRepr),SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr), SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr),SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr), SA.Return (SA.AppExpr "get" Ctx.empty SA.StubsIntRepr)],
+                        SA.stubFnPrivate=False
                     }
                 )
                 ]
@@ -398,7 +412,8 @@ initHookTest = genTestCaseIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsUnitRepr
                     },
-                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 0),SA.Return $  SA.LitExpr $ SA.UnitLit]},
+                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 0),SA.Return $  SA.LitExpr $ SA.UnitLit],
+                    SA.stubFnPrivate=False},
             SA.SomeStubsFunction
                 SA.StubsFunction {
                     SA.stubFnSig=SA.StubsSignature{
@@ -406,7 +421,8 @@ initHookTest = genTestCaseIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsUnitRepr
                     },
-                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr),SA.Return $  SA.LitExpr SA.UnitLit]},
+                    SA.stubFnBody=[SA.GlobalAssignment (SA.StubsVar "i" SA.StubsIntRepr) (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr) ) (SA.LitExpr $ SA.IntLit 1)) SA.StubsIntRepr),SA.Return $  SA.LitExpr SA.UnitLit],
+                    SA.stubFnPrivate=False},
 
             SA.SomeStubsFunction
                 SA.StubsFunction {
@@ -415,7 +431,8 @@ initHookTest = genTestCaseIO (do
                     SA.sigFnArgTys=Ctx.empty,
                     SA.sigFnRetTy=SA.StubsIntRepr
                     },
-                    SA.stubFnBody=[SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr]}
+                    SA.stubFnBody=[SA.Return $ SA.GlobalVarLit $ SA.StubsVar "i" SA.StubsIntRepr],
+                    SA.stubFnPrivate=False}
 
                 ] [SA.SomeStubsTyDecl (SA.StubsTyDecl counter SA.StubsIntRepr)] [SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl "i" (SA.StubsAliasRepr counter))],
                 SA.mkStubsModule "core"  [
@@ -426,7 +443,8 @@ initHookTest = genTestCaseIO (do
                             SA.sigFnArgTys=Ctx.empty,
                             SA.sigFnRetTy=SA.StubsIntRepr
                         },
-                        SA.stubFnBody=[SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr), SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr),SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr), SA.Return (SA.AppExpr "get" Ctx.empty SA.StubsIntRepr)]
+                        SA.stubFnBody=[SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr), SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr),SA.Assignment (SA.StubsVar "_" SA.StubsUnitRepr) (SA.AppExpr "inc" Ctx.empty SA.StubsUnitRepr), SA.Return (SA.AppExpr "get" Ctx.empty SA.StubsIntRepr)],
+                        SA.stubFnPrivate=False
                     }
                 )
                 ]
@@ -456,7 +474,8 @@ tupleTest = let pointTy = Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.S
                 SA.SomeStubsFunction 
                     SA.StubsFunction {
                         SA.stubFnSig=SA.StubsSignature "mkPoint" pointTy (SA.StubsTupleRepr pointTy) ,
-                        SA.stubFnBody=[SA.Return (SA.TupleExpr (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)) ))]
+                        SA.stubFnBody=[SA.Return (SA.TupleExpr (Ctx.extend (Ctx.extend Ctx.empty (SA.ArgLit (SA.StubsArg 0 SA.StubsIntRepr))) (SA.ArgLit (SA.StubsArg 1 SA.StubsIntRepr)) ))],
+                        SA.stubFnPrivate=False
                     },
                 SA.SomeStubsFunction 
                     SA.StubsFunction {
@@ -464,7 +483,8 @@ tupleTest = let pointTy = Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.S
                         SA.stubFnBody=[
                             SA.Return (SA.AppExpr "plus" (Ctx.extend (Ctx.extend Ctx.empty (SA.TupleAccessExpr (SA.ArgLit $ SA.StubsArg 0 (SA.StubsTupleRepr pointTy)) 0 SA.StubsIntRepr)) 
                             (SA.TupleAccessExpr (SA.ArgLit $ SA.StubsArg 0 (SA.StubsTupleRepr pointTy)) 1 SA.StubsIntRepr)) SA.StubsIntRepr )
-                        ]
+                        ],
+                        SA.stubFnPrivate=False
                     }
             ] [] [],
         SA.mkStubsModule "core" [
@@ -472,7 +492,8 @@ tupleTest = let pointTy = Ctx.extend (Ctx.extend Ctx.empty SA.StubsIntRepr) SA.S
                 SA.stubFnSig= SA.StubsSignature "main" Ctx.empty SA.StubsIntRepr,
                 SA.stubFnBody=[
                     SA.Assignment (SA.StubsVar "p" $ SA.StubsTupleRepr pointTy) (SA.AppExpr "mkPoint" (Ctx.extend (Ctx.extend Ctx.empty (SA.LitExpr $ SA.IntLit 3)) (SA.LitExpr $ SA.IntLit 5))  $ SA.StubsTupleRepr pointTy ),
-                    SA.Return (SA.AppExpr "dist" (Ctx.extend Ctx.empty (SA.VarLit (SA.StubsVar "p" $ SA.StubsTupleRepr pointTy))) SA.StubsIntRepr)]
+                    SA.Return (SA.AppExpr "dist" (Ctx.extend Ctx.empty (SA.VarLit (SA.StubsVar "p" $ SA.StubsTupleRepr pointTy))) SA.StubsIntRepr)],
+                    SA.stubFnPrivate=False
             } 
         ] [] []
      ],

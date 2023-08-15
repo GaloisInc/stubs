@@ -1,0 +1,12 @@
+type clock = int;
+clock clockInternal;
+
+fn int time(){
+    clockInternal = plus(clockInternal,1);
+    return clockInternal;
+}
+
+private init fn unit initialClock(){
+    clockInternal=0;
+    return ();
+}

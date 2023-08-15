@@ -29,7 +29,7 @@ lowerModule smod externGlobals declaredSigs = do
     globals <- lowerGlobals (SW.globals smod)
     extSigs <- genExtSigs (SW.externs smod)
     fns <- lowerFns (SW.fns smod) (externGlobals ++ globals) (declaredSigs++extSigs) types
-    return (SA.mkStubsModule (SW.moduleName smod) fns types globals, map (\(SW.SFn n _ _ _ _) -> n) $ filter (\(SW.SFn _ _ _ _ f) -> f) (SW.fns smod) ) 
+    return (SA.mkStubsModule (SW.moduleName smod) fns types globals, map (\(SW.SFn n _ _ _ _) -> n) $ filter (\(SW.SFn _ _ _ _ f) -> SW.fnInit f) (SW.fns smod) ) 
 
 -- | Lower type declarations 
 lowerTyDecls :: [SW.STyDecl] -> StubsParserM [SA.SomeStubsTyDecl]
@@ -95,7 +95,8 @@ lowerFn (SW.SFn n params ret body f) sigs globs tys = do
     (SA.SomeStubsSignature sig) <- genSig (SW.SFn n params ret body f)
     return $ SA.SomeStubsFunction (SA.StubsFunction{
         SA.stubFnSig= sig,
-        SA.stubFnBody=sbody
+        SA.stubFnBody=sbody,
+        SA.stubFnPrivate=SW.fnPrivate f
     })
 
 lowerStmts :: [SW.Stmt] -> StubsLowerSM [SA.StubsStmt]

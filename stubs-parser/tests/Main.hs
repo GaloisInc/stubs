@@ -33,7 +33,7 @@ moduleParseTest = testCase "can parse a simple module" $ do
     \c=0;\nreturn ();\
     \}"
     let res = SCP.stubsParser input
-    let exp = SWA.SModule {SWA.moduleName="", SWA.fns = [SWA.SFn "initialize" [] SWA.SUnit [SWA.Assignment "c" (SWA.IntLit 0), SWA.Return SWA.UnitLit]  False], 
+    let exp = SWA.SModule {SWA.moduleName="", SWA.fns = [SWA.SFn "initialize" [] SWA.SUnit [SWA.Assignment "c" (SWA.IntLit 0), SWA.Return SWA.UnitLit] $ SWA.FnMetadata False False], 
         SWA.tys=[], SWA.globals= [SWA.SGlobalDecl (SWA.Var "c" SWA.SInt)], SWA.externs=[]}
     assertEqual "failed to properly parse" res exp
 

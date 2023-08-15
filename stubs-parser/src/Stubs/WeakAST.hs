@@ -51,12 +51,19 @@ data Stmt where
     Declaration :: String -> SType -> Expr -> Stmt
     deriving (Eq,Ord,Show) 
 
+-- | Collection of non-type info for functions
+data FnMetadata = FnMetadata {
+    fnInit::Bool,
+    fnPrivate::Bool
+}
+    deriving (Eq,Ord,Show)
+
 data SFn = SFn {
     fnName::String,
     fnParams::[Var],
     fnRet :: SType,
     fnBody :: [Stmt],
-    isInit :: Bool
+    fnMeta :: FnMetadata
 }
     deriving (Eq,Ord,Show)
 data STyDecl = STyDecl String SType

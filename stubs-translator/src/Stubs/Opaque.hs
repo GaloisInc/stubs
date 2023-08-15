@@ -24,7 +24,7 @@ satOpaque lib = all (opaqueFn (SA.tyDecls lib)) (SA.fnDecls lib)
 
 -- | A function satisfies opaqueness if all statements in the body do too.
 opaqueFn :: [SA.SomeStubsTyDecl] -> SA.SomeStubsFunction -> Bool
-opaqueFn tys (SA.SomeStubsFunction (SA.StubsFunction sig body)) = all (opaqueStmt tys sig) body
+opaqueFn tys (SA.SomeStubsFunction (SA.StubsFunction sig body _)) = all (opaqueStmt tys sig) body
 
 -- Lookup helper for SymbolReprs
 symbolLookup :: P.SymbolRepr s -> [SA.SomeStubsTyDecl] -> Maybe SA.SomeStubsTypeRepr

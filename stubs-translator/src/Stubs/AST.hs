@@ -196,7 +196,8 @@ instance Ord SomeStubsSignature where
 -- | A Stubs function, consisting of a signature, and a list of statements comprising the body.
 data StubsFunction (args::Ctx.Ctx StubsType) (ret::StubsType) = StubsFunction {
     stubFnSig :: StubsSignature args ret,
-    stubFnBody :: [StubsStmt]
+    stubFnBody :: [StubsStmt],
+    stubFnPrivate :: Bool -- is the function private?
 }
 
 data SomeStubsFunction = forall a b . SomeStubsFunction(StubsFunction a b)
@@ -318,7 +319,7 @@ data StubsModule = StubsModule {
 
 -- Note: These instances do not give complete equality checking, this is needed for Ord for using a map
 instance Eq SomeStubsFunction where
-    (==) (SomeStubsFunction (StubsFunction sig1 _)) (SomeStubsFunction (StubsFunction sig2 _)) = (SomeStubsSignature sig1) == (SomeStubsSignature sig2)
+    (==) (SomeStubsFunction (StubsFunction sig1 _ b1)) (SomeStubsFunction (StubsFunction sig2 _ b2)) = (SomeStubsSignature sig1) == (SomeStubsSignature sig2) && b1 == b2
 
 instance Eq StubsModule where
     (==) a b = case ((fnDecls a) == (fnDecls b), (moduleName a)== (moduleName b)) of
@@ -362,15 +363,15 @@ stubsAssignmentToTys assign = case alist of
     where
         alist = Ctx.viewAssign assign
 
--- | Extract signatures for all functions declared in a library
+-- | Extract signatures for all non-private functions declared in a library
 stubsLibDefs :: StubsModule -> [SomeStubsSignature]
-stubsLibDefs lib = map (\(SomeStubsFunction f) -> SomeStubsSignature (stubFnSig f)) (fnDecls lib)
+stubsLibDefs lib = map (\(SomeStubsFunction f) -> SomeStubsSignature (stubFnSig f))  $ filter (\(SomeStubsFunction (StubsFunction _ _ p)) -> not p) (fnDecls lib)
 
 -- Given a list of functions, generate its external dependencies, for easier library construction
 extractLibDeps :: [SomeStubsFunction] ->  [SomeStubsSignature]
 extractLibDeps fns =
-        let int_sigs = Set.fromList $ map (\(SomeStubsFunction(StubsFunction sig _) )-> SomeStubsSignature sig) fns in
-            let sigs = Set.fromList $ concatMap (\(SomeStubsFunction (StubsFunction _ stmts)) -> extractSigsStmts stmts) fns in
+        let int_sigs = Set.fromList $ map (\(SomeStubsFunction(StubsFunction sig _ _) )-> SomeStubsSignature sig) fns in
+            let sigs = Set.fromList $ concatMap (\(SomeStubsFunction (StubsFunction _ stmts _)) -> extractSigsStmts stmts) fns in
             (Set.toList $ Set.difference sigs (Set.intersection sigs int_sigs))
 
 extractSigsStmts :: [StubsStmt] -> [SomeStubsSignature]
