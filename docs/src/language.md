@@ -82,7 +82,7 @@ init fn unit k(){
 
 ```
 
-A function consists of its signature, and a list of statements comprising the body. The signature denotes whether or not it is an init hook, its return type, and what parameters it takes.
+A function consists of its signature, and a list of statements comprising the body. The signature denotes whether or not it is an init hook,whether it is private or not, its return type, and what parameters it takes.
 For functions with multiple parameters, each parameter declaration is comma separated, as in C.
 
 ## Statements and Expressions

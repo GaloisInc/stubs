@@ -12,7 +12,7 @@ int clockInternal;
 Then, we add our `time` method. Notice that addition is implemented as a function call. This allows architectures to define custom implementations of core operations, referred to as the preamble.
 
 ```c
-
+// This is a comment.
 fn int time(){
     clockInternal = plus(clockInternal,1);
     return clockInternal;
@@ -100,5 +100,16 @@ fn int bumpTime(int x){
 ```
 
 This extends the interface of our clock module, without taking advantage of implementation details or leaking the abstraction. Another point to note is that parameters are immutable (necessitating the declaration of `i`).
+
+With this, we have a reasonable clock module, although there is one point where our abstraction can be messed with: `initialClock`. By default, a module exports every method, and so there is nothing preventing another module from simply resetting our clock erroneously. To prevent this behavior, we make use of the `private` keyword. We change `initialClock` to the following:
+
+```c
+private init fn unit initialClock(){
+    clockInternal=0;
+    return ();
+}
+```
+
+Now, the function cannot be invoked outside of the declaring module, and so other modules cannot reset the clock. Using `private`, a module can implement features and selectively expose those features to other modules, hiding implementation details as desired.
 
 If you've followed this quickstart guide, you now have your first module, and have seen custom types, global data, functions (and init functions), as well as several language constructs. Continuing on to the next section (Language), you can find a more comprehensive definition of the Stubs language's concrete syntax, and a discussion of more advanced features.
