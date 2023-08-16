@@ -1,0 +1,16 @@
+int seed;
+
+private init fn unit initialSeed(){
+    seed = 0;
+    return ();
+}
+
+fn unit srand(int x){
+    seed = x;
+    return ();
+}
+
+fn int rand(){
+    seed = plus(time(),mult(seed,3));
+    return seed;
+}

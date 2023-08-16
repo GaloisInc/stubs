@@ -37,4 +37,6 @@ tailRecFactorialTest = genIntegrationTest ["./stubs-parser/tests/test-data/facto
 brokenClockTest :: TestTree 
 brokenClockTest = genIntegrationExceptionTest ["./stubs-parser/tests/test-data/privateClock.stb", "./stubs-parser/tests/test-data/brokenClockClient.stb"] "./tests/test-data/basic.out" ["f"] "Private function cannot be invoked"
 
-parserTests = [counterParsedTest, initParsedTest, externParsedTest, tailRecFactorialTest,brokenClockTest]
+pseudoRandomTest :: TestTree 
+pseudoRandomTest = genIntegrationTest ["./stubs-parser/tests/test-data/privateClock.stb", "./stubs-parser/tests/test-data/rand.stb","./stubs-parser/tests/test-data/pseudoRandom.stb"] "./tests/test-data/basic.out" ["f"] "Pseudorandom number generator" 50
+parserTests = [counterParsedTest, initParsedTest, externParsedTest, tailRecFactorialTest,brokenClockTest, pseudoRandomTest]

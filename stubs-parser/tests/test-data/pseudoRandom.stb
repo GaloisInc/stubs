@@ -1,0 +1,5 @@
+fn int f(int x){
+    srand(x);
+    rand();
+    return rand();
+}
