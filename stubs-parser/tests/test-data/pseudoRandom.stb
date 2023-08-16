@@ -1,3 +1,4 @@
+// test client for rand.stb
 fn int f(int x){
     srand(x);
     rand();

@@ -31,7 +31,7 @@ tokens :-
     fn                    { token ST.FN }
     init                  { token ST.INIT }
     extern                { token ST.EXTERN }
-    private               { token ST.PRIVATE }
+    private               { token ST.PRIVATE}
 
     [=]                   { token ST.ASSIGNMENT }
     [\{]                  { token ST.LBRACE }
@@ -54,6 +54,7 @@ tokens :-
     $digit+US             { readNatToken ST.USHORTLIT }
     $alpha+               { readStrToken ST.VAR }
     <0> $white+           ;
+    [\/][\/](.+)[\n]      ;
 
 {
 

@@ -1,4 +1,4 @@
 fn int f(int x){
-    initialClock();
+    initialClock(); // this is private, so this should fail to compile
     return time();
 }

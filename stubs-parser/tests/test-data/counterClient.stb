@@ -1,3 +1,4 @@
+// An example using the counter in counter.stb, to be used in a binary override
 fn unit j(){
     initCounter();
     inc();

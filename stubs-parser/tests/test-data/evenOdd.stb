@@ -1,3 +1,5 @@
+// This file shows off mutual recursion
+
 fn bool odd(int x){
     if eq(x,0) {
         return false;

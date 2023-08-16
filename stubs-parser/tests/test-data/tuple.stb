@@ -1,3 +1,4 @@
+// Examples using tuple syntax
 type pt = (int,int);
 type ptt = (int, pt);
 

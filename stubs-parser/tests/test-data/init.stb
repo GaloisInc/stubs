@@ -1,3 +1,4 @@
+// Init hook test: g must run before f does.
 int c;
 
 fn int f(int x){

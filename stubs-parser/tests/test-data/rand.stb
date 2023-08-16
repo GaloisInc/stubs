@@ -1,3 +1,5 @@
+// Toy pseudo-random number generator API, making use of the clock 
+
 int seed;
 
 private init fn unit initialSeed(){

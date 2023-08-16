@@ -1,4 +1,4 @@
-extern @Pointer malloc(int x);
+extern @Pointer malloc(int x); // Example of using a function from an override module
 
 fn int f(int x){
     @Pointer ptr = malloc(x);
