@@ -35,6 +35,7 @@ import qualified Data.Parameterized as P
 import qualified Stubs.Common as SC 
 import qualified Lang.Crucible.Simulator as LCS
 import Control.Monad.IO.Class (MonadIO)
+import qualified Lang.Crucible.LLVM.MemModel as LCLM
 
 instance STC.StubsArch DMX.X86_64 where
 
@@ -47,6 +48,7 @@ instance STC.StubsArch DMX.X86_64 where
             SA.StubsIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
             SA.StubsBoolRepr -> return LCT.BoolRepr
             SA.StubsUnitRepr -> return LCT.UnitRepr
+            SA.StubsPointerRepr -> pure $ LCLM.LLVMPointerRepr (PN.knownNat @64)
             SA.StubsUIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
             SA.StubsLongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
             SA.StubsShortRepr-> return $ LCT.BVRepr (PN.knownNat @16)

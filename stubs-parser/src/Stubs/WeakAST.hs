@@ -17,6 +17,7 @@ data SType where
     SBool :: SType
     SChar :: SType 
     SUChar :: SType
+    SPtr :: SType
     SCustom :: String -> SType
     SIntrinsic :: String -> SType
     STuple :: [SType] -> SType

@@ -34,6 +34,7 @@ tokens :-
     init                  { token ST.INIT }
     extern                { token ST.EXTERN }
     private               { token ST.PRIVATE}
+    pointer               { token ST.POINTER }
 
     [=]                   { token ST.ASSIGNMENT }
     [\{]                  { token ST.LBRACE }

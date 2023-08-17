@@ -29,6 +29,7 @@ data Token = INT
             | EXTERN
             | DOT
             | PRIVATE
+            | POINTER
             | VAR String 
             | INTLIT Integer 
             | SHORTLIT Integer

@@ -45,6 +45,8 @@ import Control.Monad.Except (ExceptT)
 import Control.Exception
 import Control.Monad.Catch (MonadThrow)
 import Control.Monad.IO.Class (MonadIO)
+import qualified Lang.Crucible.LLVM.MemModel as LCLM
+import qualified Data.Macaw.CFG as DMC
 
 -- | Type family to map a list of Stubs types to a corresponding list of Crucible types
 type family ArchTypeMatchCtx (arch :: Type) (stubTy :: Ctx.Ctx SA.StubsType) = (crucTy :: Ctx.Ctx LCT.CrucibleType) where
@@ -64,6 +66,7 @@ type instance ArchTypeMatch arch 'SA.StubsLong = LCT.BVType (ArchLongSize arch)
 type instance ArchTypeMatch arch 'SA.StubsULong = LCT.BVType (ArchLongSize arch)
 type instance ArchTypeMatch arch ('SA.StubsIntrinsic s) = SA.ResolveIntrinsic s
 type instance ArchTypeMatch arch ('SA.StubsTuple c) = LCT.StructType (ArchTypeMatchCtx arch c)
+type instance ArchTypeMatch arch SA.StubsPointer = LCLM.LLVMPointerType (DMC.ArchAddrWidth arch)
 
 -- | Type class for defining a valid architecture for translation
 class (DMS.SymArchConstraints arch,

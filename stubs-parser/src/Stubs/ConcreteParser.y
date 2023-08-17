@@ -51,6 +51,7 @@ import qualified System.FilePath as SF
       INIT     {ST.INIT}
       DOT      { ST.DOT }
       PRIVATE  { ST.PRIVATE }
+      ptr      { ST.POINTER }
 
 %% 
 
@@ -94,6 +95,7 @@ Type : int {SWA.SInt}
      | unit  {SWA.SUnit}
      | char  {SWA.SChar}
      | uchar {SWA.SUChar}
+     | ptr   {SWA.SPtr }
      | VAR {SWA.SCustom $1}
      | AT VAR {SWA.SIntrinsic $2}
      | LPAREN TypeList RPAREN { SWA.STuple $2}

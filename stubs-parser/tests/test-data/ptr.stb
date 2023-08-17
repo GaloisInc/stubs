@@ -1,0 +1,5 @@
+//example working with a pointer input 
+
+fn int f(pointer x){
+    return 0; // currently no primitives for pointer
+}

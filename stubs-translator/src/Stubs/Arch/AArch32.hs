@@ -31,6 +31,7 @@ import qualified Lang.Crucible.CFG.Reg as LCCR
 import GHC.Natural (naturalToInteger)
 import qualified Data.Parameterized.Map as MapF
 import qualified Stubs.Translate.Intrinsic as STI
+import qualified Lang.Crucible.LLVM.MemModel as LCLM
 
 instance STC.StubsArch SAA.AArch32 where 
 
@@ -43,6 +44,7 @@ instance STC.StubsArch SAA.AArch32 where
             SA.StubsIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
             SA.StubsBoolRepr -> return LCT.BoolRepr
             SA.StubsUnitRepr -> return LCT.UnitRepr
+            SA.StubsPointerRepr -> pure $ LCLM.LLVMPointerRepr (PN.knownNat @32)
             SA.StubsUIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
             SA.StubsLongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
             SA.StubsShortRepr -> return $ LCT.BVRepr (PN.knownNat @16)

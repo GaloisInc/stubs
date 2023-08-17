@@ -69,6 +69,7 @@ data StubsType where
     -- | Like Crucible Intrinsics: These are known to Override Modules only, and map directly to crucible types
     StubsIntrinsic :: Symbol -> StubsType
     StubsTuple :: Ctx.Ctx StubsType -> StubsType
+    StubsPointer :: StubsType
 
 type StubsInt = 'StubsInt
 type StubsUnit = 'StubsUnit
@@ -82,6 +83,7 @@ type StubsChar = 'StubsChar
 type StubsUChar = 'StubsUChar 
 type StubsIntrinsic = 'StubsIntrinsic
 type StubsTuple = 'StubsTuple
+type StubsPointer = 'StubsPointer
 
 -- | Value-level type representations of StubsType
 data StubsTypeRepr a where
@@ -98,6 +100,7 @@ data StubsTypeRepr a where
     StubsAliasRepr :: P.SymbolRepr s -> StubsTypeRepr (ResolveAlias s)
     StubsIntrinsicRepr :: P.SymbolRepr s -> StubsTypeRepr (StubsIntrinsic s)
     StubsTupleRepr :: Ctx.Assignment StubsTypeRepr ctx -> StubsTypeRepr (StubsTuple ctx)
+    StubsPointerRepr :: StubsTypeRepr StubsPointer
 
 instance ShowF StubsTypeRepr where 
     showF StubsIntRepr = "Int"
@@ -113,6 +116,7 @@ instance ShowF StubsTypeRepr where
     showF (StubsTupleRepr t) = "Tuple:("++ show t ++ ")"
     showF StubsCharRepr = "Char"
     showF StubsUCharRepr = "UChar"
+    showF StubsPointerRepr = "Ptr"
 
 instance Show (StubsTypeRepr a) where 
     show StubsIntRepr = "Int"
@@ -128,6 +132,7 @@ instance Show (StubsTypeRepr a) where
     show (StubsTupleRepr t) = "Tuple:("++ show t ++ ")"
     show StubsCharRepr = "Char"
     show StubsUCharRepr = "UChar"
+    show StubsPointerRepr = "Ptr"
 
 type family ResolveAlias (s :: Symbol) :: StubsType
 

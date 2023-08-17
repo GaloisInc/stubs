@@ -39,4 +39,7 @@ brokenClockTest = genIntegrationExceptionTest ["./stubs-parser/tests/test-data/p
 
 pseudoRandomTest :: TestTree 
 pseudoRandomTest = genIntegrationTest ["./stubs-parser/tests/test-data/privateClock.stb", "./stubs-parser/tests/test-data/rand.stb","./stubs-parser/tests/test-data/pseudoRandom.stb"] "./tests/test-data/basic.out" ["f"] "Pseudorandom number generator" 50
-parserTests = [counterParsedTest, initParsedTest, externParsedTest, tailRecFactorialTest,brokenClockTest, pseudoRandomTest]
+
+ptrOverrideTest :: TestTree 
+ptrOverrideTest = genIntegrationTest ["./stubs-parser/tests/test-data/ptr.stb"] "./tests/test-data/nullptr.out" ["f"] "Override functions with pointer arguments" 0
+parserTests = [counterParsedTest, initParsedTest, externParsedTest, tailRecFactorialTest,brokenClockTest, pseudoRandomTest, ptrOverrideTest]

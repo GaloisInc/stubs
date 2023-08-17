@@ -334,6 +334,7 @@ lowerType t = case t of
     SW.SLong-> pure $ Some SA.StubsLongRepr
     SW.SULong -> pure $ Some SA.StubsULongRepr
     SW.SUnit -> pure $ Some SA.StubsUnitRepr
+    SW.SPtr -> pure $ Some SA.StubsPointerRepr
     SW.SCustom s -> do 
         Some sy <- return $ someSymbol $ DT.pack s 
         pure $ Some (SA.StubsAliasRepr sy)
@@ -368,6 +369,7 @@ stubsTyToWeakTy (Some sty) = case sty of
     SA.StubsAliasRepr s -> SW.SCustom $ show s
     SA.StubsIntrinsicRepr s -> SW.SIntrinsic $ show s
     SA.StubsTupleRepr stuptys -> SW.STuple $ assignToList (Some stuptys) 
+    SA.StubsPointerRepr -> SW.SPtr
     where 
         assignToList :: Some (Ctx.Assignment SA.StubsTypeRepr) -> [SW.SType]
         assignToList (Some t) = case Ctx.viewAssign t of 
