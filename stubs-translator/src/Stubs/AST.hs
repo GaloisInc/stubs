@@ -62,6 +62,8 @@ data StubsType where
     StubsShort :: StubsType
     StubsUShort :: StubsType
     StubsULong :: StubsType
+    StubsChar :: StubsType 
+    StubsUChar :: StubsType
     -- | Opaque type
     StubsAlias :: Symbol -> StubsType
     -- | Like Crucible Intrinsics: These are known to Override Modules only, and map directly to crucible types
@@ -76,6 +78,8 @@ type StubsLong = 'StubsLong
 type StubsShort = 'StubsShort
 type StubsULong = 'StubsULong
 type StubsUShort = 'StubsUShort
+type StubsChar = 'StubsChar 
+type StubsUChar = 'StubsUChar 
 type StubsIntrinsic = 'StubsIntrinsic
 type StubsTuple = 'StubsTuple
 
@@ -89,6 +93,8 @@ data StubsTypeRepr a where
     StubsShortRepr :: StubsTypeRepr StubsShort
     StubsULongRepr :: StubsTypeRepr StubsULong
     StubsUShortRepr :: StubsTypeRepr StubsUShort
+    StubsCharRepr :: StubsTypeRepr StubsChar 
+    StubsUCharRepr :: StubsTypeRepr StubsUChar
     StubsAliasRepr :: P.SymbolRepr s -> StubsTypeRepr (ResolveAlias s)
     StubsIntrinsicRepr :: P.SymbolRepr s -> StubsTypeRepr (StubsIntrinsic s)
     StubsTupleRepr :: Ctx.Assignment StubsTypeRepr ctx -> StubsTypeRepr (StubsTuple ctx)
@@ -105,6 +111,8 @@ instance ShowF StubsTypeRepr where
     showF (StubsAliasRepr s) = "Opaque:" ++ show s 
     showF (StubsIntrinsicRepr s) = "Intrinsic:" ++ show s 
     showF (StubsTupleRepr t) = "Tuple:("++ show t ++ ")"
+    showF StubsCharRepr = "Char"
+    showF StubsUCharRepr = "UChar"
 
 instance Show (StubsTypeRepr a) where 
     show StubsIntRepr = "Int"
@@ -118,6 +126,8 @@ instance Show (StubsTypeRepr a) where
     show (StubsAliasRepr s) = "Opaque:" ++ show s 
     show (StubsIntrinsicRepr s) = "Intrinsic:" ++ show s 
     show (StubsTupleRepr t) = "Tuple:("++ show t ++ ")"
+    show StubsCharRepr = "Char"
+    show StubsUCharRepr = "UChar"
 
 type family ResolveAlias (s :: Symbol) :: StubsType
 
@@ -253,6 +263,8 @@ data StubsLit (a::StubsType) where
     ULongLit :: Natural -> StubsLit StubsULong
     UShortLit :: Natural -> StubsLit StubsUShort
     BoolLit :: Bool -> StubsLit StubsBool
+    CharLit :: Integer -> StubsLit StubsChar 
+    UCharLit :: Natural -> StubsLit StubsUChar
 
 -- | Expression definition. Note that most interesting code is expressed through function calls, where primitive operations are defined as preamble functions.  
 -- See Stubs.Preamble for more on this.
@@ -347,6 +359,8 @@ stubsExprToTy e = case e of
     LitExpr(ShortLit _) -> StubsShortRepr
     LitExpr(ULongLit _) -> StubsULongRepr
     LitExpr(UShortLit _) -> StubsUShortRepr
+    LitExpr(CharLit _) -> StubsCharRepr
+    LitExpr(UCharLit _) -> StubsUCharRepr
     VarLit v -> varType v
     GlobalVarLit v -> varType v
     ArgLit a -> argType a

@@ -181,9 +181,11 @@ exprToTy e = do
     lst <- get
     case e of 
         SW.IntLit _ -> pure SW.SInt 
+        SW.CharLit _ -> pure SW.SChar 
         SW.LongLit _ -> pure SW.SLong 
         SW.ShortLit _ ->  pure SW.SShort
         SW.UIntLit _ -> pure SW.SUInt 
+        SW.UCharLit _ -> pure SW.SUChar
         SW.ULongLit _ -> pure SW.SULong
         SW.UShortLit _ -> pure SW.SUShort
         SW.BoolLit _ -> pure SW.SBool
@@ -249,6 +251,8 @@ lowerExpr e = do
         SW.ULongLit l -> return $ Some (SA.LitExpr (SA.ULongLit l))
         SW.UShortLit s -> return $ Some (SA.LitExpr (SA.UShortLit s))
         SW.UIntLit i -> return $ Some (SA.LitExpr (SA.UIntLit i))
+        SW.CharLit c -> return $ Some (SA.LitExpr (SA.CharLit c))
+        SW.UCharLit c -> return $ Some (SA.LitExpr (SA.UCharLit c))
         SW.UnitLit -> return $ Some (SA.LitExpr SA.UnitLit)
         SW.Call f args -> do 
             Some sargs <- lowerExprs args
@@ -321,8 +325,10 @@ lookupFn ((SA.SomeStubsSignature (SA.StubsSignature v params r)):sigs) name args
 lowerType :: SW.SType -> StubsParserM (Some SA.StubsTypeRepr)
 lowerType t = case t of 
     SW.SInt -> pure $ Some SA.StubsIntRepr
+    SW.SChar -> pure $ Some SA.StubsCharRepr
     SW.SBool -> pure $ Some SA.StubsBoolRepr
     SW.SUInt -> pure $ Some SA.StubsUIntRepr
+    SW.SUChar -> pure $ Some SA.StubsUCharRepr
     SW.SShort-> pure $ Some SA.StubsShortRepr
     SW.SUShort -> pure $ Some SA.StubsUShortRepr
     SW.SLong-> pure $ Some SA.StubsLongRepr
@@ -355,6 +361,8 @@ stubsTyToWeakTy (Some sty) = case sty of
     SA.StubsShortRepr -> SW.SShort
     SA.StubsULongRepr -> SW.SULong
     SA.StubsUShortRepr -> SW.SUShort
+    SA.StubsCharRepr -> SW.SChar 
+    SA.StubsUCharRepr -> SW.SUChar
     SA.StubsUnitRepr -> SW.SUnit
     SA.StubsBoolRepr -> SW.SBool 
     SA.StubsAliasRepr s -> SW.SCustom $ show s

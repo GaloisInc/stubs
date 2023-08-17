@@ -1,0 +1,33 @@
+// Test for parsing integer literals 
+// Note: C does not define suffixes for short or char literals, so these are unique to Stubs
+fn int i(){
+    return 5;
+}
+
+fn short s(){
+    return 5S;
+}
+
+fn long l(){
+    return 5L;
+}
+
+fn char c(){
+    return 5C;
+}
+
+fn uint u(){
+    return 5U;
+}
+
+fn ushort us(){
+    return 5US;
+}
+
+fn ulong ul(){
+    return 5UL;
+}
+
+fn uchar uc(){
+    return 5UC;
+}

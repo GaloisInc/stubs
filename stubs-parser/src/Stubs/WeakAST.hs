@@ -15,6 +15,8 @@ data SType where
     SULong :: SType
     SUnit :: SType
     SBool :: SType
+    SChar :: SType 
+    SUChar :: SType
     SCustom :: String -> SType
     SIntrinsic :: String -> SType
     STuple :: [SType] -> SType
@@ -34,6 +36,8 @@ data Expr where
     UIntLit :: Natural -> Expr 
     UShortLit :: Natural -> Expr
     ULongLit :: Natural -> Expr
+    CharLit :: Integer -> Expr 
+    UCharLit :: Natural -> Expr 
     BoolLit :: Bool -> Expr 
     UnitLit :: Expr
     StVar :: String -> Expr 

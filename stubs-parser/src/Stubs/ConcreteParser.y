@@ -15,9 +15,11 @@ import qualified System.FilePath as SF
       int   {ST.INT}
       short {ST.SHORT}
       long  {ST.LONG}
+      char  { ST.CHAR}
       uint  {ST.UINT}
       ushort{ST.USHORT}
       ulong {ST.ULONG}
+      uchar { ST.UCHAR }
       bool  {ST.BOOL}
       unit  {ST.UNIT}
       while {ST.WHILE}
@@ -39,6 +41,8 @@ import qualified System.FilePath as SF
       LONGLIT { ST.LONGLIT $$ }
       UINTLIT { ST.UINTLIT $$ }
       USHORTLIT { ST.USHORTLIT $$ }
+      CHARLIT  {ST.CHARLIT $$ }
+      UCHARLIT  {ST.UCHARLIT $$ }
       ULONGLIT { ST.ULONGLIT $$ }
       BOOLLIT  { ST.BOOLLIT $$ }
       UNITLIT  { ST.UNITLIT }
@@ -88,6 +92,8 @@ Type : int {SWA.SInt}
      | ulong {SWA.SULong}
      | bool  {SWA.SBool}
      | unit  {SWA.SUnit}
+     | char  {SWA.SChar}
+     | uchar {SWA.SUChar}
      | VAR {SWA.SCustom $1}
      | AT VAR {SWA.SIntrinsic $2}
      | LPAREN TypeList RPAREN { SWA.STuple $2}
@@ -131,6 +137,8 @@ Literal : UNITLIT {SWA.UnitLit}
      | INTLIT {SWA.IntLit $1}
      | SHORTLIT {SWA.ShortLit $1}
      | LONGLIT {SWA.LongLit $1}
+     | CHARLIT {SWA.CharLit $1}
+     | UCHARLIT {SWA.UCharLit $1}
      | UINTLIT {SWA.UIntLit $1}
      | USHORTLIT {SWA.UShortLit $1}
      | ULONGLIT {SWA.ULongLit $1}

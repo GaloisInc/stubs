@@ -77,6 +77,9 @@ ifElseChainTest = parseableTest "Nested if/else" ["./tests/test-data/evenOdd.stb
 tupParseTest :: TestTree 
 tupParseTest = parseableTest "tuple syntax" ["./tests/test-data/tuple.stb"] ["f"]
 
+integralTest :: TestTree 
+integralTest = parseableTest "integer types syntax" ["./tests/test-data/integers.stb"] []
+
 main :: IO ()
 main = defaultMain $ do
-    testGroup "Concrete Syntax Tests" [globalDeclTest,fnLexTest,moduleParseTest,moduleLowerTest,lowerFailUndeclared, counterClientTest, initFnTest,externDeclTest,loopFactorialTest,ifElseChainTest,tupParseTest]
+    testGroup "Concrete Syntax Tests" [globalDeclTest,fnLexTest,moduleParseTest,moduleLowerTest,lowerFailUndeclared, counterClientTest, initFnTest,externDeclTest,loopFactorialTest,ifElseChainTest,tupParseTest, integralTest]

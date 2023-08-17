@@ -16,10 +16,12 @@ $digit = [0-9]
 
 tokens :- 
     short                 { token ST.SHORT }
+    char                  { token ST.CHAR }
     long                  { token ST.LONG }
     int                   { token ST.INT }
     ushort                { token ST.USHORT }
     ulong                 { token ST.ULONG }
+    uchar                 { token ST.UCHAR }
     uint                  { token ST.UINT }
     unit                  { token ST.UNIT }
     bool                  { token ST.BOOL }
@@ -52,6 +54,9 @@ tokens :-
     $digit+UL             { readNatToken  ST.ULONGLIT }
     $digit+S              { readIntToken ST.SHORTLIT }
     $digit+US             { readNatToken ST.USHORTLIT }
+
+    $digit+C             { readIntToken ST.CHARLIT }
+    $digit+UC             { readNatToken ST.UCHARLIT }
     $alpha+               { readStrToken ST.VAR }
     <0> $white+           ;
     [\/][\/](.+)[\n]      ;

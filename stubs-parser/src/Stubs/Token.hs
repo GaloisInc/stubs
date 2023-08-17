@@ -4,9 +4,11 @@ import GHC.Natural (Natural)
 data Token = INT 
             | SHORT 
             | LONG 
+            | CHAR
             | ULONG 
             | UINT 
             | USHORT 
+            | UCHAR
             | UNIT 
             | BOOL 
             | TY -- type keyword 
@@ -31,6 +33,8 @@ data Token = INT
             | INTLIT Integer 
             | SHORTLIT Integer
             | LONGLIT Integer 
+            | CHARLIT Integer 
+            | UCHARLIT Natural
             | UINTLIT Natural 
             | USHORTLIT Natural
             | ULONGLIT Natural

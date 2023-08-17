@@ -52,6 +52,8 @@ instance STC.StubsArch DMX.X86_64 where
             SA.StubsShortRepr-> return $ LCT.BVRepr (PN.knownNat @16)
             SA.StubsULongRepr -> return $ LCT.BVRepr (PN.knownNat @64)
             SA.StubsUShortRepr-> return $ LCT.BVRepr (PN.knownNat @16)
+            SA.StubsCharRepr -> pure $ LCT.BVRepr (PN.knownNat @8)
+            SA.StubsUCharRepr -> pure $ LCT.BVRepr (PN.knownNat @8)
             SA.StubsAliasRepr s -> do
                 env <- STC.getStubEnv
                 let tymap = STC.stTyMap env
@@ -73,6 +75,7 @@ instance STC.StubsArch DMX.X86_64 where
         let n = PN.knownNat @32
         let ln = PN.knownNat @64
         let sn = PN.knownNat @16
+        let sc = PN.knownNat @8
         case lit of
             SA.BoolLit b -> LCCR.App $ LCCE.BoolLit b
             SA.UnitLit -> LCCR.App LCCE.EmptyApp
@@ -82,6 +85,8 @@ instance STC.StubsArch DMX.X86_64 where
             SA.ULongLit u -> LCCR.App (LCCE.IntegerToBV ln $ LCCR.App $ LCCE.IntLit (naturalToInteger u))
             SA.UShortLit u -> LCCR.App (LCCE.IntegerToBV sn $ LCCR.App $ LCCE.IntLit (naturalToInteger u))
             SA.ShortLit s -> LCCR.App (LCCE.IntegerToBV sn $ LCCR.App $ LCCE.IntLit s)
+            SA.CharLit c -> LCCR.App (LCCE.IntegerToBV sc $ LCCR.App $ LCCE.IntLit c)
+            SA.UCharLit c -> LCCR.App (LCCE.IntegerToBV sc $ LCCR.App $ LCCE.IntLit (naturalToInteger c))
 
 instance SPR.Preamble DMX.X86_64 where
     preambleMap SA.StubsSignature{SA.sigFnName="plus",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsIntRepr Ctx.:> SA.StubsIntRepr ), SA.sigFnRetTy=SA.StubsIntRepr} = arithBinOverride @DMX.X86_64 WI.bvAdd "plus"
