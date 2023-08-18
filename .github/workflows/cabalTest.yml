@@ -18,6 +18,8 @@ jobs:
         ghc-version: '8.10.3'
         cabal-version: '3.2'
 
+    - name: Submodule init 
+      run: git submodule --init 
     - name: Cache
       uses: actions/cache@v3
       env:
