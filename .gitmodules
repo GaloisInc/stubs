@@ -40,6 +40,3 @@
 [submodule "submodules/submodules/portable-executable"]
 	path = submodules/portable-executable
 	url = git@github.com:GaloisInc/portable-executable.git
-[submodule "submodules/what4-serialize"]
-	path = submodules/what4-serialize
-	url = git@github.com:GaloisInc/what4-serialize.git
