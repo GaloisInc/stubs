@@ -39,4 +39,3 @@ packages: .
           submodules/macaw-loader/macaw-loader-ppc
           submodules/macaw-loader/macaw-loader-aarch32
           submodules/portable-executable/pe-parser
-          submodules/what4-serialize
