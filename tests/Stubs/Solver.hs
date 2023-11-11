@@ -1,6 +1,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeOperators #-}
 -- | This module provides an interface for instantiating SMT solvers
 --
 -- The intent of this module is to make it easy to select a solver from the

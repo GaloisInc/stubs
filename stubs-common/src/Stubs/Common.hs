@@ -1,5 +1,6 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeOperators #-}
 module Stubs.Common where
 import qualified What4.Expr as WE
 import qualified What4.Interface as WI

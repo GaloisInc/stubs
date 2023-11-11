@@ -4,6 +4,7 @@
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeOperators #-}
 module Stubs.EnvVar
   ( ConcreteEnvVar(..)
   , ConcreteEnvVarFromBytes(..)
