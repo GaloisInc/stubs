@@ -94,10 +94,10 @@ instance PP.Pretty Diagnostic where
   pretty :: Diagnostic -> PP.Doc ann
   pretty = PP.unAnnotate . ppDiagnostic
 
--- | Produces an annotated Doc (for colorized ANSI terminal printing), 
+-- | Produces an annotated Doc (for colorized ANSI terminal printing),
 -- which is not possible with a Pretty instance.
 ppDiagnostic :: Diagnostic -> PP.Doc STY.Style
-ppDiagnostic d = 
+ppDiagnostic d =
   case d of
     DiscoveryEvent symMap de ->
       case de of
@@ -139,7 +139,7 @@ ppDiagnostic d =
               , PP.indent 2 (PP.viaShow (p ^. WL.labeledPredMsg)) <> PP.line
               ]
     ExecutingWeirdMachineAt addr ->
-      
+
       mconcat [ STY.success $ PP.pretty "Success:" <> PP.line
               , PP.pretty "Execution transferred to a Weird Machine at 0x" <> PP.pretty (showHex addr "") <> PP.line ]
     AssertingGoalsForProperty name mdesc ->
