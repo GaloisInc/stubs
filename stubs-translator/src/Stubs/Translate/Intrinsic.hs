@@ -3,6 +3,7 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 
 {-|
 Description: Override Module definitions to allow for working with 'Intrinsic' types such as pointers
@@ -11,7 +12,7 @@ This module contains the definitions for Override Modules, which allow Crucible 
 This allows for more complex concepts like memory to be written directly in Haskell, and exposed to Stubs-level programs.
 -}
 
-module Stubs.Translate.Intrinsic where 
+module Stubs.Translate.Intrinsic where
 import qualified Stubs.AST as SA
 import qualified Stubs.Translate.Core as STC
 import qualified Stubs.Common as SC
@@ -28,7 +29,7 @@ data SomeIntrinsicTyDecl = forall s tp . SomeIntrinsicTyDecl (IntrinsicTyDecl s 
 
 -- | A Module consisting of Haskell Overrides rather than Stubs-level functions
 data OverrideModule arch = OverrideModule {
-    ovModuleName :: String, 
+    ovModuleName :: String,
     ovDecls :: [SomeStubsOverride arch],
     ovTyDecls :: [SomeIntrinsicTyDecl],
     ovInits :: [String] --init fns
@@ -41,5 +42,5 @@ data SomeStubsOverride arch = forall args ret cargs cret. (STC.StubsArch arch) =
 
 -- | Typeclass to define override modules on a per-architecture basis
 -- m is a monad to allow definitions to perform actions such as making a SymbolRepr, which can't be done in a let-binding
-class (STC.StubsArch arch) => (OverrideArch arch) where 
+class (STC.StubsArch arch) => (OverrideArch arch) where
     buildOverrides :: (Monad m, MonadIO m) => m [OverrideModule arch]
