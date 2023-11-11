@@ -17,7 +17,7 @@
 {-|
 Description: Core Translation from Stubs to Crucible
 
-This module contains the translation from the Stubs language into Crucible. Given a StubsProgram,  
+This module contains the translation from the Stubs language into Crucible. Given a StubsProgram,
 an equivalent CrucibleProgram is produced, which contains Crucible CFGs alongside information needed for linking,
 as well as for symbolic execution
 -}
@@ -106,7 +106,7 @@ data SomePreambleOverride arch = forall args ret . SomePreambleOverride(Preamble
 data PreambleOverride arch args ret = PreambleOverride (forall sym bak solver scope st fs p . (bak ~ LCBO.OnlineBackend solver scope st fs, LCB.HasSymInterface sym bak, WI.IsExprBuilder sym) =>
     bak -> LCS.Override p sym (DMS.MacawExt arch) (STC.ArchTypeMatchCtx arch args) (STC.ArchTypeMatch arch ret)) (StubHandle arch args ret)
 
-data SomeWrappedOverride arch = forall args ret. SomeWrappedOverride(WrappedOverride arch args ret) 
+data SomeWrappedOverride arch = forall args ret. SomeWrappedOverride(WrappedOverride arch args ret)
 data WrappedOverride arch args ret = WrappedOverride (forall sym p . SC.Sym sym -> LCS.Override p sym (DMS.MacawExt arch) (STC.ArchTypeMatchCtx arch args) (ArchTypeMatch arch ret)) (StubHandle arch args ret)
 
 -- Unexported Internal Function. A mix of returing Atoms vs Expr causes this hierarchy to be necessary
@@ -123,7 +123,7 @@ translateExpr' e = do
                 Just (CrucReg reg _) -> do
                     t <- LCCG.readReg reg
                     LCCG.mkAtom t
-                Nothing -> throwM (STC.MissingVariable n)-- Occurs if an expression uses a variable not previously defined. Could be made unreachable by a parser. 
+                Nothing -> throwM (STC.MissingVariable n)-- Occurs if an expression uses a variable not previously defined. Could be made unreachable by a parser.
         SA.GlobalVarLit (SA.StubsVar n vt) -> do
             vcty <- runReaderT (toCrucibleTy vt) env
             case MapF.lookup (SA.CrucibleVar n vcty) refMap of
@@ -159,24 +159,24 @@ translateExpr' e = do
                     ccall <- LCCG.call t cex
                     LCCG.mkAtom ccall
                 Nothing -> throwM (STC.UnknownFunctionCall f) -- Top level translation prevents this, but invoking something more internal could cause this
-        SA.TupleExpr (tupl::Ctx.Assignment SA.StubsExpr ctx) -> do 
+        SA.TupleExpr (tupl::Ctx.Assignment SA.StubsExpr ctx) -> do
             struct <- translateTuple tupl
             LCCG.mkAtom struct
-        SA.TupleAccessExpr tupl idx ty -> do 
+        SA.TupleAccessExpr tupl idx ty -> do
             struct <- translateExpr tupl
             let t = SA.stubsExprToTy tupl
-            case t of 
-                SA.StubsTupleRepr tupty -> do 
-                    ctupty <- runReaderT (STC.toCrucibleTyCtx tupty) env 
+            case t of
+                SA.StubsTupleRepr tupty -> do
+                    ctupty <- runReaderT (STC.toCrucibleTyCtx tupty) env
                     let sz = Ctx.size ctupty
-                    case Ctx.intIndex idx sz of 
+                    case Ctx.intIndex idx sz of
                         Nothing -> throwM (STC.TupleIndexOutOfBounds idx)
-                        Just (Some idx) -> do 
+                        Just (Some idx) -> do
                             let actual = ctupty Ctx.! idx
                             cty <- runReaderT (STC.toCrucibleTy @arch ty) env
                             Just PN.Refl <- pure $ PN.testEquality cty actual
-                            
-                            let cactual = ctupty Ctx.! idx 
+
+                            let cactual = ctupty Ctx.! idx
                             let acc = LCCR.App $ LCCE.GetStruct struct idx cactual
                             LCCG.mkAtom acc
                 other -> throwM (STC.ExpectedTuple (SA.SomeStubsTypeRepr other))
@@ -196,9 +196,9 @@ translateExpr' e = do
                 SA.TupleExpr _ -> throwM (STC.UnexpectedError "internal translateExpr called on TupleExpr")
                 SA.TupleAccessExpr _ _ _ -> throwM (STC.UnexpectedError "internal translateExpr called on TupleAccessExpr")
         translateTuple :: forall arch ctx a. (STC.ArchTypeMatchCtx arch ctx ~ a, STC.StubsArch arch) => Ctx.Assignment SA.StubsExpr ctx -> StubsM arch s args ret (LCCR.Expr (DMS.MacawExt arch) s (LCT.StructType a))
-        translateTuple tupl = do 
+        translateTuple tupl = do
             env <- gets stStubsenv
-            internals <- translateExprs tupl 
+            internals <- translateExprs tupl
             ctys <- runReaderT (toCrucibleTyCtx $ SA.stubsAssignmentToTys tupl) env
             return $ LCCR.App $ LCCE.MkStruct ctys internals
 
@@ -313,10 +313,10 @@ translateDecls :: forall arch s m . (STC.StubsArch arch, SPR.Preamble arch, LCCE
         LCF.HandleAllocator ->
         [(String, SomePreambleOverride arch)] -> -- Override mappings : needed so all modules use the same preamble handles
         [(String, SomeHandle arch)] -> -- Handles for previously translated functions (from modules already processed)
-        STC.StubsEnv arch -> 
+        STC.StubsEnv arch ->
         MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
         [(String, SomeWrappedOverride arch)] ->
-        [SA.SomeStubsFunction] -> -- Functions to translate 
+        [SA.SomeStubsFunction] -> -- Functions to translate
         m [(LCSC.ACFG (DMS.MacawExt arch), (String,SomeHandle arch))]
 translateDecls ng hAlloc preMap prevHdls env gmap ovMap fns = do
 
@@ -365,7 +365,7 @@ translateLibrary ng halloc preMap prevHdls env gmap ovMap lib = do
         crExportedHandles=map snd cfghdls
     }
 
--- | Translation of an entire StubsProgram. This is the core entry point for translation, and includes 
+-- | Translation of an entire StubsProgram. This is the core entry point for translation, and includes
 -- module graph resolution, for externs in each library
 translateProgram :: forall arch s m . (STC.StubsArch arch,SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch), StubsTranslator m) => PN.NonceGenerator IO s -> LCF.HandleAllocator -> [STI.OverrideModule arch]-> SA.StubsProgram -> m [CrucibleProgram arch]
 translateProgram ng halloc ovs prog = do
@@ -374,7 +374,7 @@ translateProgram ng halloc ovs prog = do
     -- 1.1 Collect Intrinsic Definitions, to put into environment
     let intrinsicMap = foldr (\(STI.SomeIntrinsicTyDecl (STI.IntrinsicTyDecl s ct)) acc -> MapF.insert s (STC.coerceToIntrinsic s ct) acc) MapF.empty (concatMap (\(STI.OverrideModule _ _ decls _)-> decls)  ovs)
     -- 1.2 Wrap up override definitions like preamble (Will put this information into CrucibleProgram, as it needs to be linked specially)
-    ovMapTpl <- concat <$> mapM (\(STI.OverrideModule _ decls _ _) -> mapM (\(STI.SomeStubsOverride (STI.StubsOverride ovf cargs cret) sig) -> do 
+    ovMapTpl <- concat <$> mapM (\(STI.OverrideModule _ decls _ _) -> mapM (\(STI.SomeStubsOverride (STI.StubsOverride ovf cargs cret) sig) -> do
                 SA.StubsSignature n argtys ret <- return sig
                 hdl <-  mkHandle @arch halloc sig (STC.StubsEnv @arch (DMC.memWidthNatRepr @(DMC.ArchAddrWidth arch)) MapF.empty intrinsicMap)
                 --Type Check
@@ -406,7 +406,7 @@ translateProgram ng halloc ovs prog = do
     let definedSigs = Set.fromList $ concatMap SA.stubsLibDefs libs
     let undefinedSigs = Set.toList $ Set.difference expectedSigs definedSigs
 
-    --TODO: handle opaque issues separate 
+    --TODO: handle opaque issues separate
     let tys = concatMap SA.tyDecls libs
     t <- mapM (\sig -> liftIO $ SO.reifySig sig tys) undefinedSigs
     let missingSigs = Set.toList $ Set.difference (Set.fromList t) (Set.union (Set.union (Set.fromList SPR.stubsPreamble) (Set.fromList ovSigs)) definedSigs)
@@ -463,7 +463,7 @@ translateFnArgs catoms tys = case (alist,tlist) of
         alist = Ctx.viewAssign catoms
         tlist = Ctx.viewAssign tys
 
--- Generate global variable ref cells 
+-- Generate global variable ref cells
 translateGlobals ::forall arch m . (STC.StubsArch arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch), StubsTranslator m) => LCF.HandleAllocator -> STC.StubsEnv arch -> [SA.SomeStubsGlobalDecl] -> m (MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch))
 translateGlobals halloc env globals = do
     foldM (\acc (SA.SomeStubsGlobalDecl (SA.StubsGlobalDecl g ty)) -> do

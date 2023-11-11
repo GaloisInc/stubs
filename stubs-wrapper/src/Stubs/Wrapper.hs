@@ -7,7 +7,7 @@
 {-# LANGUAGE DataKinds #-}
 
 {-|
-Description: Core ABI Wrapper Module 
+Description: Core ABI Wrapper Module
 
 Generally, this module, and cabal target, focuses on loading translated Stubs into overrides for use in symbolic execution or analysis.
 -}
@@ -101,7 +101,7 @@ crucibleProgramToFunctionOverride sym prog = do
     -- Translate preambles into bindings
     let wrappedPre = ST.crFnHandleMap prog
     let preambleBindings = map (wrappedPreambleToBinding sym) wrappedPre
-    -- Haskell Overrides to bindings 
+    -- Haskell Overrides to bindings
     let wrappedHovs = ST.crOvHandleMap prog
     let ovBindings = map (wrappedOverrideToBinding sym) wrappedHovs
 
@@ -114,7 +114,7 @@ crucibleProgramToFunctionOverride sym prog = do
                   retRepr = SFA.promoteBVToPtr retType
               -- Turn aux cfgs into bindings
               let auxBindings = map acfgToFnBinding aux
-              -- Make core override    
+              -- Make core override
               case LCCS.toSSA cfg of
                 LCCC.SomeCFG ssaCFG -> return $ SF.SomeFunctionOverride (SF.FunctionOverride {
                     SF.functionName=e,
@@ -138,7 +138,7 @@ genInitHooks sym prog = do
       -- Translate preambles into bindings
       let wrappedPre = ST.crFnHandleMap prog
       let preambleBindings = map (wrappedPreambleToBinding sym) wrappedPre
-       -- Haskell Overrides to bindings 
+       -- Haskell Overrides to bindings
       let wrappedHovs = ST.crOvHandleMap prog
       let ovBindings = map (wrappedOverrideToBinding sym) wrappedHovs
       let (inits, _) = List.partition (isInitPoint (ST.crInit prog)) (ST.crCFGs prog)

@@ -84,9 +84,9 @@ data MainArgVals sym mem arch w = (IsStubsMemoryModel mem arch) => MainArgVals
   , envpVal :: PtrVal sym mem arch
   }
 
--- | Core typeclass for memory model implementations 
+-- | Core typeclass for memory model implementations
 -- In order to have a more reusable simulation pipeline, this typeclass defines core requirements of a memory model
--- NOTE: This abstraction was initially built from code that used LLVMMemory explicitly, so in future some tweaks may be necessary to support 
+-- NOTE: This abstraction was initially built from code that used LLVMMemory explicitly, so in future some tweaks may be necessary to support
 -- significantly different models.
 class (DMS.IsMemoryModel mem, DMS.SymArchConstraints arch) => IsStubsMemoryModel mem arch where
   type PtrType mem arch :: LCT.CrucibleType
@@ -107,13 +107,13 @@ class (DMS.IsMemoryModel mem, DMS.SymArchConstraints arch) => IsStubsMemoryModel
 
   -- ExtensionImpl defines how to handle Macaw memory operations
   genExtImpl :: (DMB.BinaryLoader
-                      arch binfmt, Monad m, MonadIO m) => SC.Sym sym-> InitialMemory sym mem arch 
-    -> DMS.MacawArchEvalFn (VerifierState sym mem arch) sym (MemType mem arch) arch 
+                      arch binfmt, Monad m, MonadIO m) => SC.Sym sym-> InitialMemory sym mem arch
+    -> DMS.MacawArchEvalFn (VerifierState sym mem arch) sym (MemType mem arch) arch
     -> LCF.HandleAllocator
     -> DMS.GenArchVals mem arch
     -> DMA.ArchitectureInfo arch
     -> SLB.BinaryConfig arch binfmt
-    -> FunctionABI arch sym (VerifierState sym mem arch) mem 
+    -> FunctionABI arch sym (VerifierState sym mem arch) mem
     -> SyscallABI arch sym (VerifierState sym mem arch)
     -- -> DMS.LookupFunctionHandle p sym arch -- ties to LLVM :(
     -- -> DMS.LookupSyscallHandle p sym arch
@@ -127,7 +127,7 @@ data (IsStubsMemoryModel mem arch) => InitialMemory sym mem arch =
                 , imGlobals :: LCSG.SymGlobalState sym
                -- ^ Initial global variables
                 , imStackBasePtr :: LCS.RegValue sym (PtrType mem arch)
-               -- ^ Stack memory base pointer 
+               -- ^ Stack memory base pointer
                 , imMemTable :: MemTable sym mem arch
                 , imGlobalMap :: MemMap sym arch
                 }
