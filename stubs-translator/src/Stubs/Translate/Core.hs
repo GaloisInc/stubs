@@ -11,6 +11,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE QuantifiedConstraints #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 
 {-|
 Description: Definition of Core typeclasses, monads, and constraints for translation
@@ -75,14 +76,14 @@ class (DMS.SymArchConstraints arch,
         -- 16 taken from previous constraints imposed on arch
         16 PN.<= ArchIntSize arch, 1 PN.<= ArchIntSize arch, KnownNat (ArchIntSize arch),
         16 PN.<= ArchShortSize arch, 1 PN.<= ArchShortSize arch, KnownNat (ArchShortSize arch),
-        16 PN.<= ArchLongSize arch, 1 PN.<= ArchLongSize arch, KnownNat (ArchLongSize arch)) => StubsArch arch where 
+        16 PN.<= ArchLongSize arch, 1 PN.<= ArchLongSize arch, KnownNat (ArchLongSize arch)) => StubsArch arch where
 
     -- | Integer width in bits
     type ArchIntSize arch :: Nat
     -- | Short integer width in bits
     type ArchShortSize arch :: Nat
     -- | Long integer width in bits
-    type ArchLongSize arch :: Nat 
+    type ArchLongSize arch :: Nat
     -- | Function for mapping Stubs types to Crucible types, at the value level
     toCrucibleTy ::forall a m. (HasStubsEnv arch m) => SA.StubsTypeRepr a -> m (LCT.TypeRepr (ArchTypeMatch arch a))
     -- | Function for translating literals into Crucible values
@@ -99,7 +100,7 @@ data StubsState arch ret args s = forall ret2 . (ret ~ ArchTypeMatch arch ret2) 
     stRegMap::MapF.MapF SA.CrucibleVar (CrucReg arch s), --TODO: this will have dynamic scoping if left as is
     -- | Cache of expressions already made into atoms
     stAtomCache::MapF.MapF SA.StubsExpr (StubAtom arch s),
-    -- | Parameter Atoms 
+    -- | Parameter Atoms
     stParams :: Ctx.Assignment (StubAtom arch s) args,
     -- | Functions defined in program
     stFns :: Map.Map String (SomeHandle arch),
@@ -124,17 +125,17 @@ withReturn f = do
     f retrepr
 -- | A symbol (representing an opaque type), alongside a type repr that will be resolved during translation
 data WrappedStubsTypeAliasRepr (s :: P.Symbol) where
-    WrappedStubsTypeAliasRepr :: P.SymbolRepr s -> SA.StubsTypeRepr (SA.ResolveAlias s) -> WrappedStubsTypeAliasRepr s 
-    deriving Show 
+    WrappedStubsTypeAliasRepr :: P.SymbolRepr s -> SA.StubsTypeRepr (SA.ResolveAlias s) -> WrappedStubsTypeAliasRepr s
+    deriving Show
 
-instance P.ShowF WrappedStubsTypeAliasRepr where 
+instance P.ShowF WrappedStubsTypeAliasRepr where
     showF (WrappedStubsTypeAliasRepr s t) = "WrappedAlias: " ++ show s ++ " " ++ show t
 
-data WrappedIntrinsicRepr (s:: P.Symbol) where 
-    WrappedIntrinsicRepr :: P.SymbolRepr s -> LCT.TypeRepr (SA.ResolveIntrinsic s) -> WrappedIntrinsicRepr s 
-    deriving Show 
+data WrappedIntrinsicRepr (s:: P.Symbol) where
+    WrappedIntrinsicRepr :: P.SymbolRepr s -> LCT.TypeRepr (SA.ResolveIntrinsic s) -> WrappedIntrinsicRepr s
+    deriving Show
 
-instance P.ShowF WrappedIntrinsicRepr where 
+instance P.ShowF WrappedIntrinsicRepr where
     showF (WrappedIntrinsicRepr s t) = "WrappedIntrinsic: " ++ show s ++ " " ++ show t
 
 -- | Wrap symbol and type together, to use in translation of opaque types
@@ -142,7 +143,7 @@ coerceToAlias :: P.SymbolRepr s -> SA.StubsTypeRepr a -> WrappedStubsTypeAliasRe
 coerceToAlias s repr = WrappedStubsTypeAliasRepr s (unsafeCoerce repr)
 
 -- | Wrap symbol and CrucibleType, to translate intrinsic types
-coerceToIntrinsic :: P.SymbolRepr s -> LCT.TypeRepr tp -> WrappedIntrinsicRepr s 
+coerceToIntrinsic :: P.SymbolRepr s -> LCT.TypeRepr tp -> WrappedIntrinsicRepr s
 coerceToIntrinsic s repr = WrappedIntrinsicRepr s (unsafeCoerce repr)
 
 -- | Architecture information and a mapping of symbols to their corresponding types
@@ -158,23 +159,23 @@ type StubsM arch s args ret a= (DMS.SymArchConstraints arch, LCCE.IsSyntaxExtens
 class (Monad m, MonadIO m, MonadThrow m, MonadFail m) => StubsTranslator m
 
 
-data TranslatorException where 
+data TranslatorException where
     UnexpectedError :: String -> TranslatorException -- for things expected to be impossible, for diagnosis
     OpaquenessViolation :: String -> TranslatorException  -- module name
     UndefinedSignatures :: [SA.SomeStubsSignature] -> TranslatorException
     MissingVariable :: String -> TranslatorException
-    ParamIndexOutOfBounds :: Int -> TranslatorException 
+    ParamIndexOutOfBounds :: Int -> TranslatorException
     TupleIndexOutOfBounds :: Int -> TranslatorException
     UnknownFunctionCall :: String -> TranslatorException
     ExpectedTuple :: SA.SomeStubsTypeRepr -> TranslatorException --actual type
     TypeMismatch ::SA.SomeStubsTypeRepr -> SA.SomeStubsTypeRepr -> TranslatorException --expected, then actual
 
-instance Show TranslatorException where 
-    show (UnexpectedError e) = "Unexpected Error: " ++ e 
+instance Show TranslatorException where
+    show (UnexpectedError e) = "Unexpected Error: " ++ e
     show (OpaquenessViolation modName) = "Violated opaque type constraints in: " ++ modName
     show (UndefinedSignatures sigs) = "Could not find the following signatures: " ++ show sigs
-    show (MissingVariable v) = "Use of undeclared variable: " ++ v 
-    show (ParamIndexOutOfBounds i) = "Parameter index out of bounds: " ++ show i 
+    show (MissingVariable v) = "Use of undeclared variable: " ++ v
+    show (ParamIndexOutOfBounds i) = "Parameter index out of bounds: " ++ show i
     show (TupleIndexOutOfBounds i) = "Tuple access index out of bounds: " ++ show i
     show (UnknownFunctionCall f) = "Call to unknown function: " ++ f
     show (ExpectedTuple (SA.SomeStubsTypeRepr ty)) = "Expected tuple, got expression of type: " ++ show ty
