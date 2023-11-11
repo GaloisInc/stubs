@@ -112,7 +112,7 @@ ppDiagnostic d =
                   , PP.pretty (DMD.ppFunReason rsn)
                   , PP.line
                   ]
-        DMD.ReportAnalyzeBlock _ baddr ->
+        DMD.ReportAnalyzeBlock _ baddr _ ->
           PP.pretty "Analyzing a block at address " <> PP.pretty baddr <> PP.line
     What4SolverDebugEvent verb msg ->
       PP.pretty "Solver debug event " <>
