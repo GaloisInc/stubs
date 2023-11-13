@@ -49,7 +49,7 @@ import qualified Data.IntervalMap.Strict as IM
 import qualified Data.IntervalSet as IS
 import qualified Data.List as L
 import qualified Data.Map.Strict as Map
-import           Data.Maybe ( fromMaybe, isNothing )
+import           Data.Maybe ( isNothing )
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Sequence as Seq
@@ -110,22 +110,18 @@ ambientExtensions ::
   -> DMS.MacawArchEvalFn (AmbientSimulatorState sym arch) sym LCLM.Mem arch
   -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
-  -> DMS.LookupFunctionHandle (AmbientSimulatorState sym arch) sym arch
-  -- ^ A function to translate virtual addresses into function handles
-  -- dynamically during symbolic execution
-  -> DMS.LookupSyscallHandle (AmbientSimulatorState sym arch) sym arch
-  -- ^ A function to examine the machine state to determine which system call
-  -- should be invoked; returns the function handle to invoke
+  -> DMS.MemModelConfig (AmbientSimulatorState sym arch) sym arch LCLM.Mem
+  -- ^ Configuration options for the memory model
   -> Map.Map (DMM.MemWord w) String
   -- ^ Mapping from unsupported relocation addresses to the names of the
   -- unsupported relocation types.
   -> LCSE.ExtensionImpl (AmbientSimulatorState sym arch) sym (DMS.MacawExt arch)
-ambientExtensions bak f initialMem lookupH lookupSyscall unsupportedRelocs =
-  (DMS.macawExtensions f (SM.imMemVar initialMem) (SM.imGlobalMap initialMem) lookupH lookupSyscall (\_ _ _ _->return Nothing))
+ambientExtensions bak f initialMem mmConf unsupportedRelocs =
+  (DMS.macawExtensions f (SM.imMemVar initialMem) mmConf)
     { LCSE.extensionEval = \_sym iTypes logFn cst g ->
-        evalMacawExprExtension bak f initialMem lookupH lookupSyscall iTypes logFn cst g
+        evalMacawExprExtension bak f initialMem mmConf iTypes logFn cst g
     , LCSE.extensionExec =
-        execAmbientStmtExtension bak f initialMem lookupH lookupSyscall unsupportedRelocs
+        execAmbientStmtExtension bak f initialMem mmConf unsupportedRelocs
     }
 
 -- -- | This function proceeds in two steps:
@@ -525,19 +521,15 @@ evalMacawExprExtension ::
   -> DMS.MacawArchEvalFn (AmbientSimulatorState sym arch) sym LCLM.Mem arch
   -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
-  -> DMS.LookupFunctionHandle (AmbientSimulatorState sym arch) sym arch
-  -- ^ A function to translate virtual addresses into function handles
-  -- dynamically during symbolic execution
-  -> DMS.LookupSyscallHandle (AmbientSimulatorState sym arch) sym arch
-  -- ^ A function to examine the machine state to determine which system call
-  -- should be invoked; returns the function handle to invoke
+  -> DMS.MemModelConfig (AmbientSimulatorState sym arch) sym arch LCLM.Mem
+  -- ^ Configuration options for the memory model
   -> LCS.IntrinsicTypes sym
   -> (Int -> String -> IO ())
   -> LCS.CrucibleState p sym (DMS.MacawExt arch) rtp blocks r ctx
   -> (forall utp . f utp -> IO (LCS.RegValue sym utp))
   -> DMS.MacawExprExtension arch f tp
   -> IO (LCS.RegValue sym tp)
-evalMacawExprExtension bak f initialMem lookupH lookupSyscall iTypes logFn cst g e0 =
+evalMacawExprExtension bak f initialMem mmConf iTypes logFn cst g e0 =
   case e0 of
     DMS.PtrToBits xw xv -> do
       x <- g xv
@@ -556,13 +548,11 @@ evalMacawExprExtension bak f initialMem lookupH lookupSyscall iTypes logFn cst g
             else defaultBehavior
         Nothing -> defaultBehavior
     _ ->
-      LCSE.extensionEval (DMS.macawExtensions f mvar globs lookupH lookupSyscall toMemPred)
+      LCSE.extensionEval (DMS.macawExtensions f mvar mmConf)
                          bak iTypes logFn cst g e0
   where
     sym = LCB.backendGetSym bak
     mvar = SM.imMemVar initialMem
-    globs = SM.imGlobalMap initialMem
-    toMemPred _ _ _ _ = return Nothing
 
 -- | This evaluates a Macaw statement extension in the simulator.
 execAmbientStmtExtension :: forall sym scope st fs bak solver arch p w.
@@ -585,17 +575,13 @@ execAmbientStmtExtension :: forall sym scope st fs bak solver arch p w.
   -> DMS.MacawArchEvalFn p sym LCLM.Mem arch
   -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
-  -> DMS.LookupFunctionHandle p sym arch
-  -- ^ A function to turn machine addresses into Crucible function
-  -- handles (which can also perform lazy CFG creation)
-  -> DMS.LookupSyscallHandle p sym arch
-  -- ^ A function to examine the machine state to determine which system call
-  -- should be invoked; returns the function handle to invoke
+  -> DMS.MemModelConfig (AmbientSimulatorState sym arch) sym arch LCLM.Mem
+  -- ^ Configuration options for the memory model
   -> Map.Map (DMM.MemWord w) String
   -- ^ Mapping from unsupported relocation addresses to the names of the
   -- unsupported relocation types.
   -> DMSB.MacawEvalStmtFunc (DMS.MacawStmtExtension arch) p sym (DMS.MacawExt arch)
-execAmbientStmtExtension bak f initialMem lookupH lookupSyscall unsupportedRelocs s0 st =
+execAmbientStmtExtension bak f initialMem mmConf unsupportedRelocs s0 st =
   -- NB: Most of this code is copied directly from the 'execMacawStmtExtension'
   -- function in macaw-symbolic. One notable difference is the use of
   -- 'AVC.resolveSingletonPointer' to attempt to concrete the pointer being
@@ -659,16 +645,14 @@ execAmbientStmtExtension bak f initialMem lookupH lookupSyscall unsupportedReloc
                 pure (eq, st)
         else DMSMO.doPtrEq st mvar w xEntry yEntry
     _ ->
-      let lookupFnH = fromMaybe lookupH ( st
-                                       ^. LCS.stateContext
-                                        . LCS.cruciblePersonality
-                                        . overrideLookupFunctionHandle ) in
-      LCSE.extensionExec (DMS.macawExtensions f mvar globs lookupFnH lookupSyscall toMemPred) s0 st
+      LCSE.extensionExec (DMS.macawExtensions f mvar mmConf) s0 st
   where
     sym = LCB.backendGetSym bak
     mvar = SM.imMemVar initialMem
     mpt = SM.imMemTable initialMem
     globs = SM.imGlobalMap initialMem
+
+    toMemPred :: DMS.MkGlobalPointerValidityAssertion sym w
     toMemPred = (\_ _ _ _->return Nothing)
 
 -- | Check if a pointer has a special region number. Currently, the only such

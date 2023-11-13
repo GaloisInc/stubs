@@ -65,14 +65,14 @@ import qualified Stubs.Loader.BinaryConfig as SLB
 import qualified Data.Macaw.BinaryLoader as DMB
 import Data.Macaw.BinaryLoader.X86 ()
 
-instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where 
+instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
   type instance PtrType DMS.LLVMMemory DMX.X86_64 =  LCLM.LLVMPointerType (DMC.ArchAddrWidth DMX.X86_64)
   type instance MemType DMS.LLVMMemory DMX.X86_64 = LCLM.Mem
   type instance BVToPtrTy w DMS.LLVMMemory DMX.X86_64 = LCLM.LLVMPointerType w
   type instance MemTable sym DMS.LLVMMemory DMX.X86_64 = AEM.MemPtrTable sym DMX.X86_64
   type instance MemMap sym DMX.X86_64 = DMSMO.GlobalMap sym LCLM.Mem (DMC.ArchAddrWidth DMX.X86_64)
-  type instance VerifierState sym DMS.LLVMMemory DMX.X86_64 = (SE.AmbientSimulatorState sym DMX.X86_64) 
- 
+  type instance VerifierState sym DMS.LLVMMemory DMX.X86_64 = (SE.AmbientSimulatorState sym DMX.X86_64)
+
   ptrRepr = let ?ptrWidth=WI.knownRepr in LCLM.PtrRepr
 
   genExtImpl :: forall sym binfmt m. (DMB.BinaryLoader
@@ -87,16 +87,46 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
     -> SM.FunctionABI DMX.X86_64 sym (SE.AmbientSimulatorState sym DMX.X86_64) DMS.LLVMMemory
     -> SM.SyscallABI DMX.X86_64 sym (SE.AmbientSimulatorState sym DMX.X86_64)
     -> m (LCSE.ExtensionImpl (SE.AmbientSimulatorState sym DMX.X86_64) sym (DMSMO.MacawExt DMA.X86_64))
-  genExtImpl (SC.Sym _ bak) initialMem f halloc archVals archInfo binconf functionABI syscallABI = do 
+  genExtImpl (SC.Sym _ bak) initialMem f halloc archVals archInfo binconf functionABI syscallABI = do
     let ?memOpts = LCLM.defaultMemOptions
     (re, _) <- liftIO $ SM.buildRecordLLVMAnnotation @sym
     let ?recordLLVMAnnotation = re
-    return $ SE.ambientExtensions @sym @DMX.X86_64 bak f initialMem (SMC.symExLookupFunction SL.emptyLogger bak initialMem archVals binconf functionABI halloc archInfo Nothing)
-     (SMC.symExLookupSyscall bak syscallABI halloc) mempty
+    let mpt = SM.imMemTable initialMem
+    -- This MemModelConfig is very nearly the same as the memModelConfig that
+    -- Data.Macaw.Symbolic.Memory provides, but we have to duplicate some logic
+    -- here since `stubs` uses a different MemPtrTable data type than
+    -- `macaw-symbolic`. Note that some of these fields (e.g., the
+    -- `mkGlobalPointerValidityAssertion` field) will effectively go unused, as
+    -- `stubs-common`'s memory model overrides certain operations that would
+    -- otherwise use these fields.
+    --
+    -- In the future, it would be preferable to build on top of the
+    -- `macaw-symbolic` lazy memory model, whose functionality largely overlaps
+    -- with the `stubs-common` memory model. See
+    -- https://github.com/GaloisInc/stubs/issues/12.
+    let mmConf =
+          DMS.MemModelConfig
+            { DMS.globalMemMap =
+                AEM.mapRegionPointers mpt
+            , DMS.lookupFunctionHandle =
+                SMC.symExLookupFunction SL.emptyLogger bak initialMem archVals binconf functionABI halloc archInfo Nothing
+
+            , DMS.lookupSyscallHandle =
+                SMC.symExLookupSyscall bak syscallABI halloc
+            , DMS.mkGlobalPointerValidityAssertion =
+                AEM.mkGlobalPointerValidityPred mpt
+            , DMS.resolvePointer =
+                pure
+            , DMS.concreteImmutableGlobalRead =
+                \_ _ -> pure Nothing
+            , DMS.lazilyPopulateGlobalMem =
+                \_ _ -> pure
+            }
+    return $ SE.ambientExtensions @sym @DMX.X86_64 bak f initialMem mmConf mempty
 
   bvToPtr :: LCT.TypeRepr tp-> LCT.TypeRepr (SM.ToPtrTy tp DMS.LLVMMemory DMX.X86_64)
   bvToPtr (LCT.BVRepr n) = LCLM.LLVMPointerRepr n
-  bvToPtr ty = case ty of 
+  bvToPtr ty = case ty of
     LCT.AnyRepr -> LCT.AnyRepr
     LCT.UnitRepr -> LCT.UnitRepr
     LCT.BoolRepr -> LCT.BoolRepr
@@ -128,7 +158,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
 
   memPtrSize :: PN.NatRepr (DMC.ArchAddrWidth DMX.X86_64)
   memPtrSize = WI.knownRepr
-  initMem (SC.Sym sym bak) archInfo stackSize binConf halloc = do 
+  initMem (SC.Sym sym bak) archInfo stackSize binConf halloc = do
 
     let mems = fmap (DMB.memoryImage . SLB.lbpBinary) (SLB.bcBinaries binConf)
     let endian = DMSM.toCrucibleEndian (DMA.archEndianness archInfo)
@@ -233,7 +263,7 @@ freshGSBaseGlobalVar hdlAlloc =
 -- and returns an 'InitArchSpecificGlobals' that initializes those globals
 -- and inserts them into the global variable state.
 x86_64LinuxInitGlobals
-  :: ( ?memOpts :: LCLM.MemOptions, 
+  :: ( ?memOpts :: LCLM.MemOptions,
        ?recordLLVMAnnotation::Lang.Crucible.LLVM.MemModel.CallStack.CallStack -> LCLMP.BoolAnn sym -> LCLE.BadBehavior sym -> IO ()
      )
   => LCCC.GlobalVar (LCLM.LLVMPointerType (DMC.ArchAddrWidth DMX.X86_64))
