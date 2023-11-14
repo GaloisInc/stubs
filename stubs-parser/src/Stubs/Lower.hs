@@ -13,7 +13,10 @@ import qualified Stubs.WeakAST as SW
 import qualified Data.Map as Map
 import Data.Parameterized (someSymbol, Some (Some), TestEquality (testEquality), type (:~:) (Refl))
 import qualified Data.Text as DT
-import Control.Monad.State
+import Control.Monad (foldM)
+import Control.Monad.IO.Class (MonadIO (liftIO))
+import Control.Monad.State (MonadState (..), StateT(..), gets)
+import Control.Monad.Trans (MonadTrans (lift))
 import qualified Data.Parameterized.Context as Ctx
 import qualified Stubs.Preamble as SPR
 import qualified Data.List as List
