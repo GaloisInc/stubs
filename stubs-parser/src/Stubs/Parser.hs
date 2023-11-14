@@ -15,7 +15,7 @@ import qualified Stubs.WeakAST as SWA
 import qualified Stubs.ConcreteParser as SCP
 import qualified Stubs.AST as SA
 import qualified Stubs.Lower as SLow
-import Control.Monad.Except (MonadIO(..))
+import Control.Monad.IO.Class (MonadIO(..))
 
 -- | Top level function for reading and lowering stubs files.
 parseStubsOverrides :: [FilePath] -> [String] -> SLow.StubsParserM SA.StubsProgram

@@ -49,7 +49,9 @@ import qualified What4.FunctionName as WF
 import qualified What4.ProgramLoc as WF
 import qualified Data.Text as T
 
-import Control.Monad.RWS
+import Control.Monad (foldM, foldM_, unless, when)
+import Control.Monad.IO.Class (MonadIO(liftIO))
+import Control.Monad.RWS (gets, modify)
 import Control.Monad.Reader (ReaderT (runReaderT))
 import Lang.Crucible.CFG.Core (StringInfoRepr(UnicodeRepr))
 import qualified Lang.Crucible.Syntax.Concrete as LCSC
@@ -74,7 +76,6 @@ import qualified Stubs.Opaque as SO
 import qualified Stubs.Translate.Intrinsic as STI
 import qualified Stubs.Common as SC
 import qualified Lang.Crucible.Types as LCT
-import Control.Monad.Except (throwError)
 import Control.Monad.Catch (throwM)
 -- | A translated Program. Several fields are taken from crucible-syntax's ParsedProgram, for easy conversion
 data CrucibleProgram arch = CrucibleProgram {
@@ -410,7 +411,7 @@ translateProgram ng halloc ovs prog = do
     let tys = concatMap SA.tyDecls libs
     t <- mapM (\sig -> liftIO $ SO.reifySig sig tys) undefinedSigs
     let missingSigs = Set.toList $ Set.difference (Set.fromList t) (Set.union (Set.union (Set.fromList SPR.stubsPreamble) (Set.fromList ovSigs)) definedSigs)
-    Control.Monad.RWS.when (not (null missingSigs)) $ throwM $ STC.UndefinedSignatures missingSigs --Note: This shows the types after removing opaques, so may be unhelpful. The parser is intended to catch this sort of thing
+    when (not (null missingSigs)) $ throwM $ STC.UndefinedSignatures missingSigs --Note: This shows the types after removing opaques, so may be unhelpful. The parser is intended to catch this sort of thing
 
     -- Collect aliases/opaques
     let tyMap = foldr (\(SA.SomeStubsTyDecl (SA.StubsTyDecl s t)) acc -> MapF.insert s (STC.coerceToAlias s t) acc) MapF.empty tys
