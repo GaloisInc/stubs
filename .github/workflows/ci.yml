@@ -5,7 +5,57 @@ name: build
 permissions:
   contents: read
 
+env:
+  # The NAME makes it easier to copy/paste snippets from other CI configs
+  NAME: stubs
+
 jobs:
+  doc:
+    runs-on: ubuntu-latest
+    permissions:
+      # Cancel workflow
+      actions: write
+      # Upload docs
+      contents: write
+    steps:
+    - name: Cancel previous run
+      uses: styfle/cancel-workflow-action@0.12.0
+      with:
+        access_token: ${{ github.token }}
+
+    - uses: actions/checkout@v4
+
+    - name: Setup mdBook
+      uses: peaceiris/actions-mdbook@v1
+      with:
+        mdbook-version: '0.4.35'
+
+    - name: Build docs
+      run: |
+        cd docs
+        mdbook build
+
+    - name: Package docs
+      shell: bash
+      run: |
+        tar -cvf doc.tar.gz docs/book/*
+
+    - name: Upload docs artifact
+      uses: actions/upload-artifact@v3
+      if: github.repository == 'GaloisInc/${{ env.NAME }}'
+      with:
+        name: "${{ env.NAME }}-docs"
+        path: doc.tar.gz
+        if-no-files-found: error
+
+    # TODO(#10): Enable this after open-sourcing
+    # - name: Push docs
+    #   uses: peaceiris/actions-gh-pages@v3
+    #   if: ${{ github.ref == 'refs/heads/main' }}
+    #   with:
+    #     github_token: ${{ secrets.GITHUB_TOKEN }}
+    #     publish_dir: doc/book
+
   build:
     runs-on: ${{ matrix.os }}
     strategy:
