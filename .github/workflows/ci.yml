@@ -62,7 +62,7 @@ jobs:
       matrix:
         os: [ubuntu-22.04]
         cabal: ["3.10.1.0"]
-        ghc: ["9.2.8"]
+        ghc: ["9.2.8", "9.4.8", "9.6.3"]
     name: GHC ${{ matrix.ghc }}
     steps:
 
