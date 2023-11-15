@@ -36,7 +36,6 @@ common shared
         megaparsec >= 7 && < 10,
         mtl >= 2 && < 3,
         panic >= 0.4 && < 0.5,
-        pe-parser,
         parameterized-utils >= 2 && < 3,
         parser-combinators >= 1.2 && < 1.4,
         prettyprinter >= 1.7 && < 1.8,
@@ -44,7 +43,7 @@ common shared
         yaml >= 0.11 && < 0.12,
         text
 
-library 
+library
     import: shared
     exposed-modules:  Stubs.ABI,
                       Stubs.Common,
