@@ -36,7 +36,6 @@ common shared
         megaparsec >= 7 && < 10,
         mtl >= 2 && < 3,
         panic >= 0.4 && < 0.5,
-        pe-parser,
         parameterized-utils >= 2 && < 3,
         parser-combinators >= 1.2 && < 1.4,
         prettyprinter >= 1.7 && < 1.8,
@@ -45,12 +44,12 @@ common shared
         text,
         template-haskell
 
-library 
-    import: shared 
+library
+    import: shared
     exposed-modules: Stubs.Wrapper,
                      Stubs.Wrapper.Exception
     hs-source-dirs: src
-    default-language: Haskell2010 
+    default-language: Haskell2010
     ghc-options: -Wextra -Wcompat
     build-depends: stubs-common,
                    stubs-translator,
