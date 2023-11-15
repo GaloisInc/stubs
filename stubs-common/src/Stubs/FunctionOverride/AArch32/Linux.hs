@@ -10,7 +10,9 @@
 --
 -- See <https://github.com/ARM-software/abi-aa/releases> for details
 module Stubs.FunctionOverride.AArch32.Linux (
-    aarch32LinuxFunctionABI
+    aarch32LinuxIntegerArguments
+  , aarch32LinuxIntegerReturnRegisters
+  , aarch32LinuxFunctionABI
   , aarch32LinuxTypes
   ) where
 
