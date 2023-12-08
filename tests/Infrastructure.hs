@@ -28,7 +28,6 @@ import qualified Stubs.EnvVar as AEnv
 
 import qualified Stubs.Memory as AM
 import qualified Stubs.Solver as AS
-import qualified Lang.Crucible.Syntax.Concrete as LCSC
 import qualified Data.Macaw.Symbolic as DMS
 
 import           Data.Macaw.BinaryLoader.X86 ()
@@ -45,6 +44,7 @@ import qualified Lang.Crucible.Simulator.GlobalState as LCSG
 import qualified Lang.Crucible.LLVM.SymIO as LCLS
 import qualified System.IO as IO
 import qualified Lang.Crucible.CFG.Core as LCCC
+import qualified Lang.Crucible.CFG.Reg as LCCR
 import qualified Lang.Crucible.Analysis.Postdom as LCAP
 import qualified Lang.Crucible.CFG.SSAConversion as LCSSA
 import qualified Lang.Crucible.Types as LCT
@@ -193,7 +193,7 @@ symexec bak halloc prog cfg args retRepr check ovs = do --todo link ovs
                     LCS.regValue <$> LCS.callCFG cfg (LCS.RegMap args)
 
   let cfgs = ST.crCFGs prog
-  let hdlMap = foldr (\(LCSC.ACFG _ _ icfg) acc -> case LCSSA.toSSA icfg of
+  let hdlMap = foldr (\(LCCR.AnyCFG icfg) acc -> case LCSSA.toSSA icfg of
             (LCCC.SomeCFG ccfg) -> LCF.insertHandleMap (LCCC.cfgHandle ccfg)
                                        (LCS.UseCFG ccfg (LCAP.postdomInfo ccfg))
                                        acc

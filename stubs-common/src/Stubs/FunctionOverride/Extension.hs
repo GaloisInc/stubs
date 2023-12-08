@@ -41,7 +41,7 @@ import qualified Lang.Crucible.CFG.Reg as LCCR
 import qualified Lang.Crucible.LLVM.MemModel as LCLM
 import qualified Lang.Crucible.Syntax.Atoms as LCSA
 import qualified Lang.Crucible.Syntax.Concrete as LCSC
-import qualified Lang.Crucible.Syntax.ExprParse as LCSE
+import qualified Lang.Crucible.Syntax.Monad as LCSM
 import qualified Lang.Crucible.Types as LCT
 import qualified What4.Interface as WI
 import qualified What4.ProgramLoc as WP
@@ -55,7 +55,7 @@ allTypeAliases = [minBound .. maxBound]
 
 -- | Parser for type extensions to crucible syntax
 extensionTypeParser
-  :: (LCSE.MonadSyntax LCSA.Atomic m)
+  :: (LCSM.MonadSyntax LCSA.Atomic m)
   => Map.Map LCSA.AtomName (Some LCT.TypeRepr)
   -- ^ A mapping from additional type names to the crucible types they
   -- represent
@@ -157,14 +157,14 @@ extensionParser :: forall s m ext arch w
                 -- ^ A pair containing a result type and an atom of that type
 extensionParser wrappers hooks =
   let ?parserHooks = hooks in
-  LCSE.depCons LCSC.atomName $ \name ->
+  LCSM.depCons LCSC.atomName $ \name ->
     case name of
       LCSA.AtomName "pointer-read" -> do
         -- Pointer reads are a special case because we must parse the type of
         -- the value to read as well as the endianness of the read before
         -- parsing the additional arguments as Atoms.
-        LCSE.depCons LCSC.isType $ \(Some tp) ->
-          LCSE.depCons LCSC.atomName $ \endiannessName ->
+        LCSM.depCons LCSC.isType $ \(Some tp) ->
+          LCSM.depCons LCSC.atomName $ \endiannessName ->
             case endiannessFromAtomName endiannessName of
               Just endianness ->
                 let readWrapper =
@@ -175,8 +175,8 @@ extensionParser wrappers hooks =
         -- Pointer writes are a special case because we must parse the type of
         -- the value to write out as well as the endianness of the write before
         -- parsing the additional arguments as Atoms.
-        LCSE.depCons LCSC.isType $ \(Some tp) ->
-          LCSE.depCons LCSC.atomName $ \endiannessName ->
+        LCSM.depCons LCSC.isType $ \(Some tp) ->
+          LCSM.depCons LCSC.atomName $ \endiannessName ->
             case endiannessFromAtomName endiannessName of
               Just endianness ->
                 let writeWrapper =
@@ -187,7 +187,7 @@ extensionParser wrappers hooks =
         -- Bitvector literals with a type argument are a special case.  We must
         -- parse the type argument separately before parsing the remaining
         -- argument as an Atom.
-        LCSE.depCons LCSC.isType $ \(Some tp) ->
+        LCSM.depCons LCSC.isType $ \(Some tp) ->
           case tp of
             LCT.BVRepr{} ->
               go (SomeExtensionWrapper (buildBvTypedLitWrapper tp))
@@ -197,9 +197,9 @@ extensionParser wrappers hooks =
         -- name and length arguments separately due to their need to be
         -- concrete, and we must parse the type argument separately before we
         -- can know the return type.
-        LCSE.depCons LCSC.string $ \nmPrefix ->
-          LCSE.depCons LCSC.isType $ \(Some tp) ->
-            LCSE.depCons LCSC.nat $ \len ->
+        LCSM.depCons LCSC.string $ \nmPrefix ->
+          LCSM.depCons LCSC.isType $ \(Some tp) ->
+            LCSM.depCons LCSC.nat $ \len ->
             go (SomeExtensionWrapper (buildFreshVecWrapper nmPrefix tp len))
       _ ->
         case Map.lookup name wrappers of
@@ -210,7 +210,7 @@ extensionParser wrappers hooks =
        => SomeExtensionWrapper arch
        -> m (Some (LCCR.Atom s))
     go (SomeExtensionWrapper wrapper) = do
-      loc <- LCSE.position
+      loc <- LCSM.position
       -- Generate atoms for the arguments to this extension
       operandAtoms <- LCSC.operands (extArgTypes wrapper)
       -- Pass these atoms to the extension wrapper and return an atom for the

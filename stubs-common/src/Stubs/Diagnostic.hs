@@ -36,7 +36,6 @@ import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.CFG.Reg as LCCR
 import qualified Lang.Crucible.FunctionHandle as LCF
 import qualified Lang.Crucible.Simulator.SimError as LCSS
-import qualified Lang.Crucible.Syntax.Concrete as LCSC
 import qualified Stubs.Style as STY
 
 data Diagnostic where
@@ -73,7 +72,7 @@ data Diagnostic where
   -- | Setting up the goals for the given property
   AssertingGoalsForProperty :: T.Text -> Maybe T.Text -> Diagnostic
   -- | Executing a user override test
-  ExecutingOverrideTest :: LCSC.ACFG ext -> FilePath -> Diagnostic
+  ExecutingOverrideTest :: LCCR.AnyCFG ext -> FilePath -> Diagnostic
   -- | Reporting a symbolic branch
   SymbolicBranch :: Maybe WP.ProgramLoc -> Diagnostic
   -- | Invoking a function call in the simulator
@@ -146,7 +145,7 @@ ppDiagnostic d =
     AssertingGoalsForProperty name mdesc ->
       let desc = maybe mempty ((PP.line <>) . PP.pretty) mdesc
       in PP.pretty "Asserting goals for property " <> PP.pretty name <> desc <> PP.line
-    ExecutingOverrideTest (LCSC.ACFG _ _ g) path ->
+    ExecutingOverrideTest (LCCR.AnyCFG g) path ->
           PP.pretty "Executing override test '"
       <> PP.pretty (LCF.handleName (LCCR.cfgHandle g))
       <> PP.pretty "' in '"
