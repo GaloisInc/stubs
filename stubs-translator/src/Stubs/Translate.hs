@@ -54,7 +54,6 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.RWS (gets, modify)
 import Control.Monad.Reader (ReaderT (runReaderT))
 import Lang.Crucible.CFG.Core (StringInfoRepr(UnicodeRepr))
-import qualified Lang.Crucible.Syntax.Concrete as LCSC
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Map as Map
 import qualified Stubs.AST as SA
@@ -80,7 +79,7 @@ import Control.Monad.Catch (throwM)
 -- | A translated Program. Several fields are taken from crucible-syntax's ParsedProgram, for easy conversion
 data CrucibleProgram arch = CrucibleProgram {
   -- | The generated CFGs
-  crCFGs :: [LCSC.ACFG (DMS.MacawExt arch)],
+  crCFGs :: [LCCR.AnyCFG (DMS.MacawExt arch)],
   crGlobals :: Map.Map LCSA.GlobalName (Some LCCC.GlobalVar),
   crExterns :: Map.Map LCSA.GlobalName (Some LCCC.GlobalVar),
   crFwdDecs :: Map.Map WF.FunctionName LCF.SomeHandle,
@@ -97,7 +96,7 @@ data CrucibleProgram arch = CrucibleProgram {
 -- | A translated library / module. This is the result of translating a StubsLibrary
 data CrucibleLibrary arch = CrucibleLibrary {
     -- | Generated CFGs
-    crLibCFGs :: [LCSC.ACFG (DMS.MacawExt arch)],
+    crLibCFGs :: [LCCR.AnyCFG (DMS.MacawExt arch)],
     -- | Signature and Handle information for defined CFGs, for linking
     crExportedHandles :: [(String,STC.SomeHandle arch)]
 }
@@ -298,15 +297,13 @@ translateFn :: forall args ret s arch m. (DMS.SymArchConstraints arch, LCCE.IsSy
                 StubHandle arch args ret ->
                 STC.StubsEnv arch ->
                 MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
-                SA.StubsFunction args ret ->  m (LCSC.ACFG (DMS.MacawExt arch))
+                SA.StubsFunction args ret ->  m (LCCR.AnyCFG (DMS.MacawExt arch))
 translateFn ng _ handles hdl env gmap SA.StubsFunction{SA.stubFnSig=SA.StubsSignature{SA.sigFnArgTys=argtys, SA.sigFnRetTy=retty},SA.stubFnBody=body}= do
     -- CFG needs crucible type info
-    args <- runReaderT (toCrucibleTyCtx argtys) env
-    cret <- runReaderT (toCrucibleTy retty) env
     let StubHandle _ _ handle = hdl
     (LCCR.SomeCFG cfg, _) <- liftIO $ LCCG.defineFunction WF.InternalPos (Some ng) handle $ \crucArgs -> (StubsState env retty MapF.empty MapF.empty (translateFnArgs crucArgs argtys) handles gmap,
                                                                                                      translateStmts @arch @_ @ret body >> LCCG.reportError (LCCR.App $ LCCE.StringEmpty UnicodeRepr))
-    return $ LCSC.ACFG args cret cfg
+    return $ LCCR.AnyCFG cfg
 
 -- | Translate all declarations from a StubsLibrary
 translateDecls :: forall arch s m . (STC.StubsArch arch, SPR.Preamble arch, LCCE.IsSyntaxExtension (DMS.MacawExt arch), StubsTranslator m) =>
@@ -318,7 +315,7 @@ translateDecls :: forall arch s m . (STC.StubsArch arch, SPR.Preamble arch, LCCE
         MapF.MapF SA.CrucibleVar (STC.CrucibleGlobal arch) ->
         [(String, SomeWrappedOverride arch)] ->
         [SA.SomeStubsFunction] -> -- Functions to translate
-        m [(LCSC.ACFG (DMS.MacawExt arch), (String,SomeHandle arch))]
+        m [(LCCR.AnyCFG (DMS.MacawExt arch), (String,SomeHandle arch))]
 translateDecls ng hAlloc preMap prevHdls env gmap ovMap fns = do
 
     -- get handles for all functions before hand, for linking.

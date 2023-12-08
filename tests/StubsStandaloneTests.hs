@@ -16,7 +16,6 @@ import qualified Lang.Crucible.Simulator.ExecutionTree as LCSE
 import qualified Data.Macaw.Symbolic as DMS
 import qualified Lang.Crucible.Simulator as LCS
 import Test.Tasty
-import qualified Lang.Crucible.Syntax.Concrete as LCSC
 import qualified Pipeline as STP
 import qualified Lang.Crucible.CFG.SSAConversion as LCSSA
 import qualified Data.List as List
@@ -42,11 +41,12 @@ genTestCaseIO iprog check tag = testCase tag $ do
     let prog = head cprog
     case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
         Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
-        Just (LCSC.ACFG _ ret icfg) -> do
+        Just (LCCR.AnyCFG icfg) -> do
+            let ret = LCCR.cfgReturnType icfg
             res <- STP.smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
             if res then assertBool "" True else assertFailure "Test failed"
     where
-        lookupEntry e = List.find (\(LCSC.ACFG _ _ cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
+        lookupEntry e = List.find (\(LCCR.AnyCFG cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
         f :: (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args))
         f _ assign = case Ctx.viewAssign assign of
             Ctx.AssignEmpty -> return Ctx.empty
@@ -60,11 +60,12 @@ genTestCase sprog check tag = testCase tag $ do
     let prog = head cprog
     case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
         Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
-        Just (LCSC.ACFG _ ret icfg) -> do
+        Just (LCCR.AnyCFG icfg) -> do
+            let ret = LCCR.cfgReturnType icfg
             res <- STP.smallPipeline prog ( LCSSA.toSSA icfg) f ret (check ret)
             if res then assertBool "" True else assertFailure "Test failed"
     where
-        lookupEntry e = List.find (\(LCSC.ACFG _ _ cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
+        lookupEntry e = List.find (\(LCCR.AnyCFG cfg)-> show (LCF.handleName $ LCCR.cfgHandle cfg) == e)
         f :: (forall sym . sym -> Ctx.Assignment LCT.TypeRepr args -> IO (Ctx.Assignment (LCS.RegEntry sym) args))
         f _ assign = case Ctx.viewAssign assign of
             Ctx.AssignEmpty -> return Ctx.empty

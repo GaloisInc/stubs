@@ -31,7 +31,7 @@ import qualified Lang.Crucible.CFG.Extension as LCCE
 import qualified Lang.Crucible.CFG.Reg as LCCR
 import qualified Lang.Crucible.Syntax.Atoms as LCSA
 import qualified Lang.Crucible.Syntax.Concrete as LCSC
-import qualified Lang.Crucible.Syntax.ExprParse as LCSE
+import qualified Lang.Crucible.Syntax.Monad as LCSM
 import qualified Lang.Crucible.Types as LCT
 import qualified What4.ProgramLoc as WP
 
@@ -47,7 +47,7 @@ data TypeAlias = Byte | Int | Long | PidT | Pointer | Short | SizeT | UidT
 newtype TypeLookup = TypeLookup (TypeAlias -> (Some LCT.TypeRepr))
 
 -- | The constraints on the abstract parser monad
-type ExtensionParser m ext s = ( LCSE.MonadSyntax LCSA.Atomic m
+type ExtensionParser m ext s = ( LCSM.MonadSyntax LCSA.Atomic m
                                , MonadWriter [WP.Posd (LCCR.Stmt ext s)] m
                                , MonadState (LCSC.SyntaxState s) m
                                , MonadIO m
