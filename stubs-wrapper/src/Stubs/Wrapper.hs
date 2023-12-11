@@ -14,6 +14,7 @@ Generally, this module, and cabal target, focuses on loading translated Stubs in
 -}
 module Stubs.Wrapper (
     loadParsedPrograms,
+    parsedProgToFunctionOverride,
     crucibleProgramToFunctionOverride,
     genInitHooks,
     genInitOvHooks
@@ -206,7 +207,7 @@ parsedProgToFunctionOverride ::
   ( ext ~ DMS.MacawExt arch, LCCE.IsSyntaxExtension ext ) =>
   String ->
   LCSC.ParsedProgram ext ->
-  IO (SF.SomeFunctionOverride () sym arch)
+  IO (SF.SomeFunctionOverride p sym arch)
 parsedProgToFunctionOverride path parsedProg = do
   let fnName = DS.fromString $ FP.takeBaseName path
   let globals = LCSC.parsedProgGlobals parsedProg
@@ -252,7 +253,7 @@ acfgToFunctionOverride
   -> [LCCR.AnyCFG ext]
   -- ^ The ACFGs for auxiliary functions
   -> LCCR.AnyCFG ext
-  -> SF.SomeFunctionOverride () sym arch
+  -> SF.SomeFunctionOverride p sym arch
 acfgToFunctionOverride name globals externs fwdDecs auxCFGs (LCCR.AnyCFG cfg) =
   let argTypes = LCCR.cfgArgTypes cfg
       retType = LCCR.cfgReturnType cfg
