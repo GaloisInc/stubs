@@ -11,7 +11,9 @@
 -- See <https://chromium.googlesource.com/chromiumos/docs/+/master/constants/syscalls.md#arm-32_bit_EABI>
 -- for the system call number mapping
 module Stubs.Syscall.AArch32.Linux (
-  aarch32LinuxSyscallABI
+    aarch32LinuxSyscallArgumentRegisters
+  , aarch32LinuxSyscallReturnRegisters
+  , aarch32LinuxSyscallABI
   ) where
 
 import qualified Data.Parameterized.Classes as PC

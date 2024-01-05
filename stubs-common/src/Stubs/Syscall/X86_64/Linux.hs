@@ -6,7 +6,11 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Stubs.Syscall.X86_64.Linux ( x86_64LinuxSyscallABI ) where
+module Stubs.Syscall.X86_64.Linux (
+    x86_64LinuxSyscallArgumentRegisters
+  , x86_64LinuxSyscallReturnRegisters
+  , x86_64LinuxSyscallABI
+  ) where
 
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as PN
