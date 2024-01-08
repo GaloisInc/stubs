@@ -12,6 +12,7 @@
 -- for the system call number mapping
 module Stubs.Syscall.AArch32.Linux (
     aarch32LinuxSyscallArgumentRegisters
+  , aarch32LinuxSyscallNumberRegister
   , aarch32LinuxSyscallReturnRegisters
   , aarch32LinuxSyscallABI
   ) where
