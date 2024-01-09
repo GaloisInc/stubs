@@ -8,6 +8,7 @@
 
 module Stubs.Syscall.X86_64.Linux (
     x86_64LinuxSyscallArgumentRegisters
+  , x86_64LinuxSyscallNumberRegister
   , x86_64LinuxSyscallReturnRegisters
   , x86_64LinuxSyscallABI
   ) where
