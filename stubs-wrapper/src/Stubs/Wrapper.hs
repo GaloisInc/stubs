@@ -109,7 +109,7 @@ crucibleProgramToFunctionOverride sym prog = do
     let ovBindings = map (wrappedOverrideToBinding sym) wrappedHovs
 
     -- Get entry point of override
-    case List.partition (isEntryPoint (ST.crEntry prog)) (ST.crCFGs prog) of
+    case List.partition (isEntryPoint (DS.fromString (ST.crEntry prog))) (ST.crCFGs prog) of
       ([LCCR.AnyCFG cfg], aux) -> do
               let argTypes = LCCR.cfgArgTypes cfg
               let retType = LCCR.cfgReturnType cfg
@@ -209,10 +209,10 @@ parsedProgToFunctionOverride ::
   LCSC.ParsedProgram ext ->
   IO (SF.SomeFunctionOverride p sym arch)
 parsedProgToFunctionOverride path parsedProg = do
-  let fnName = DS.fromString $ FP.takeBaseName path
+  let fnName = DS.fromString $ FP.dropExtensions $ FP.takeBaseName path
   let globals = LCSC.parsedProgGlobals parsedProg
   let externs = LCSC.parsedProgExterns parsedProg
-  let (matchCFGs, auxCFGs) = List.partition (isEntryPoint path)
+  let (matchCFGs, auxCFGs) = List.partition (isEntryPoint fnName)
                                             (LCSC.parsedProgCFGs parsedProg)
   let fwdDecs = LCSC.parsedProgForwardDecs parsedProg
   case matchCFGs of
@@ -226,9 +226,9 @@ parsedProgToFunctionOverride path parsedProg = do
 
 -- | Does a function have the same name as the @.cbl@ file in which it is
 -- defined?
-isEntryPoint :: String -> LCCR.AnyCFG ext -> Bool
-isEntryPoint path acfg =
-  acfgHandleName acfg == DS.fromString path
+isEntryPoint :: WF.FunctionName -> LCCR.AnyCFG ext -> Bool
+isEntryPoint fnName acfg =
+  acfgHandleName acfg == fnName
 
 isInitPoint :: [String] -> LCCR.AnyCFG ext -> Bool
 isInitPoint initNames acfg = show (acfgHandleName acfg) `elem` initNames
