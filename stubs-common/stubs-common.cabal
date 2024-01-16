@@ -58,6 +58,7 @@ library
                       Stubs.FunctionOverride.Common,
                       Stubs.FunctionOverride.Extension,
                       Stubs.FunctionOverride.Extension.Types,
+                      Stubs.FunctionOverride.ForwardDeclarations,
                       Stubs.FunctionOverride.StackArguments,
                       Stubs.FunctionOverride.AArch32.Linux,
                       Stubs.FunctionOverride.X86_64.Linux,
