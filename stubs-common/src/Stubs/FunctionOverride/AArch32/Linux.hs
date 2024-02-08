@@ -12,6 +12,7 @@
 module Stubs.FunctionOverride.AArch32.Linux (
     aarch32LinuxIntegerArguments
   , aarch32LinuxIntegerReturnRegisters
+  , aarch32LinuxReturnAddr
   , aarch32LinuxFunctionABI
   , aarch32LinuxTypes
   ) where
