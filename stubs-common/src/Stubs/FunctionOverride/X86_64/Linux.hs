@@ -11,6 +11,7 @@
 module Stubs.FunctionOverride.X86_64.Linux (
     x86_64LinuxIntegerArguments
   , x86_64LinuxIntegerReturnRegisters
+  , x86_64LinuxReturnAddr
   , x86_64LinuxFunctionABI
   , x86_64LinuxTypes
   ) where
