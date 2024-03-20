@@ -117,38 +117,58 @@ aarch32LinuxIntegerReturnRegisters
   -> LCS.OverrideSim p sym ext r args rtp (LCS.RegValue sym (DMS.ArchRegStruct DMA.ARM))
 aarch32LinuxIntegerReturnRegisters bak _archVals ovTy result initRegs =
   case ovTy of
-    LCT.UnitRepr -> do
-      return $ updateRegs initRegs
-    LCLM.LLVMPointerRepr w
-      | Just PC.Refl <- PC.testEquality w (PN.knownNat @32) -> do
-          let r0 = ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R0")
-          return $! updateRegs (DMAS.updateReg r0 (const (LCS.RV (AF.result result))) initRegs)
-    LCLM.LLVMPointerRepr w
-      | Just PC.Refl <- PC.testEquality w (PN.knownNat @16) -> do
-          liftIO $ extendResult result
-    LCLM.LLVMPointerRepr w
-      | Just PC.Refl <- PC.testEquality w (PN.knownNat @8) -> do
-          liftIO $ extendResult result
-    _ -> AP.panic AP.FunctionOverride "aarch32LinuxIntegerReturnRegisters" [ "Unsupported return type: " ++ show ovTy ]
+    LCT.UnitRepr ->
+      pure $ updateRegs initRegs (AF.regUpdates result)
+    _ -> do
+      regs' <- injectIntoReg ovTy (AF.result result) r0 initRegs
+      pure $ updateRegs regs' (AF.regUpdates result)
   where
     sym = LCB.backendGetSym bak
+    r0 = ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R0")
+
+    -- Inject a return value of the given TypeRepr into the supplied ARMReg.
+    -- Depending on the type of the value, this may require zero extension.
+    injectIntoReg ::
+         forall tp
+       . LCT.TypeRepr tp
+      -> LCS.RegValue sym tp
+      -> ARMReg.ARMReg (DMT.BVType 32)
+      -> LCS.RegValue sym (DMS.ArchRegStruct DMA.ARM)
+      -> LCS.OverrideSim p sym ext r args rtp (LCS.RegValue sym (DMS.ArchRegStruct DMA.ARM))
+    injectIntoReg tpr val reg allRegs =
+      case tpr of
+        LCLM.LLVMPointerRepr w
+          | Just PC.Refl <- PC.testEquality w (PN.knownNat @32) -> do
+              return $! updateRegs allRegs [(reg, val)]
+        LCLM.LLVMPointerRepr w
+          | Just PC.Refl <- PC.testEquality w (PN.knownNat @16) -> do
+              extVal <- liftIO $ extendResult val
+              return $! updateRegs allRegs [(reg, extVal)]
+        LCLM.LLVMPointerRepr w
+          | Just PC.Refl <- PC.testEquality w (PN.knownNat @8) -> do
+              extVal <- liftIO $ extendResult val
+              return $! updateRegs allRegs [(reg, extVal)]
+        _ -> AP.panic AP.FunctionOverride "aarch32LinuxIntegerReturnRegisters" [ "Unsupported return type: " ++ show tpr ]
 
     -- Zero extend return value to fit in 32-bit register and update register
     -- state.
     extendResult
       :: (1 WI.<= srcW, DMT.KnownNat srcW)
-      => AF.OverrideResult sym DMA.ARM (LCLM.LLVMPointerType srcW)
-      -> IO (LCS.RegValue sym (DMS.ArchRegStruct DMA.ARM))
-    extendResult ovRes = do
-      asBv <- LCLM.projectLLVM_bv bak (AF.result ovRes)
-      asPtr <- AO.bvToPtr sym asBv (PN.knownNat @32)
-      let r0 = ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R0")
-      return $! updateRegs (DMAS.updateReg r0 (const (LCS.RV asPtr)) initRegs)
+      => LCLM.LLVMPtr sym srcW
+      -> IO (LCLM.LLVMPtr sym 32)
+    extendResult res = do
+      asBv <- LCLM.projectLLVM_bv bak res
+      AO.bvToPtr sym asBv (PN.knownNat @32)
 
-    updateRegs regs =
+    updateRegs ::
+         LCS.RegValue sym (DMS.ArchRegStruct DMA.ARM)
+      -> [( ARMReg.ARMReg (DMT.BVType 32)
+          , LCLM.LLVMPtr sym 32)]
+      -> LCS.RegValue sym (DMS.ArchRegStruct DMA.ARM)
+    updateRegs regs regUpdates =
       foldl' (\r (reg, val) -> DMAS.updateReg reg (const (LCS.RV val)) r)
              regs
-             (AF.regUpdates result)
+             regUpdates
 
 -- | Retrieve the return address for the function being called by looking up
 -- the current value of the link register.

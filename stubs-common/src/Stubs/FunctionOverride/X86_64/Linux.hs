@@ -107,43 +107,58 @@ x86_64LinuxIntegerReturnRegisters
   -> LCS.RegValue sym (DMS.ArchRegStruct DMX.X86_64)
   -- ^ Argument register values from before override execution
   -> LCS.OverrideSim p sym ext r args rtp (LCS.RegValue sym (DMS.ArchRegStruct DMX.X86_64))
-x86_64LinuxIntegerReturnRegisters bak archVals ovTyp result initRegs = do
+x86_64LinuxIntegerReturnRegisters bak archVals ovTyp result initRegs =
   case ovTyp of
     LCT.UnitRepr -> do
       pure $ updateRegs initRegs (AF.regUpdates result)
-    LCLM.LLVMPointerRepr w
-      | Just WI.Refl <- WI.testEquality w (WI.knownNat @64) -> do
-      pure $ updateRegs initRegs ((DMXR.RAX, AF.result result) : AF.regUpdates result)
-    LCLM.LLVMPointerRepr w
-      | Just WI.Refl <- WI.testEquality w (WI.knownNat @8) -> do
-      regs <- bvZextResult result
-      pure $ updateRegs regs (AF.regUpdates result)
-    LCLM.LLVMPointerRepr w
-      | Just WI.Refl <- WI.testEquality w (WI.knownNat @16) -> do
-      regs <- bvZextResult result
-      pure $ updateRegs regs (AF.regUpdates result)
-    LCLM.LLVMPointerRepr w
-      | Just WI.Refl <- WI.testEquality w (WI.knownNat @32) -> do
-      regs <- bvZextResult result
-      pure $ updateRegs regs (AF.regUpdates result)
-    _ -> AP.panic AP.FunctionOverride
-                  "x86_64LinuxIntegerReturnRegisters"
-                  ["Unsupported override return type: " ++ show ovTyp]
-    -- NOTE: If we encounter an override that returns a 128 bit int we'll
-    -- need to add support for that here
+    _ -> do
+      regs' <- injectIntoReg ovTyp (AF.result result) rax initRegs
+      pure $ updateRegs regs' (AF.regUpdates result)
   where
     sym = LCB.backendGetSym bak
+    rax = DMXR.RAX
+
+    -- Inject a return value of the given TypeRepr into the supplied X86Reg.
+    -- Depending on the type of the value, this may require zero extension.
+    injectIntoReg ::
+         forall tp
+       . LCT.TypeRepr tp
+      -> LCS.RegValue sym tp
+      -> DMXR.X86Reg DMXR.GP
+      -> LCS.RegValue sym (DMS.ArchRegStruct DMX.X86_64)
+      -> LCS.OverrideSim p sym ext r args rtp (LCS.RegValue sym (DMS.ArchRegStruct DMX.X86_64))
+    injectIntoReg tpr val reg allRegs =
+      case tpr of
+        LCLM.LLVMPointerRepr w
+          | Just WI.Refl <- WI.testEquality w (WI.knownNat @64) -> do
+          pure $ updateRegs allRegs [(reg, val)]
+        LCLM.LLVMPointerRepr w
+          | Just WI.Refl <- WI.testEquality w (WI.knownNat @8) -> do
+          extVal <- bvZextResult val
+          pure $ updateRegs allRegs [(reg, extVal)]
+        LCLM.LLVMPointerRepr w
+          | Just WI.Refl <- WI.testEquality w (WI.knownNat @16) -> do
+          extVal <- bvZextResult val
+          pure $ updateRegs allRegs [(reg, extVal)]
+        LCLM.LLVMPointerRepr w
+          | Just WI.Refl <- WI.testEquality w (WI.knownNat @32) -> do
+          extVal <- bvZextResult val
+          pure $ updateRegs allRegs [(reg, extVal)]
+        _ -> AP.panic AP.FunctionOverride
+                      "x86_64LinuxIntegerReturnRegisters"
+                      ["Unsupported override return type: " ++ show tpr]
+        -- NOTE: If we encounter an override that returns a 128 bit int we'll
+        -- need to add support for that here
 
     -- | Zero extend result LLMVPointer in region 0 (a bitvector) to fit in an
     -- integer register
     bvZextResult
       :: (1 <= srcW, KnownNat srcW)
-      => AF.OverrideResult sym DMX.X86_64 (LCLM.LLVMPointerType srcW)
-      -> LCS.OverrideSim p sym ext r args rtp (LCS.RegValue sym (DMS.ArchRegStruct DMX.X86_64))
-    bvZextResult ovRes = do
-      asBv <- liftIO $ LCLM.projectLLVM_bv bak (AF.result ovRes)
-      asPtr <- liftIO $ AO.bvToPtr sym asBv (WI.knownNat @64)
-      return $ updateRegs initRegs [(DMXR.RAX, asPtr)]
+      => LCLM.LLVMPtr sym srcW
+      -> LCS.OverrideSim p sym ext r args rtp (LCLM.LLVMPtr sym 64)
+    bvZextResult res = do
+      asBv <- liftIO $ LCLM.projectLLVM_bv bak res
+      liftIO $ AO.bvToPtr sym asBv (WI.knownNat @64)
 
     updateRegs :: LCS.RegValue sym (DMS.ArchRegStruct DMX.X86_64)
                -> [( DMC.ArchReg DMX.X86_64 (DMT.BVType 64)
