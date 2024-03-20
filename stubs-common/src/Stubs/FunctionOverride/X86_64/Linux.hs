@@ -111,12 +111,20 @@ x86_64LinuxIntegerReturnRegisters bak archVals ovTyp result initRegs =
   case ovTyp of
     LCT.UnitRepr -> do
       pure $ updateRegs initRegs (AF.regUpdates result)
+    -- We have a special case for Structs of two elements, which we treat as
+    -- though we are computing two return values, one in RAX and the other in RDX.
+    LCT.StructRepr (Ctx.Empty Ctx.:> fstTpr Ctx.:> sndTpr) -> do
+      Ctx.Empty Ctx.:> LCS.RV fstVal Ctx.:> LCS.RV sndVal <- pure (AF.result result)
+      regs0 <- injectIntoReg fstTpr fstVal rax initRegs
+      regs1 <- injectIntoReg sndTpr sndVal rdx regs0
+      pure $ updateRegs regs1 (AF.regUpdates result)
     _ -> do
       regs' <- injectIntoReg ovTyp (AF.result result) rax initRegs
       pure $ updateRegs regs' (AF.regUpdates result)
   where
     sym = LCB.backendGetSym bak
     rax = DMXR.RAX
+    rdx = DMXR.RDX
 
     -- Inject a return value of the given TypeRepr into the supplied X86Reg.
     -- Depending on the type of the value, this may require zero extension.
