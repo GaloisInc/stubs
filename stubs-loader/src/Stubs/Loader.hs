@@ -32,6 +32,7 @@ import           Data.Macaw.BinaryLoader.X86 ()
 import           Data.Macaw.BinaryLoader.AArch32 ()
 import qualified Data.Macaw.CFG as DMC
 import qualified Data.Macaw.Memory as DMM
+import qualified Data.Macaw.Memory.ElfLoader.PLTStubs as DMMEP
 import qualified Data.Macaw.Memory.LoadCommon as MML
 import qualified Data.Macaw.Symbolic as DMS
 import qualified Data.Macaw.X86 as DMX
@@ -53,7 +54,6 @@ import qualified Stubs.Loader.BinaryConfig as ALB
 import qualified Stubs.Loader.ELF.DynamicLoader as ALED
 import qualified Stubs.Loader.ELF.Symbols as ALES
 import qualified Stubs.Loader.ELF.Symbols.AArch32 as ALESA
-import qualified Stubs.Loader.ELF.PLTStubDetector as ALEP
 import qualified Stubs.Loader.Relocations as ALR
 import qualified Stubs.Loader.Versioning as ALV
 import qualified Stubs.Memory.AArch32.Linux as AMAL
@@ -154,8 +154,9 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
             Just archVals -> do
               binsAndPaths <- loadElfBinaries options ehi hdrMachine hdrClass
               let bins = NEV.map fst binsAndPaths
-              binConf <- mkElfBinConf AA.X86_64Linux
-                                      (Proxy @DE.X86_64_RelocationType)
+              binConf <- mkElfBinConf DMX.x86_64PLTStubInfo
+                                      options
+                                      ehi
                                       binsAndPaths
                                       -- NOTE: We do not currently support
                                       -- relocations on X86 so we pass in empty
@@ -188,8 +189,9 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
               let bins = NEV.map fst binsAndPaths
               (unsupportedRels, supportedRels) <- liftIO $ ALESA.elfAarch32Rels bins
               let dynGlobSymMap = ALES.elfDynamicGlobalSymbolMap supportedRels bins
-              binConf <- mkElfBinConf AA.AArch32Linux
-                                      (Proxy @DE.ARM32_RelocationType)
+              binConf <- mkElfBinConf Macaw.AArch32.armPLTStubInfo
+                                      options
+                                      ehi
                                       binsAndPaths
                                       dynGlobSymMap
                                       unsupportedRels
@@ -226,7 +228,7 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
 
     -- Construct a BinaryConfig for an ELF file.
     mkElfBinConf ::
-      forall arch binFmt w proxy reloc.
+      forall arch binFmt w reloc.
       ( binFmt ~ DE.ElfHeaderInfo (DMC.ArchAddrWidth arch)
       , w ~ DMC.ArchAddrWidth arch
       , w ~ DE.RelocationWidth reloc
@@ -234,8 +236,9 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
       , DE.IsRelocationType reloc
       , DMM.MemWidth w
       ) =>
-      AA.ABI ->
-      proxy reloc ->
+      DMMEP.PLTStubInfo reloc ->
+      MML.LoadOptions ->
+      DE.ElfHeaderInfo w ->
       -- ^ The relocation type to use when detecting PLT stubs
       NEV.NonEmptyVector (DMB.LoadedBinary arch binFmt, FilePath) ->
       -- ^ All loaded binaries (including shared libraries) and their file paths
@@ -247,8 +250,18 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
       Map.Map (DMM.MemWord (DMC.ArchAddrWidth arch)) ALR.RelocType ->
       -- ^ Supported relocation types
       m (ALB.BinaryConfig arch binFmt)
-    mkElfBinConf abi proxyReloc binsAndPaths dynGlobals
+    mkElfBinConf pltStubInfo options ehi binsAndPaths dynGlobals
                  unsupportedRels supportedRels = do
+      let pltStubs =
+            fmap
+              (\(symtabEntry, versionedVal) ->
+                ALV.VerSym
+                  { ALV.versymSymbol =
+                      ALES.symtabEntryFunctionName symtabEntry
+                  , ALV.versymVersion =
+                      ALES.versionTableValueToSymbolVersion versionedVal
+                  })
+              (DMMEP.pltStubSymbols pltStubInfo options ehi)
       let loadedBinaryPaths =
             NEV.map
               (\(bin, path) ->
@@ -257,7 +270,7 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
                   , ALB.lbpPath = path
                   , ALB.lbpEntryPoints = ALES.elfEntryPointAddrMap bin
                   , ALB.lbpGlobalVars = ALES.elfGlobalSymbolMap supportedRels bin
-                  , ALB.lbpPltStubs = ALEP.pltStubSymbols abi proxyReloc bin
+                  , ALB.lbpPltStubs = pltStubs
                   })
               binsAndPaths
       let bins = NEV.map fst binsAndPaths

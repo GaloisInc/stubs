@@ -50,7 +50,6 @@ library
                      Stubs.EntryPoint,
                      Stubs.Loader.ELF.DecodeError,
                      Stubs.Loader.ELF.DynamicLoader,
-                     Stubs.Loader.ELF.PLTStubDetector,
                      Stubs.Loader.ELF.Symbols,
                      Stubs.Loader.ELF.Symbols.AArch32
     hs-source-dirs: src
