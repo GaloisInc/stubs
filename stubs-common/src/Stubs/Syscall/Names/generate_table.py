@@ -25,7 +25,7 @@ for line in data:
             continue
         syscall = parts[2].strip()
         print(f"    ({code}, \"{syscall}\"),")
-    except: 
+    except:
         failed += ["-- failed: " + dat]
 
 for fail in failed:

@@ -6,9 +6,9 @@
 -- about the signatures of syscalls, only
 -- the information that's contained within
 -- syscalls.tbl
-module Stubs.Syscall.Names.X86_64.Linux 
+module Stubs.Syscall.Names.X86_64.Linux
     (
-     syscallMap   
+     syscallMap
     )
     where
 
