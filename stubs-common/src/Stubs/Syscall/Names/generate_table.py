@@ -1,13 +1,19 @@
 #!/usr/bin/env python3
-import sys
+import argparse
 
-if len(sys.argv) == 1 or sys.argv[1] == "--help" or sys.argv[1] == "-h":
-    print("Usage: generate_table.py <input .tbl file>")
-    exit(1)
+parser = argparse.ArgumentParser(
+                    prog="generate_table.py",
+                    description="Generate a map of syscall names from a .tbl file")
+parser.add_argument("filename",
+                    help="The input .tbl file")
+parser.add_argument("--exclude-abi",
+                    help="Exclude syscalls that require the supplied ABI name",
+                    default=[],
+                    action="append")
 
-inpfile = sys.argv[1]
+args = parser.parse_args()
 
-with open(inpfile, "r") as f:
+with open(args.filename, "r") as f:
     data = f.readlines()
 
 failed = []
@@ -19,9 +25,9 @@ for line in data:
     try:
         parts = dat.split("\t")
         code = int(parts[0].strip())
-        # Special case: filter out syscalls that use the x32 abi
+        # Filter out syscalls that are in the list of excluded ABIs
         abi = parts[1].strip()
-        if abi == "x32":
+        if abi in args.exclude_abi:
             continue
         syscall = parts[2].strip()
         print(f"    ({code}, \"{syscall}\"),")

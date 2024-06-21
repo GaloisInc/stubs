@@ -5,7 +5,7 @@
 -- module does not carry any type information
 -- about the signatures of syscalls, only
 -- the information that's contained within
--- syscalls.tbl
+-- syscalls_arm.tbl.
 module Stubs.Syscall.Names.AArch32.Linux
     (
      syscallMap
@@ -22,7 +22,8 @@ syscallMap = IM.fromList armSyscalls_
 
 -- | The raw table of arm syscalls and their associated numbers.
 -- See syscall_arm.tbl for more information. This data is
--- generated automatically from the generate_table.py script.
+-- generated automatically from the generate_table.py script. See the
+-- @stubs-common/src/Stubs/Syscall/Names/README@ file for more information.
 armSyscalls_ :: [(Int, DT.Text)]
 armSyscalls_ = [
     (0, "restart_syscall"),
