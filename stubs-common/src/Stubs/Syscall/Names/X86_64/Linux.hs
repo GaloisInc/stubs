@@ -5,7 +5,7 @@
 -- module does not carry any type information
 -- about the signatures of syscalls, only
 -- the information that's contained within
--- syscalls.tbl
+-- syscalls_x86_64.tbl.
 module Stubs.Syscall.Names.X86_64.Linux
     (
      syscallMap
@@ -22,7 +22,8 @@ syscallMap = IM.fromList x86_64Syscalls_
 
 -- | The raw table of x86 64-bit syscalls and their associated numbers.
 -- See syscall_x86_64.tbl for more information. This data is
--- generated automatically from the generate_table.py script.
+-- generated automatically from the generate_table.py script. See the
+-- @stubs-common/src/Stubs/Syscall/Names/README@ file for more information.
 x86_64Syscalls_ :: [(Int, DT.Text)]
 x86_64Syscalls_ = [
     (0, "read"),
