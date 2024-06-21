@@ -114,10 +114,10 @@ withBinary
         , mem ~ DMS.LLVMMemory
         , p ~ AExt.AmbientSimulatorState sym arch
         , w ~ DMC.RegAddrWidth (DMC.ArchReg arch)
-        , 1 <= w 
+        , 1 <= w
         , SM.IsStubsMemoryModel mem arch
         , SM.PtrType DMS.LLVMMemory arch ~ LCLM.LLVMPointerType (DMC.ArchAddrWidth arch)
-        , SM.MemType DMS.LLVMMemory arch ~ LCLM.Mem 
+        , SM.MemType DMS.LLVMMemory arch ~ LCLM.Mem
         , SM.VerifierState sym DMS.LLVMMemory arch ~ SE.AmbientSimulatorState sym arch
         )
      => DMA.ArchitectureInfo arch
@@ -129,7 +129,7 @@ withBinary
      -> Int
      -- ^ Total number of bytes loaded (includes shared libraries).
      -> ALB.BinaryConfig arch binFmt
-     -> Maybe (FunABIExt arch) 
+     -> Maybe (FunABIExt arch)
      -> [STI.OverrideModule arch]
      -- ^ Information about the loaded binaries
      -> m a)
