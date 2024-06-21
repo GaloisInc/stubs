@@ -53,8 +53,8 @@ data BinaryConfig arch binFmt = BinaryConfig {
 
   , bcPltStubs :: Map.Map (DMM.MemWord (DMC.ArchAddrWidth arch)) ALV.VersionedFunctionName
   -- ^ Maps the addresses of PLT stub in each binary and shared library to
-  -- their corresponding function names. See @Note [PLT Stub Names]@ in
-  -- "Ambient.ELF.Loader.PLTStubDetector".
+  -- their corresponding function names. See @Note [PLT stub names]@ in
+  -- "Data.Macaw.Memory.ElfLoader.PLTStubs" in @macaw-base@.
   --
   -- Note that this is the same thing as the union of all the 'lbpPltStubs' in
   -- each of the binaries in 'bcBinaries'. We cache the result in this field so
@@ -121,8 +121,8 @@ data LoadedBinaryPath arch binFmt = LoadedBinaryPath {
 
   , lbpPltStubs :: Map.Map (DMM.MemWord (DMC.ArchAddrWidth arch)) ALV.VersionedFunctionName
   -- ^ Maps the addresses of PLT stubs in the binary to their corresponding
-  -- function names. See @Note [PLT Stub Names]@ in
-  -- "Ambient.ELF.Loader.PLTStubDetector".
+  -- function names. See @Note [PLT stub names]@ in
+  -- "Data.Macaw.Memory.ElfLoader.PLTStubs" in @macaw-base@.
   }
 
 -- | Convert the 'lbpEntryPoints' in a 'LoadedBinaryPath' to an
