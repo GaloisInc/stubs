@@ -17,6 +17,6 @@ For testing, the ABIs used assume LLVM and Linux, supporting AArch32 and X86_64.
 ## BuildFunctionABI and BuildSyscallABI
 These types wrap around functions that construct ABI types, based on memory. The loader passes these along to its continuation, as part of its arch/memory specific data.
 
-## Sym 
+## Sym
 
 Throughout the pipeline, a symbolic backend, and associated expression builder, are frequently used. Many functions require these to be related, so a `Sym` wraps the two together, satisfying these constraints.
