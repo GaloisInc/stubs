@@ -1,10 +1,14 @@
 Automatically generated int -> syscall conversions for different platforms
 
-syscall_arm.tbl and syscall_x86_64.tbl are tables of syscall codes on arm and x86 respectively.
-Their sources are given at the top of each file.
+syscall_arm.tbl, syscall_powerpc.tbl, syscall_x86_64.tbl are tables of syscall
+codes on arm, powerpc, and x86, respectively. Their sources are given at the
+top of each file.
 
-To generate the data used in AArch32/Linux.hs and X86_64/Linux.hs, run one of
-the following commands and paste the output into the list literal:
+To generate the data used in AArch32/Linux.hs, PPC32/Linux.hs, PPC64/Linux.hs,
+and X86_64/Linux.hs, run one of the following commands and paste the output
+into the list literal:
 
 * For AArch32: `./generate_table.py syscall_arm.tbl`
 * For x86_64:  `./generate_table.py syscall_x86_64.tbl --exclude-abi x32`
+* For PPC32:   `./generate_table.py syscall_powerpc.tbl --exclude-abi 64 --exclude-abi spu`
+* For PPC64:   `./generate_table.py syscall_powerpc.tbl --exclude-abi 32 --exclude-abi spu`
