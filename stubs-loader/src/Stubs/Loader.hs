@@ -35,6 +35,8 @@ import qualified Data.Macaw.Memory as DMM
 import qualified Data.Macaw.Memory.ElfLoader.PLTStubs as DMMEP
 import qualified Data.Macaw.Memory.LoadCommon as MML
 import qualified Data.Macaw.Symbolic as DMS
+import qualified Data.Macaw.PPC as DMP
+import           Data.Macaw.PPC.Symbolic ()
 import qualified Data.Macaw.X86 as DMX
 import           Data.Macaw.X86.Symbolic ()
 import qualified Data.Macaw.ARM as Macaw.AArch32
@@ -50,6 +52,7 @@ import qualified Stubs.Extensions as AExt
 import qualified Stubs.FunctionOverride.Extension as AFE
 import qualified Stubs.FunctionOverride.X86_64.Linux as AFXL
 import qualified Stubs.FunctionOverride.AArch32.Linux as AFAL
+import qualified Stubs.FunctionOverride.PPC.Linux as AFPL
 import qualified Stubs.Loader.BinaryConfig as ALB
 import qualified Stubs.Loader.ELF.DynamicLoader as ALED
 import qualified Stubs.Loader.ELF.Symbols as ALES
@@ -58,7 +61,9 @@ import qualified Stubs.Loader.Relocations as ALR
 import qualified Stubs.Loader.Versioning as ALV
 import qualified Stubs.Memory.AArch32.Linux as AMAL
 import qualified Stubs.Memory.X86_64.Linux as AMXL
+import qualified Stubs.Memory.PPC.Linux as AMPL
 import qualified Stubs.Syscall.AArch32.Linux as ASAL
+import qualified Stubs.Syscall.PPC.Linux as ASPL
 import qualified Stubs.Syscall.X86_64.Linux as ASXL
 import Data.Macaw.CFG (ArchReg, ArchAddrWidth)
 import Data.Macaw.Types (BVType)
@@ -66,7 +71,10 @@ import Data.Macaw.X86.X86Reg as DMX
 import qualified Stubs.Preamble as SPR
 import Stubs.Arch.X86 ()
 import Stubs.Arch.AArch32 ()
+import Stubs.Arch.PPC32 ()
+import Stubs.Arch.PPC64 ()
 import qualified Data.Macaw.ARM.ARMReg as ARMReg
+import qualified Dismantle.PPC as DP
 import qualified Language.ASL.Globals as ASL
 import qualified Stubs.Translate.Core as STC
 import qualified Stubs.Memory as SM
@@ -209,6 +217,72 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
                 (Just (FunABIExt (ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R0"))))
                 ovs
             Nothing -> CMC.throwM (AE.UnsupportedELFArchitecture name DE.EM_ARM DE.ELFCLASS32)
+        (DE.EM_PPC, DE.ELFCLASS32) -> do
+          let extOverride = AMPL.ppcLinuxStmtExtensionOverride
+          case DMS.archVals (Proxy @DMP.PPC32) (Just extOverride) of
+            Just archVals -> do
+              binsAndPaths <- loadElfBinaries options ehi hdrMachine hdrClass
+              let bins = NEV.map fst binsAndPaths
+              binConf <- mkElfBinConf (DMMEP.noPLTStubInfo "PPC32")
+                                      options
+                                      ehi
+                                      binsAndPaths
+                                      -- NOTE: We do not currently support
+                                      -- relocations on PowerPC
+                                      -- (see https://github.com/GaloisInc/macaw/issues/386)
+                                      -- so we pass in empty maps for the
+                                      -- relocation structures.
+                                      Map.empty
+                                      Map.empty
+                                      Map.empty
+              -- Here we capture all of the necessary constraints required by the
+              -- callback and pass them down along with the architecture info
+              ovs <- STI.buildOverrides
+              k DMP.ppc32_linux_info
+                AA.PPC32Linux
+                archVals
+                ASPL.ppcLinuxSyscallABI
+                AFPL.ppcLinuxFunctionABI
+                (AFE.machineCodeParserHooks (Proxy @DMP.PPC32)
+                                            AFPL.ppc32LinuxTypes)
+                (elfBinarySizeTotal bins)
+                binConf
+                (Just (FunABIExt (DMP.PPC_GP (DP.GPR 3))))
+                ovs
+            Nothing -> CMC.throwM (AE.UnsupportedELFArchitecture name DE.EM_PPC DE.ELFCLASS32)
+        (DE.EM_PPC64, DE.ELFCLASS64) -> do
+          let extOverride = AMPL.ppcLinuxStmtExtensionOverride
+          case DMS.archVals (Proxy @DMP.PPC64) (Just extOverride) of
+            Just archVals -> do
+              binsAndPaths <- loadElfBinaries options ehi hdrMachine hdrClass
+              let bins = NEV.map fst binsAndPaths
+              binConf <- mkElfBinConf (DMMEP.noPLTStubInfo "PPC64")
+                                      options
+                                      ehi
+                                      binsAndPaths
+                                      -- NOTE: We do not currently support
+                                      -- relocations on PowerPC
+                                      -- (see https://github.com/GaloisInc/macaw/issues/386)
+                                      -- so we pass in empty maps for the
+                                      -- relocation structures.
+                                      Map.empty
+                                      Map.empty
+                                      Map.empty
+              -- Here we capture all of the necessary constraints required by the
+              -- callback and pass them down along with the architecture info
+              ovs <- STI.buildOverrides
+              k (DMP.ppc64_linux_info (ALB.lbpBinary (ALB.mainLoadedBinaryPath binConf)))
+                AA.PPC64Linux
+                archVals
+                ASPL.ppcLinuxSyscallABI
+                AFPL.ppcLinuxFunctionABI
+                (AFE.machineCodeParserHooks (Proxy @DMP.PPC64)
+                                            AFPL.ppc64LinuxTypes)
+                (elfBinarySizeTotal bins)
+                binConf
+                (Just (FunABIExt (DMP.PPC_GP (DP.GPR 3))))
+                ovs
+            Nothing -> CMC.throwM (AE.UnsupportedELFArchitecture name DE.EM_PPC64 DE.ELFCLASS64)
         (machine, klass) -> CMC.throwM (AE.UnsupportedELFArchitecture name machine klass)
     Left _ -> throwDecodeFailure name bytes
   where
