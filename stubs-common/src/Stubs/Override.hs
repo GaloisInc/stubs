@@ -46,7 +46,7 @@ import qualified Stubs.Panic as AP
 -- See @Note [Passing arguments to functions]@ in "Ambient.FunctionOverride".
 buildArgumentAssignment
   :: forall w args sym bak
-   . (1 <= w, KnownNat w, LCB.IsSymBackend sym bak)
+   . (1 <= w, LCB.IsSymBackend sym bak)
   => bak
   -> LCT.CtxRepr args
   -- ^ Types of arguments
