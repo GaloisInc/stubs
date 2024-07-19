@@ -74,6 +74,7 @@ library
                       Stubs.Memory.SharedMemory,
                       Stubs.Memory.AArch32.Linux,
                       Stubs.Memory.X86_64.Linux,
+                      Stubs.Memory.PPC.Linux,
                       Stubs.MonadState,
                       Stubs.Override,
                       Stubs.Panic,
