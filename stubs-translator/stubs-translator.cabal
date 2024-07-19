@@ -45,6 +45,8 @@ library
     exposed-modules: Stubs.AST,
                      Stubs.Arch.X86,
                      Stubs.Arch.AArch32,
+                     Stubs.Arch.PPC32,
+                     Stubs.Arch.PPC64,
                      Stubs.Translate,
                      Stubs.Translate.Core,
                      Stubs.Translate.Intrinsic,
