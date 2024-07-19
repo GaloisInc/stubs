@@ -63,6 +63,7 @@ library
                       Stubs.FunctionOverride.AArch32.Linux,
                       Stubs.FunctionOverride.X86_64.Linux,
                       Stubs.FunctionOverride.X86_64.Linux.Specialized,
+                      Stubs.FunctionOverride.PPC.Linux,
                       Stubs.Lift,
                       Stubs.Loader.BinaryConfig,
                       Stubs.Loader.LoadOptions,
