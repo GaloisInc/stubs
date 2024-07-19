@@ -12,7 +12,7 @@ In a symbolic execution pipeline, these overrides are packed into the `FunctionA
 
 These ABI types are memory-model and arch independent structures defining how to pass values between functions. They consist of functions defining how to retrieve arguments, as well as how to retrieve the return result, and return address.
 
-For testing, the ABIs used assume LLVM and Linux, supporting AArch32 and X86_64.
+For testing, the ABIs used assume LLVM and Linux, supporting AArch32, X86_64, and PowerPC (32-bit and 64-bit).
 
 ## BuildFunctionABI and BuildSyscallABI
 These types wrap around functions that construct ABI types, based on memory. The loader passes these along to its continuation, as part of its arch/memory specific data.
