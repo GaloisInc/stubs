@@ -61,6 +61,7 @@ library
                    vector,
                    binary-symbols,
                    asl-translator,
+                   dismantle-ppc,
                    what4,
                    crucible,
                    crucible-llvm,
@@ -75,4 +76,7 @@ library
                    macaw-x86-symbolic,
                    macaw-aarch32,
                    macaw-aarch32-symbolic,
-                   macaw-loader-aarch32
+                   macaw-loader-aarch32,
+                   macaw-ppc,
+                   macaw-ppc-symbolic,
+                   macaw-loader-ppc
