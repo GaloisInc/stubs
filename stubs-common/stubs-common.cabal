@@ -83,6 +83,8 @@ library
                       Stubs.Syscall.X86_64.Linux,
                       Stubs.Syscall.Names.X86_64.Linux,
                       Stubs.Syscall.Names.AArch32.Linux,
+                      Stubs.Syscall.Names.PPC32.Linux,
+                      Stubs.Syscall.Names.PPC64.Linux,
                       Stubs.Verifier.Concretize
 
     -- Modules included in this library but not exported.
