@@ -68,7 +68,7 @@ ppcLinuxIntegerArguments
      )
   => bak
   -> DMS.GenArchVals mem (DMP.AnyPPC v)
-  -- ^ ARM-specific architecture information
+  -- ^ PPC-specific architecture information
   -> LCT.CtxRepr atps
   -- ^ The argument types
   -> Ctx.Assignment (LCS.RegValue' sym) (DMS.MacawCrucibleRegTypes (DMP.AnyPPC v))
@@ -84,6 +84,8 @@ ppcLinuxIntegerArguments bak archVals argTypes regs mem = do
              -- not 0, as the first stack argument is located at @8(r1)@
              -- instead of @0(r1)@ (which is where the back chain resides).
              [1..]
+  -- NB: `regArgList` below only has eight elements, so the cost of using (++)
+  -- below (which is O(n) in the size of the first list n) is negligible.
   let argList = regArgList ++ stackArgList
   AO.buildArgumentAssignment bak argTypes argList
   where

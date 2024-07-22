@@ -30,6 +30,7 @@ import qualified What4.Symbol as WSym
 
 import qualified Stubs.Memory as AM
 import qualified Stubs.Common as SC
+import qualified Lang.Crucible.FunctionHandle as LCF
 import qualified Lang.Crucible.Types as LCT
 import qualified Data.Macaw.Symbolic.Memory as DMSM
 import qualified Data.Macaw.Architecture.Info as DMA
@@ -56,9 +57,12 @@ instance (DMS.SymArchConstraints (DMP.AnyPPC v), 16 WI.<= SAP.AddrWidth v) =>
 
   type instance VerifierState sym DMS.LLVMMemory (DMP.AnyPPC v) = SE.AmbientSimulatorState sym (DMP.AnyPPC v)
 
-  bvToPtr :: LCT.TypeRepr tp-> LCT.TypeRepr (SM.ToPtrTy tp DMS.LLVMMemory (DMP.AnyPPC v))
-  bvToPtr (LCT.BVRepr n) = LCLM.LLVMPointerRepr n
+  bvToPtr :: LCT.TypeRepr tp -> LCT.TypeRepr (SM.ToPtrTy tp DMS.LLVMMemory (DMP.AnyPPC v))
   bvToPtr ty = case ty of
+    -- Map BVRepr to LLVMPointerRepr...
+    LCT.BVRepr n -> LCLM.LLVMPointerRepr n
+
+    -- ...and map all other TypeReprs to themselves.
     LCT.AnyRepr -> LCT.AnyRepr
     LCT.UnitRepr -> LCT.UnitRepr
     LCT.BoolRepr -> LCT.BoolRepr
@@ -87,8 +91,10 @@ instance (DMS.SymArchConstraints (DMP.AnyPPC v), 16 WI.<= SAP.AddrWidth v) =>
   memPtrSize :: PN.NatRepr (SAP.AddrWidth v)
   memPtrSize = WI.knownRepr
 
+  genStackPtr :: (Monad m, MonadIO m) => LCLM.LLVMPtr sym (SAP.AddrWidth v) -> WI.SymBV sym (SAP.AddrWidth v) -> SC.Sym sym -> m (LCLM.LLVMPtr sym (SAP.AddrWidth v))
   genStackPtr baseptr offset (SC.Sym sym _) = liftIO $ LCLM.ptrAdd sym WI.knownRepr baseptr offset
 
+  initMem :: SC.Sym sym -> DMA.ArchitectureInfo (DMP.AnyPPC v) -> Integer -> SLB.BinaryConfig (DMP.AnyPPC v) binfmt -> LCF.HandleAllocator -> (Monad m, MonadIO m) => m (SM.InitialMemory sym DMS.LLVMMemory (DMP.AnyPPC v))
   initMem (SC.Sym sym bak) archInfo stackSize binConf halloc = do
     let endian = DMSM.toCrucibleEndian (DMA.archEndianness archInfo)
 
@@ -105,7 +111,7 @@ instance (DMS.SymArchConstraints (DMP.AnyPPC v), 16 WI.<= SAP.AddrWidth v) =>
     stackArrayStorage <- liftIO $ WI.freshConstant sym (WSym.safeSymbol "stack_array") WI.knownRepr
     mem2 <- liftIO $ LCLM.doArrayStore bak mem1 stackBasePtr LCLD.noAlignment stackArrayStorage stackSizeBV
 
-    memVar <- liftIO $ LCLM.mkMemVar (DT.pack "ambient-verifier::memory") halloc
+    memVar <- liftIO $ LCLM.mkMemVar (DT.pack "stubs::memory") halloc
     let globals = LCSG.insertGlobal memVar mem2 LCSG.emptyGlobals
     let globalMap = AEM.mapRegionPointers memPtrTbl
 

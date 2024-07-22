@@ -1,19 +1,19 @@
-{-# LANGUAGE RankNTypes #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE GADTs #-}
 {-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -Wno-orphans #-}
 {-# LANGUAGE DataKinds #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GADTs #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 {-|
-Description: Preamble Instance for AArch32
+Description: 'SPR.Preamble' Instance for AArch32
 -}
 module Stubs.Arch.AArch32() where
 import qualified Stubs.AST as SA
@@ -33,12 +33,12 @@ import qualified Data.Parameterized.Map as MapF
 import qualified Stubs.Translate.Intrinsic as STI
 import qualified Lang.Crucible.LLVM.MemModel as LCLM
 
-instance STC.StubsArch SAA.AArch32 where 
+instance STC.StubsArch SAA.AArch32 where
 
     type instance ArchIntSize SAA.AArch32 = 32
     type instance ArchShortSize SAA.AArch32 =16
     type instance ArchLongSize SAA.AArch32 = 64
-    
+
     toCrucibleTy tyrepr = do
         case tyrepr of
             SA.StubsIntRepr -> return $ LCT.BVRepr (PN.knownNat @32)
@@ -52,28 +52,28 @@ instance STC.StubsArch SAA.AArch32 where
             SA.StubsUShortRepr -> return $ LCT.BVRepr (PN.knownNat @16)
             SA.StubsCharRepr -> pure $ LCT.BVRepr (PN.knownNat @8)
             SA.StubsUCharRepr -> pure $ LCT.BVRepr (PN.knownNat @8)
-            SA.StubsAliasRepr s -> do 
-                env <- STC.getStubEnv 
+            SA.StubsAliasRepr s -> do
+                env <- STC.getStubEnv
                 let tymap = STC.stTyMap env
-                case MapF.lookup  s tymap of 
+                case MapF.lookup  s tymap of
                     Just (STC.WrappedStubsTypeAliasRepr _ t) -> STC.toCrucibleTy t
                     Nothing -> error $ "missing type alias: " ++ show s
-            SA.StubsIntrinsicRepr s -> do 
-                env <- STC.getStubEnv 
-                let intrinsicMap = STC.stIntrinsicMap env 
-                case MapF.lookup s intrinsicMap of 
-                    Just (STC.WrappedIntrinsicRepr _ t) -> return t 
+            SA.StubsIntrinsicRepr s -> do
+                env <- STC.getStubEnv
+                let intrinsicMap = STC.stIntrinsicMap env
+                case MapF.lookup s intrinsicMap of
+                    Just (STC.WrappedIntrinsicRepr _ t) -> return t
                     Nothing -> error $ "Missing intrinsic: " ++ show s
-            SA.StubsTupleRepr t -> do 
+            SA.StubsTupleRepr t -> do
                 internal <- STC.toCrucibleTyCtx @_ @SAA.AArch32 t
                 return (LCT.StructRepr internal)
 
-    translateLit lit = do 
+    translateLit lit = do
         let n = PN.knownNat @32
         let ln = PN.knownNat @64
         let sn = PN.knownNat @16
         let sc = PN.knownNat @8
-        case lit of 
+        case lit of
             SA.BoolLit b -> LCCR.App $ LCCE.BoolLit b
             SA.UnitLit -> LCCR.App LCCE.EmptyApp
             SA.IntLit i -> LCCR.App (LCCE.IntegerToBV n $ LCCR.App $ LCCE.IntLit i)
@@ -101,10 +101,10 @@ instance SPR.Preamble SAA.AArch32 where
     preambleMap SA.StubsSignature{SA.sigFnName="ushort",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsShortRepr), SA.sigFnRetTy=SA.StubsUShortRepr} = bvIdOverride @SAA.AArch32 "ushort"
     preambleMap SA.StubsSignature{SA.sigFnName="long",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsULongRepr), SA.sigFnRetTy=SA.StubsLongRepr} = bvIdOverride @SAA.AArch32 "long"
     preambleMap SA.StubsSignature{SA.sigFnName="ulong",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsLongRepr), SA.sigFnRetTy=SA.StubsULongRepr} = bvIdOverride @SAA.AArch32 "ulong"
-    preambleMap SA.StubsSignature{SA.sigFnName="uint_s",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUShortRepr), SA.sigFnRetTy=SA.StubsUIntRepr} = bvExtendOverride @SAA.AArch32 "uint_s" False 
+    preambleMap SA.StubsSignature{SA.sigFnName="uint_s",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUShortRepr), SA.sigFnRetTy=SA.StubsUIntRepr} = bvExtendOverride @SAA.AArch32 "uint_s" False
     preambleMap SA.StubsSignature{SA.sigFnName="ulong_i",SA.sigFnArgTys=(Ctx.Empty Ctx.:> SA.StubsUIntRepr), SA.sigFnRetTy=SA.StubsULongRepr} = bvExtendOverride @SAA.AArch32 "ulong_i" False
     preambleMap sig = error ("Missing implementation for preamble function:"++SA.sigFnName sig)
 
-instance STI.OverrideArch SAA.AArch32 where 
+instance STI.OverrideArch SAA.AArch32 where
   buildOverrides = pure []
-    
+

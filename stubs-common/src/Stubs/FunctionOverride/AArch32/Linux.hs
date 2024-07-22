@@ -85,6 +85,8 @@ aarch32LinuxIntegerArguments bak archVals argTypes regFile mem = do
   let ?ptrWidth = ptrWidth
   let stackArgList = map (AFS.loadIntegerStackArgument bak archVals regFile mem)
                          [0..]
+  -- NB: `regArgList` below only has four elements, so the cost of using (++)
+  -- below (which is O(n) in the size of the first list n) is negligible.
   let argList = regArgList ++ stackArgList
   AO.buildArgumentAssignment bak argTypes argList
   where
