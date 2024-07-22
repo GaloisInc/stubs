@@ -87,6 +87,8 @@ x86_64LinuxIntegerArguments bak archVals argTypes regs mem = do
              -- instead of @0(%rsp)@ (which is where the return address
              -- resides).
              [1..]
+  -- NB: `regArgList` below only has six elements, so the cost of using (++)
+  -- below (which is O(n) in the size of the first list n) is negligible.
   let argList = regArgList ++ stackArgList
   AO.buildArgumentAssignment bak argTypes argList
   where

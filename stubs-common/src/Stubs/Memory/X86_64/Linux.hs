@@ -124,9 +124,12 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
             }
     return $ SE.ambientExtensions @sym @DMX.X86_64 bak f initialMem mmConf mempty
 
-  bvToPtr :: LCT.TypeRepr tp-> LCT.TypeRepr (SM.ToPtrTy tp DMS.LLVMMemory DMX.X86_64)
-  bvToPtr (LCT.BVRepr n) = LCLM.LLVMPointerRepr n
+  bvToPtr :: LCT.TypeRepr tp -> LCT.TypeRepr (SM.ToPtrTy tp DMS.LLVMMemory DMX.X86_64)
   bvToPtr ty = case ty of
+    -- Map BVRepr to LLVMPointerRepr...
+    LCT.BVRepr n -> LCLM.LLVMPointerRepr n
+
+    -- ...and map all other TypeReprs to themselves.
     LCT.AnyRepr -> LCT.AnyRepr
     LCT.UnitRepr -> LCT.UnitRepr
     LCT.BoolRepr -> LCT.BoolRepr
@@ -152,12 +155,17 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
     LCT.SymbolicStructRepr r -> LCT.SymbolicStructRepr r
     LCT.ReferenceRepr r -> LCT.ReferenceRepr r
 
+  genStackPtr :: (Monad m, MonadIO m) => LCLM.LLVMPtr sym 64 -> WI.SymBV sym 64 -> SC.Sym sym -> m (LCLM.LLVMPtr sym 64)
   genStackPtr baseptr offset (SC.Sym sym _) = liftIO $ LCLM.ptrAdd sym WI.knownRepr baseptr offset
+
+  insertStackPtr :: (WI.IsExprBuilder sym, LCB.IsSymInterface sym) => DMS.GenArchVals DMS.LLVMMemory DMX.X86_64 -> LCLM.LLVMPtr sym 64 -> LCS.RegEntry sym (LCT.StructType (DMS.CtxToCrucibleType (DMS.ArchRegContext DMX.X86_64))) -> LCS.RegEntry sym (LCT.StructType (DMS.CtxToCrucibleType (DMS.ArchRegContext DMX.X86_64)))
   insertStackPtr archVals sp initialRegsEntry= DMS.updateReg archVals initialRegsEntry DMC.sp_reg sp
 
 
   memPtrSize :: PN.NatRepr (DMC.ArchAddrWidth DMX.X86_64)
   memPtrSize = WI.knownRepr
+
+  initMem :: SC.Sym sym -> DMA.ArchitectureInfo DMX.X86_64 -> Integer -> SLB.BinaryConfig DMX.X86_64 binfmt -> LCF.HandleAllocator -> (Monad m, MonadIO m) => m (SM.InitialMemory sym DMS.LLVMMemory DMX.X86_64)
   initMem (SC.Sym sym bak) archInfo stackSize binConf halloc = do
 
     let mems = fmap (DMB.memoryImage . SLB.lbpBinary) (SLB.bcBinaries binConf)
@@ -177,7 +185,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
     stackArrayStorage <- liftIO $ WI.freshConstant sym (WSym.safeSymbol "stack_array") WI.knownRepr
     mem2 <- liftIO $ LCLM.doArrayStore bak mem1 stackBasePtr LCLD.noAlignment stackArrayStorage stackSizeBV
     (mem3, globals0) <- liftIO $ x86_64LinuxInitGlobals fsvar gsvar (SC.Sym sym bak) mem2
-    memVar <- liftIO $ LCLM.mkMemVar (DT.pack "ambient-verifier::memory") halloc
+    memVar <- liftIO $ LCLM.mkMemVar (DT.pack "stubs::memory") halloc
     let globals1 = LCSG.insertGlobal memVar mem3 globals0
 
     let globalMap = AEM.mapRegionPointers memPtrTbl

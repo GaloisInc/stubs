@@ -6,6 +6,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE InstanceSigs #-}
+{-# LANGUAGE RankNTypes #-}
 {-# OPTIONS_GHC -Wno-orphans #-}
 
 {-| Description: IsStubsMemoryModel instance for LLVMMemory with AArch32
@@ -50,7 +51,7 @@ import qualified Data.Macaw.Architecture.Info as DMA
 import qualified Data.Parameterized.NatRepr as PN
 import qualified Stubs.Memory as SM
 import qualified SemMC.Architecture.AArch32 as SAA
-import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Class (MonadIO(..))
 import Data.Macaw.AArch32.Symbolic ()
 import qualified Stubs.Extensions as SE
 import qualified Data.Macaw.Symbolic.MemOps as DMSMO
@@ -59,18 +60,21 @@ import qualified Data.Macaw.BinaryLoader as DMB
 import qualified Stubs.Loader.BinaryConfig as SLB
 import qualified Stubs.Memory.Common as SMC
 
-instance SM.IsStubsMemoryModel DMS.LLVMMemory SAA.AArch32 where 
+instance SM.IsStubsMemoryModel DMS.LLVMMemory SAA.AArch32 where
   type instance PtrType DMS.LLVMMemory SAA.AArch32 =  LCLM.LLVMPointerType (DMC.ArchAddrWidth SAA.AArch32)
   type instance MemType DMS.LLVMMemory SAA.AArch32 = LCLM.Mem
   type instance BVToPtrTy w DMS.LLVMMemory SAA.AArch32 = LCLM.LLVMPointerType w
   type instance MemTable sym DMS.LLVMMemory SAA.AArch32 = AEM.MemPtrTable sym SAA.AArch32
   type instance MemMap sym SAA.AArch32 = DMSMO.GlobalMap sym LCLM.Mem (DMC.ArchAddrWidth SAA.AArch32)
 
-  type instance VerifierState sym DMS.LLVMMemory SAA.AArch32 = (SE.AmbientSimulatorState sym SAA.AArch32) 
+  type instance VerifierState sym DMS.LLVMMemory SAA.AArch32 = (SE.AmbientSimulatorState sym SAA.AArch32)
 
-  bvToPtr :: LCT.TypeRepr tp-> LCT.TypeRepr (SM.ToPtrTy tp DMS.LLVMMemory SAA.AArch32)
-  bvToPtr (LCT.BVRepr n) = LCLM.LLVMPointerRepr n
-  bvToPtr ty = case ty of 
+  bvToPtr :: LCT.TypeRepr tp -> LCT.TypeRepr (SM.ToPtrTy tp DMS.LLVMMemory SAA.AArch32)
+  bvToPtr ty = case ty of
+    -- Map BVRepr to LLVMPointerRepr...
+    LCT.BVRepr n -> LCLM.LLVMPointerRepr n
+
+    -- ...and map all other TypeReprs to themselves.
     LCT.AnyRepr -> LCT.AnyRepr
     LCT.UnitRepr -> LCT.UnitRepr
     LCT.BoolRepr -> LCT.BoolRepr
@@ -99,11 +103,13 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory SAA.AArch32 where
   memPtrSize :: PN.NatRepr (DMC.ArchAddrWidth SAA.AArch32)
   memPtrSize = WI.knownRepr
 
+  genStackPtr :: (Monad m, MonadIO m) => LCLM.LLVMPtr sym 32 -> WI.SymBV sym 32 -> SC.Sym sym -> m (LCLM.LLVMPtr sym 32)
   genStackPtr baseptr offset (SC.Sym sym _) = liftIO $ LCLM.ptrAdd sym WI.knownRepr baseptr offset
 
-  initMem (SC.Sym sym bak) archInfo stackSize binConf halloc = do 
+  initMem :: SC.Sym sym -> DMA.ArchitectureInfo SAA.AArch32 -> Integer -> SLB.BinaryConfig SAA.AArch32 binfmt -> LCF.HandleAllocator -> (Monad m, MonadIO m) => m (SM.InitialMemory sym DMS.LLVMMemory SAA.AArch32)
+  initMem (SC.Sym sym bak) archInfo stackSize binConf halloc = do
     let endian = DMSM.toCrucibleEndian (DMA.archEndianness archInfo)
-    
+
     let mems = fmap (DMB.memoryImage . SLB.lbpBinary) (SLB.bcBinaries binConf)
     let ?ptrWidth = SM.memPtrSize @DMS.LLVMMemory @SAA.AArch32
     (recordFn, _) <- liftIO SM.buildRecordLLVMAnnotation
@@ -119,7 +125,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory SAA.AArch32 where
     mem2 <- liftIO $ LCLM.doArrayStore bak mem1 stackBasePtr LCLD.noAlignment stackArrayStorage stackSizeBV
 
     (mem3, globals0) <- liftIO $ aarch32LinuxInitGlobals tlsvar (SC.Sym sym bak) mem2
-    memVar <- liftIO $ LCLM.mkMemVar (DT.pack "ambient-verifier::memory") halloc
+    memVar <- liftIO $ LCLM.mkMemVar (DT.pack "stubs::memory") halloc
     let globals1 = LCSG.insertGlobal memVar mem3 globals0
     let globalMap = AEM.mapRegionPointers memPtrTbl
 

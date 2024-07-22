@@ -7,10 +7,8 @@
 -- the information that's contained within
 -- syscalls_powerpc.tbl.
 module Stubs.Syscall.Names.PPC64.Linux
-    (
-     syscallMap
-    )
-    where
+    ( syscallMap
+    ) where
 
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Text as DT

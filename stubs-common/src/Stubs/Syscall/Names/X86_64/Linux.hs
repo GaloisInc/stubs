@@ -7,10 +7,8 @@
 -- the information that's contained within
 -- syscalls_x86_64.tbl.
 module Stubs.Syscall.Names.X86_64.Linux
-    (
-     syscallMap
-    )
-    where
+    ( syscallMap
+    ) where
 
 import qualified Data.IntMap.Strict as IM
 import qualified Data.Text as DT
