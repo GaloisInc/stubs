@@ -90,7 +90,7 @@ x86_64LinuxIntegerArguments bak archVals argTypes regs mem = do
   -- NB: `regArgList` below only has six elements, so the cost of using (++)
   -- below (which is O(n) in the size of the first list n) is negligible.
   let argList = regArgList ++ stackArgList
-  AO.buildArgumentAssignment bak argTypes argList
+  AO.buildArgumentAssignment (LCB.backendGetSym bak) argTypes argList
   where
     ptrWidth = WI.knownNat @64
     regArgList = map (pure . DMS.lookupReg archVals (LCS.RegEntry LCT.knownRepr regs)) DMX.x86ArgumentRegs
@@ -142,15 +142,15 @@ x86_64LinuxIntegerReturnRegisters bak archVals ovTyp result initRegs =
           pure $ updateRegs allRegs [(reg, val)]
         LCLM.LLVMPointerRepr w
           | Just WI.Refl <- WI.testEquality w (WI.knownNat @8) -> do
-          extVal <- bvZextResult val
+          extVal <- liftIO $ bvZextResult val
           pure $ updateRegs allRegs [(reg, extVal)]
         LCLM.LLVMPointerRepr w
           | Just WI.Refl <- WI.testEquality w (WI.knownNat @16) -> do
-          extVal <- bvZextResult val
+          extVal <- liftIO $ bvZextResult val
           pure $ updateRegs allRegs [(reg, extVal)]
         LCLM.LLVMPointerRepr w
           | Just WI.Refl <- WI.testEquality w (WI.knownNat @32) -> do
-          extVal <- bvZextResult val
+          extVal <- liftIO $ bvZextResult val
           pure $ updateRegs allRegs [(reg, extVal)]
         _ -> AP.panic AP.FunctionOverride
                       "x86_64LinuxIntegerReturnRegisters"
@@ -163,10 +163,8 @@ x86_64LinuxIntegerReturnRegisters bak archVals ovTyp result initRegs =
     bvZextResult
       :: (1 <= srcW, KnownNat srcW)
       => LCLM.LLVMPtr sym srcW
-      -> LCS.OverrideSim p sym ext r args rtp (LCLM.LLVMPtr sym 64)
-    bvZextResult res = do
-      asBv <- liftIO $ LCLM.projectLLVM_bv bak res
-      liftIO $ AO.bvToPtr sym asBv (WI.knownNat @64)
+      -> IO (LCLM.LLVMPtr sym 64)
+    bvZextResult res = liftIO $ AO.adjustPointerSize sym res (PN.knownNat @64)
 
     updateRegs :: LCS.RegValue sym (DMS.ArchRegStruct DMX.X86_64)
                -> [( DMC.ArchReg DMX.X86_64 (DMT.BVType 64)

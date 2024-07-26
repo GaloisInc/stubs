@@ -84,7 +84,7 @@ x86_64LinuxSyscallArgumentRegisters bak regTyps regs syscallTyps
         -- Extract argument registers and put in list.
         let regEntries = map (pure . toRegEntry) [rdi, rsi, rdx, r10, r8, r9]
         -- Build an assignment from 'regEntries'
-        (regAssn, _) <- AO.buildArgumentAssignment bak syscallTyps regEntries
+        (regAssn, _) <- AO.buildArgumentAssignment (LCB.backendGetSym bak) syscallTyps regEntries
         -- No syscalls make use of variadic arguments (see Note [Varargs] in
         -- Ambient.FunctionOverride), so we do not make use of the GetVarArg
         -- callback.

@@ -8,9 +8,7 @@ module Stubs.Override
   ( buildArgumentAssignment
   , narrowPointerType
   , extendPointerType
-  , bvToPtr
-  , ptrToBv8
-  , ptrToBv32
+  , adjustPointerSize
   , overrideMemOptions
   ) where
 
@@ -18,7 +16,7 @@ import qualified Control.Monad.Catch as CMC
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
 import qualified Data.Parameterized.NatRepr as PN
-import           GHC.TypeNats ( type (<=), KnownNat )
+import           GHC.TypeNats ( type (<=) )
 
 import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Simulator as LCS
@@ -45,16 +43,16 @@ import qualified Stubs.Panic as AP
 -- list is monadic because of the possible need to load a value from memory.
 -- See @Note [Passing arguments to functions]@ in "Ambient.FunctionOverride".
 buildArgumentAssignment
-  :: forall w args sym bak
-   . (1 <= w, LCB.IsSymBackend sym bak)
-  => bak
+  :: forall w args sym
+   . (1 <= w, LCB.IsSymInterface sym)
+  => sym
   -> LCT.CtxRepr args
   -- ^ Types of arguments
   -> [IO (LCS.RegEntry sym (LCLM.LLVMPointerType w))]
   -- ^ List of potential argument values
   -> IO (Ctx.Assignment (LCS.RegEntry sym) args, AF.GetVarArg sym)
   -- ^ The argument values and a callback for retrieving variadic arguments
-buildArgumentAssignment bak argTyps argEntries = do
+buildArgumentAssignment sym argTyps argEntries = do
   (knownArgs, variadicArgs) <- buildAssignment argTyps argEntries
   pure ( knownArgs
        , AF.GetVarArg $ \tp -> getVarArg tp variadicArgs
@@ -113,7 +111,7 @@ buildArgumentAssignment bak argTyps argEntries = do
                            ]
             mkArg : args' -> do
               arg <- mkArg
-              arg' <- narrowPointerType bak trep arg
+              arg' <- narrowPointerType sym trep arg
               rest <- go typs' args'
               return (rest Ctx.:> arg')
 
@@ -126,13 +124,13 @@ newtype BvNarrowing sym w tp where
 -- 'LCLM.LLVMPointerType's, truncate the wider type to the narrow type.
 -- Otherwise, require the types to be the same.
 narrowPointerType ::
-  forall sym bak wideTp narrowTp.
-  LCB.IsSymBackend sym bak =>
-  bak ->
+  forall sym wideTp narrowTp.
+  LCB.IsSymInterface sym =>
+  sym ->
   LCT.TypeRepr narrowTp ->
   LCS.RegEntry sym wideTp ->
   IO (LCS.RegEntry sym narrowTp)
-narrowPointerType bak narrowTypeRepr wideEntry
+narrowPointerType sym narrowTypeRepr wideEntry
   | LCLM.LLVMPointerRepr widePtrW <- LCS.regType wideEntry
   = case MapF.lookup narrowTypeRepr (conversions widePtrW) of
       Nothing -> CMC.throwM $ AE.FunctionTypeBvNarrowingError widePtrW
@@ -164,7 +162,7 @@ narrowPointerType bak narrowTypeRepr wideEntry
             => PN.NatRepr narrowPtrW
             -> LCS.RegEntry sym (LCLM.LLVMPointerType widePtrW)
             -> IO (LCS.RegEntry sym (LCLM.LLVMPointerType narrowPtrW))
-    bvTrunc bvW ptr = adjustPtrEntrySize bak ptr bvW
+    bvTrunc bvW ptr = adjustPointerEntrySize sym ptr bvW
 
 -- | Bitvector conversion from a narrow type to a wider width.
 -- Like 'BvConversion', except with the argument and result types in the
@@ -177,13 +175,13 @@ newtype BvExtension sym w tp where
 -- 'LCLM.LLVMPointerType's, zero-extend the narrow type to the wider type.
 -- Otherwise, require the types to be the same.
 extendPointerType ::
-  forall sym bak narrowTp wideTp.
-  LCB.IsSymBackend sym bak =>
-  bak ->
+  forall sym narrowTp wideTp.
+  LCB.IsSymInterface sym =>
+  sym ->
   LCT.TypeRepr wideTp ->
   LCS.RegEntry sym narrowTp ->
   IO (LCS.RegEntry sym wideTp)
-extendPointerType bak wideTypeRepr narrowEntry
+extendPointerType sym wideTypeRepr narrowEntry
   | LCLM.LLVMPointerRepr widePtrW <- wideTypeRepr
   = case MapF.lookup narrowTypeRepr (conversions widePtrW) of
       Nothing -> CMC.throwM $ AE.FunctionTypeBvExtensionError widePtrW
@@ -217,80 +215,60 @@ extendPointerType bak wideTypeRepr narrowEntry
             => PN.NatRepr widePtrW
             -> LCS.RegEntry sym (LCLM.LLVMPointerType narrowPtrW)
             -> IO (LCS.RegEntry sym (LCLM.LLVMPointerType widePtrW))
-    bvZext bvW ptr = adjustPtrEntrySize bak ptr bvW
+    bvZext bvW ptr = adjustPointerEntrySize sym ptr bvW
 
--- | Zero extend or truncate bitvector to an LLVMPointer
-bvToPtr :: forall sym srcW ptrW
-         . ( LCB.IsSymInterface sym
-           , 1 <= srcW
-           , 1 <= ptrW
-           )
-           => sym
-           -> WI.SymExpr sym (WI.BaseBVType srcW)
-           -> PN.NatRepr ptrW
-           -> IO (LCS.RegValue sym (LCLM.LLVMPointerType ptrW))
-bvToPtr sym bv ptrW =
-  case PN.compareNat srcW ptrW of
-    PN.NatEQ -> LCLM.llvmPointer_bv sym bv
-    PN.NatLT _w -> WI.bvZext sym ptrW bv >>= LCLM.llvmPointer_bv sym
-    PN.NatGT _w -> WI.bvTrunc sym ptrW bv >>= LCLM.llvmPointer_bv sym
+-- | Zero-extend or truncate a @'WI.SymBV' sym srcW@ to be of size @dstW@.
+adjustBvSize ::
+  forall sym srcW dstW.
+  ( LCB.IsSymInterface sym
+  , 1 <= srcW
+  , 1 <= dstW
+  ) =>
+  sym ->
+  WI.SymBV sym srcW ->
+  PN.NatRepr dstW ->
+  IO (WI.SymBV sym dstW)
+adjustBvSize sym bv dstW =
+  case PN.compareNat srcW dstW of
+    PN.NatEQ -> pure bv
+    PN.NatLT _w -> WI.bvZext sym dstW bv
+    PN.NatGT _w -> WI.bvTrunc sym dstW bv
   where
     srcW :: PN.NatRepr srcW
     srcW = case WI.exprType bv of
              WI.BaseBVRepr w -> w
 
--- | Zero extend or truncate an 'LCLM.LLVMPointer' 'LCS.RegEntry'.
-adjustPtrEntrySize ::
-  forall sym bak srcW dstW.
-  ( LCB.IsSymBackend sym bak
+-- | Zero-extend or truncate an @'LCLM.LLVMPtr' sym srcW@ to be of size @dstW@.
+adjustPointerSize ::
+  forall sym srcW dstW.
+  ( LCB.IsSymInterface sym
   , 1 <= srcW
   , 1 <= dstW
   ) =>
-  bak ->
+  sym ->
+  LCLM.LLVMPtr sym srcW ->
+  PN.NatRepr dstW ->
+  IO (LCLM.LLVMPtr sym dstW)
+adjustPointerSize sym srcPtr dstW = do
+  let LCLM.LLVMPointer srcBase srcOffset = srcPtr
+  dstOffset <- adjustBvSize sym srcOffset dstW
+  pure $ LCLM.LLVMPointer srcBase dstOffset
+
+-- | Zero-extend or truncate an @'LCLM.LLVMPtr' sym srcW@ 'LCS.RegEntry' to be of
+-- size @dstW@.
+adjustPointerEntrySize ::
+  forall sym srcW dstW.
+  ( LCB.IsSymInterface sym
+  , 1 <= srcW
+  , 1 <= dstW
+  ) =>
+  sym ->
   LCS.RegEntry sym (LCLM.LLVMPointerType srcW) ->
   PN.NatRepr dstW ->
   IO (LCS.RegEntry sym (LCLM.LLVMPointerType dstW))
-adjustPtrEntrySize bak srcPtr dstW = do
-  let sym = LCB.backendGetSym bak
-  bv <- LCLM.projectLLVM_bv bak $ LCS.regValue srcPtr
-  rv <- bvToPtr sym bv dstW
-  pure $ LCS.RegEntry (LCLM.LLVMPointerRepr dstW) rv
-
--- | Convert an 'LCLM.LLVMPtr' to an 8-bit vector by dropping the upper bits.
-ptrToBv8 :: ( LCB.IsSymBackend sym bak )
-          => bak
-          -> PN.NatRepr w
-          -> LCS.RegEntry sym (LCLM.LLVMPointerType w)
-          -> IO (LCS.RegEntry sym (LCT.BVType 8))
-ptrToBv8 = ptrToBv
-
--- | Convert an 'LCLM.LLVMPtr' to a 32-bit vector by dropping the upper bits.
-ptrToBv32 :: ( LCB.IsSymBackend sym bak )
-          => bak
-          -> PN.NatRepr w
-          -> LCS.RegEntry sym (LCLM.LLVMPointerType w)
-          -> IO (LCS.RegEntry sym (LCT.BVType 32))
-ptrToBv32 = ptrToBv
-
--- | Convert an 'LCLM.LLVMPtr' to a bitvector by dropping the upper bits.
-ptrToBv :: forall sym bak ptrW destW
-         . ( LCB.IsSymBackend sym bak
-           , KnownNat destW
-           , 1 <= destW
-           )
-        => bak
-        -> PN.NatRepr ptrW
-        -> LCS.RegEntry sym (LCLM.LLVMPointerType ptrW)
-        -> IO (LCS.RegEntry sym (LCT.BVType destW))
-ptrToBv bak nr ptr = do
-  let sym = LCB.backendGetSym bak
-  bvW <- LCLM.projectLLVM_bv bak (LCS.regValue ptr)
-  case PN.compareNat nr (WI.knownNat @destW) of
-    PN.NatLT _ -> AP.panic AP.Override "ptrToBv32" ["Pointer too small to truncate to 32 bits: " ++ show nr]
-    PN.NatEQ -> return $! LCS.RegEntry LCT.knownRepr bvW
-    PN.NatGT _w -> do
-      lower <- WI.bvTrunc sym (WI.knownNat @destW) bvW
-      return $! LCS.RegEntry LCT.knownRepr lower
+adjustPointerEntrySize sym ptrEntry dstW =
+  LCS.RegEntry (LCLM.LLVMPointerRepr dstW) <$>
+  adjustPointerSize sym (LCS.regValue ptrEntry) dstW
 
 -- | The memory options used to configure the memory model for system call and
 -- function overrides.
