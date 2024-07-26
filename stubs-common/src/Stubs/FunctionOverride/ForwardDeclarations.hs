@@ -53,6 +53,7 @@ mkForwardDeclarationOverride bak
   (SF.SomeFunctionOverride resolvedFnOv NEL.:| parents) fwdDecName fwdDecHandle =
     LCS.mkOverride' fwdDecName (LCF.handleReturnType fwdDecHandle) ovSim
   where
+    sym = LCB.backendGetSym bak
     fwdDecRetType = SFA.promoteBVToPtr $ LCF.handleReturnType fwdDecHandle
 
     ovSim ::
@@ -72,7 +73,7 @@ mkForwardDeclarationOverride bak
       let resEntry0 = LCS.RegEntry (SF.functionReturnType resolvedFnOv) resValue
       -- Step (4)
       resEntry1 <- liftIO $
-        SO.narrowPointerType bak fwdDecRetType resEntry0
+        SO.narrowPointerType sym fwdDecRetType resEntry0
       -- Step (5)
       resEntry2 <- liftIO $
         SFA.convertBitvector bak (LCF.handleReturnType fwdDecHandle) resEntry1
@@ -100,7 +101,7 @@ mkForwardDeclarationOverride bak
               IO (Ctx.Assignment (LCS.RegEntry sym) regTps')
         go Ctx.Empty Ctx.Empty = pure Ctx.Empty
         go (regTypeReprs Ctx.:> regTypeRepr) (narrowEntries Ctx.:> narrowEntry) = do
-          regEntry <- SO.extendPointerType bak regTypeRepr narrowEntry
+          regEntry <- SO.extendPointerType sym regTypeRepr narrowEntry
           regEntries <- go regTypeReprs narrowEntries
           pure (regEntries Ctx.:> regEntry)
         go _ _ = CMC.throwM $ SE.ForwardDeclarationArgumentNumberMismatch

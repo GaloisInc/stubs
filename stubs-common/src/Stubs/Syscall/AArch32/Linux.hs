@@ -130,7 +130,7 @@ aarch32LinuxSyscallArgumentRegisters bak regTypes regs syscallTypes
           -- No syscalls make use of variadic arguments (see Note [Varargs] in
           -- Ambient.FunctionOverride), so we do not make use of the GetVarArg
           -- callback.
-          (regAssn, _getVarArg) <- AO.buildArgumentAssignment bak syscallTypes regEntries
+          (regAssn, _getVarArg) <- AO.buildArgumentAssignment (LCB.backendGetSym bak) syscallTypes regEntries
           pure regAssn
   | otherwise = AP.panic AP.Syscall "aarch32LinuxSyscallArgumentRegisters" [ "Unexpected argument register shape: " ++ show regTypes ]
   where

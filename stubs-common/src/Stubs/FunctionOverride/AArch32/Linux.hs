@@ -88,7 +88,7 @@ aarch32LinuxIntegerArguments bak archVals argTypes regFile mem = do
   -- NB: `regArgList` below only has four elements, so the cost of using (++)
   -- below (which is O(n) in the size of the first list n) is negligible.
   let argList = regArgList ++ stackArgList
-  AO.buildArgumentAssignment bak argTypes argList
+  AO.buildArgumentAssignment (LCB.backendGetSym bak) argTypes argList
   where
     ptrWidth = PN.knownNat @32
     regArgList = map (pure . lookupReg) aarch32LinuxIntegerArgumentRegisters
@@ -166,9 +166,7 @@ aarch32LinuxIntegerReturnRegisters bak _archVals ovTy result initRegs =
       :: (1 WI.<= srcW, DMT.KnownNat srcW)
       => LCLM.LLVMPtr sym srcW
       -> IO (LCLM.LLVMPtr sym 32)
-    extendResult res = do
-      asBv <- LCLM.projectLLVM_bv bak res
-      AO.bvToPtr sym asBv (PN.knownNat @32)
+    extendResult res = AO.adjustPointerSize sym res (PN.knownNat @32)
 
     updateRegs ::
          LCS.RegValue sym (DMS.ArchRegStruct DMA.ARM)

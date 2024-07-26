@@ -87,7 +87,7 @@ ppcLinuxIntegerArguments bak archVals argTypes regs mem = do
   -- NB: `regArgList` below only has eight elements, so the cost of using (++)
   -- below (which is O(n) in the size of the first list n) is negligible.
   let argList = regArgList ++ stackArgList
-  AO.buildArgumentAssignment bak argTypes argList
+  AO.buildArgumentAssignment (LCB.backendGetSym bak) argTypes argList
   where
     regArgList = map (pure . DMS.lookupReg archVals (LCS.RegEntry LCT.knownRepr regs))
                      ppcLinuxIntegerArgumentRegisters
@@ -162,9 +162,8 @@ ppcLinuxIntegerReturnRegisters bak archVals ovTy result initRegs =
       :: (1 WI.<= srcW, DMT.KnownNat srcW)
       => LCLM.LLVMPtr sym srcW
       -> IO (LCLM.LLVMPtr sym (SAP.AddrWidth v))
-    extendOrTruncResult res = do
-      asBv <- LCLM.projectLLVM_bv bak res
-      AO.bvToPtr sym asBv (SAP.addrWidth (DMP.knownVariant @v))
+    extendOrTruncResult res =
+      AO.adjustPointerSize sym res (SAP.addrWidth (DMP.knownVariant @v))
 
     updateRegs ::
          LCS.RegValue sym (DMS.ArchRegStruct (DMP.AnyPPC v))
