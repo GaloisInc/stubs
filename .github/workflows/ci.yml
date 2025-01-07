@@ -41,7 +41,7 @@ jobs:
         tar -cvf doc.tar.gz docs/book/*
 
     - name: Upload docs artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: github.repository == 'GaloisInc/${{ env.NAME }}'
       with:
         name: "${{ env.NAME }}-docs"
