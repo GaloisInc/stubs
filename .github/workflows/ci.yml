@@ -94,7 +94,20 @@ jobs:
           key: ${{ env.key }}-plan-${{ hashFiles('**/plan.json') }}
           restore-keys: ${{ env.key }}-
 
-      - run: cabal build
+      - name: Configure
+        run: cabal configure -j2 --enable-tests
+
+      - name: Build
+        run: cabal build
+
+      - name: Run parser tests
+        run: cabal test parser-tests
+
+      - name: Run translator tests
+        run: cabal test translator-tests
+
+      - name: Run stubs tests
+        run: cabal test stubs-tests
 
       - name: Cache dependencies
         uses: actions/cache/save@v3

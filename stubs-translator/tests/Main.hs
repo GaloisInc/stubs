@@ -17,7 +17,6 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Stubs.Translate as ST
 import qualified Data.Macaw.X86 as DMX
 import           Data.Macaw.X86.Symbolic ()
-import qualified Lang.Crucible.Syntax.Concrete as LCSC
 import qualified Data.Parameterized as P
 import qualified Lang.Crucible.CFG.Core as LCCC
 import qualified Data.Parameterized.NatRepr as PN
@@ -47,7 +46,8 @@ testFnTranslationBasic = testCase "Basic Translation" $ do
 
     -- Expect single CFG
     assertEqual "Unexpected CFG count" (length cfgs) 1
-    LCSC.ACFG _ r _ <- return $ head cfgs
+    LCCR.AnyCFG m <- return $ head cfgs
+    let r = cfgReturnType m
 
     -- Expect Int to be BV 32 on X86_64 -- TODO: make less brittle
     Just P.Refl <- return $ P.testEquality r $ LCCC.BVRepr (PN.knownNat @32)
@@ -70,7 +70,7 @@ testFnTranslationITE = testCase "ITE Translation" $ do
 
     -- Expect single CFG
     assertEqual "Unexpected CFG count" 1 (length cfgs)
-    LCSC.ACFG _ _ m <- return $ head cfgs
+    LCCR.AnyCFG m <- return $ head cfgs
 
     let blocks = LCCR.cfgBlocks m
     assertEqual "Unexpected Block count" 4 (length blocks)
@@ -92,7 +92,7 @@ testFnTranslationLoop = testCase "Loop Translation" $ do
 
     -- Expect single CFG
     assertEqual "Unexpected CFG count" 1 (length cfgs)
-    LCSC.ACFG _ _ m <- return $ head cfgs
+    LCCR.AnyCFG m <- return $ head cfgs
 
     let blocks = LCCR.cfgBlocks m
     assertEqual "Unexpected Block count" 4 (length blocks) -- While this could be only 3, due to the Generator's implementation 4 blocks are made total
