@@ -17,7 +17,6 @@ import qualified Data.Parameterized.Context as Ctx
 import qualified Stubs.Translate as ST
 import qualified Data.Macaw.X86 as DMX
 import           Data.Macaw.X86.Symbolic ()
-import qualified Lang.Crucible.Syntax.Concrete as LCSC
 import qualified Data.Parameterized as P
 import qualified Lang.Crucible.CFG.Core as LCCC
 import qualified Data.Parameterized.NatRepr as PN
@@ -31,7 +30,7 @@ import qualified Data.Macaw.CFG as DMC
 
 testEnv = STC.StubsEnv @DMX.X86_64 (DMC.memWidthNatRepr @(DMC.ArchAddrWidth DMX.X86_64)) MapF.empty MapF.empty
 testFnTranslationBasic :: TestTree
-testFnTranslationBasic = testCase "Basic Translation" $ do 
+testFnTranslationBasic = testCase "Basic Translation" $ do
     hAlloc <- LCF.newHandleAllocator
     Some ng <- PN.newIONonceGenerator
     let fn = SA.StubsFunction {
@@ -43,18 +42,19 @@ testFnTranslationBasic = testCase "Basic Translation" $ do
         SA.stubFnBody=[SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 20),SA.Return (SA.LitExpr $ SA.IntLit 20)]
     }
     p <- ST.translateDecls @DMX.X86_64 ng hAlloc [] [] testEnv MapF.empty [] [SA.SomeStubsFunction fn]
-    let cfgs = map fst p 
+    let cfgs = map fst p
 
     -- Expect single CFG
     assertEqual "Unexpected CFG count" (length cfgs) 1
-    LCSC.ACFG _ r _ <- return $ head cfgs
+    LCCR.AnyCFG m <- return $ head cfgs
+    let r = cfgReturnType m
 
     -- Expect Int to be BV 32 on X86_64 -- TODO: make less brittle
-    Just P.Refl <- return $ P.testEquality r $ LCCC.BVRepr (PN.knownNat @32) 
+    Just P.Refl <- return $ P.testEquality r $ LCCC.BVRepr (PN.knownNat @32)
     return ()
 
-testFnTranslationITE :: TestTree 
-testFnTranslationITE = testCase "ITE Translation" $ do 
+testFnTranslationITE :: TestTree
+testFnTranslationITE = testCase "ITE Translation" $ do
     hAlloc <- LCF.newHandleAllocator
     Some ng <- PN.newIONonceGenerator
     let fn = SA.StubsFunction {
@@ -66,17 +66,17 @@ testFnTranslationITE = testCase "ITE Translation" $ do
         SA.stubFnBody=[SA.ITE (SA.LitExpr $ SA.BoolLit True) [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 20)] [SA.Assignment (SA.StubsVar "v" SA.StubsIntRepr) (SA.LitExpr $ SA.IntLit 40)],SA.Return (SA.LitExpr $ SA.IntLit 20)]
     }
     p <- ST.translateDecls @DMX.X86_64 ng hAlloc [] [] testEnv MapF.empty [] [SA.SomeStubsFunction fn]
-    let cfgs = map fst p 
+    let cfgs = map fst p
 
     -- Expect single CFG
     assertEqual "Unexpected CFG count" 1 (length cfgs)
-    LCSC.ACFG _ _ m <- return $ head cfgs
-    
+    LCCR.AnyCFG m <- return $ head cfgs
+
     let blocks = LCCR.cfgBlocks m
     assertEqual "Unexpected Block count" 4 (length blocks)
 
-testFnTranslationLoop :: TestTree 
-testFnTranslationLoop = testCase "Loop Translation" $ do 
+testFnTranslationLoop :: TestTree
+testFnTranslationLoop = testCase "Loop Translation" $ do
     hAlloc <- LCF.newHandleAllocator
     Some ng <- PN.newIONonceGenerator
     let fn = SA.StubsFunction {
@@ -92,13 +92,13 @@ testFnTranslationLoop = testCase "Loop Translation" $ do
 
     -- Expect single CFG
     assertEqual "Unexpected CFG count" 1 (length cfgs)
-    LCSC.ACFG _ _ m <- return $ head cfgs
+    LCCR.AnyCFG m <- return $ head cfgs
 
     let blocks = LCCR.cfgBlocks m
     assertEqual "Unexpected Block count" 4 (length blocks) -- While this could be only 3, due to the Generator's implementation 4 blocks are made total
 
-testOpaquenessCheckRet :: TestTree 
-testOpaquenessCheckRet = testCase "Catch Opaqueness Violation in return" $ do 
+testOpaquenessCheckRet :: TestTree
+testOpaquenessCheckRet = testCase "Catch Opaqueness Violation in return" $ do
     Some counter <- return $ LCCC.someSymbol "Counter"
     let lib = SA.mkStubsModule "counter" [
             SA.SomeStubsFunction
@@ -112,8 +112,8 @@ testOpaquenessCheckRet = testCase "Catch Opaqueness Violation in return" $ do
             ] [] []
     assertBool "Failed to catch opaqueness violation in return stmt" (not (SO.satOpaque lib))
 
-testOpaquenessCheckArg :: TestTree 
-testOpaquenessCheckArg = testCase "Catch Opaqueness Violation in argument" $ do 
+testOpaquenessCheckArg :: TestTree
+testOpaquenessCheckArg = testCase "Catch Opaqueness Violation in argument" $ do
     Some counter <- return $ LCCC.someSymbol "Counter"
     let lib = SA.mkStubsModule "counter" [
             SA.SomeStubsFunction
@@ -135,8 +135,8 @@ testOpaquenessCheckArg = testCase "Catch Opaqueness Violation in argument" $ do
             ] [] []
     assertBool "Failed to catch opaqueness violation in argument" (not (SO.satOpaque lib))
 
-testOpaquenessCheckAssignmentBad :: TestTree 
-testOpaquenessCheckAssignmentBad = testCase "Catch Opaqueness Violation in variable assignment" $ do 
+testOpaquenessCheckAssignmentBad :: TestTree
+testOpaquenessCheckAssignmentBad = testCase "Catch Opaqueness Violation in variable assignment" $ do
     Some counter <- return $ LCCC.someSymbol "Counter"
     let lib = SA.mkStubsModule "counter" [
             SA.SomeStubsFunction SA.StubsFunction {
@@ -150,8 +150,8 @@ testOpaquenessCheckAssignmentBad = testCase "Catch Opaqueness Violation in varia
          ] [] []
     assertBool "Failed to catch opaqueness violation in variable assignment" (not (SO.satOpaque lib))
 
-testOpaquenessCheckAssignmentOK :: TestTree 
-testOpaquenessCheckAssignmentOK = testCase "Allow type changing with decl" $ do 
+testOpaquenessCheckAssignmentOK :: TestTree
+testOpaquenessCheckAssignmentOK = testCase "Allow type changing with decl" $ do
     Some counter <- return $ LCCC.someSymbol "Counter"
     let lib = SA.mkStubsModule "counter" [
             SA.SomeStubsFunction SA.StubsFunction {
