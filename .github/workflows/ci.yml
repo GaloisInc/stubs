@@ -6,6 +6,7 @@ permissions:
   contents: read
 
 env:
+  SOLVER_PKG_VERSION: "snapshot-20241119"
   # The NAME makes it easier to copy/paste snippets from other CI configs
   NAME: stubs
 
@@ -93,6 +94,14 @@ jobs:
           path: ${{ steps.setup.outputs.cabal-store }}
           key: ${{ env.key }}-plan-${{ hashFiles('**/plan.json') }}
           restore-keys: ${{ env.key }}-
+
+      - shell: bash
+        name: Install system dependencies
+        run: .github/ci.sh install_system_deps
+        env:
+          BIN_ZIP_FILE: ${{ matrix.os }}-bin.zip
+          BUILD_TARGET_OS: ${{ matrix.os }}
+          BUILD_TARGET_ARCH: ${{ runner.arch }}
 
       - name: Configure
         run: cabal configure -j2 --enable-tests
