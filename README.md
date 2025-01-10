@@ -14,4 +14,7 @@ cd doc/
 mdbook build
 ```
 
+Much of the code in this repository was originally developed as part of the
+[`ambient-verifier`](https://github.com/GaloisInc/ambient-verifier) tool.
+
 [macaw-symbolic]: https://github.com/GaloisInc/macaw/tree/master/symbolic
