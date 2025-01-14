@@ -20,6 +20,7 @@ module Stubs.Memory.AArch32.Linux (
   ) where
 
 import qualified Data.BitVector.Sized as BVS
+import           Data.Proxy (Proxy(..))
 import qualified Data.Text as DT
 
 import qualified Data.Macaw.ARM as DMA
@@ -46,7 +47,7 @@ import qualified Lang.Crucible.LLVM.MemModel.Partial as LCLMP
 import qualified Lang.Crucible.LLVM.Errors as LCLE
 import qualified Lang.Crucible.LLVM.MemModel.CallStack
 import qualified Lang.Crucible.Types as LCT
-import qualified Data.Macaw.Symbolic.Memory as DMSM
+import qualified Data.Macaw.Symbolic.Memory.Lazy as DMSM
 import qualified Data.Macaw.Architecture.Info as DMA
 import qualified Data.Parameterized.NatRepr as PN
 import qualified Stubs.Memory as SM
@@ -55,7 +56,6 @@ import Control.Monad.IO.Class (MonadIO(..))
 import Data.Macaw.AArch32.Symbolic ()
 import qualified Stubs.Extensions as SE
 import qualified Data.Macaw.Symbolic.MemOps as DMSMO
-import qualified Stubs.Extensions.Memory as AEM
 import qualified Data.Macaw.BinaryLoader as DMB
 import qualified Stubs.Loader.BinaryConfig as SLB
 import qualified Stubs.Memory.Common as SMC
@@ -64,7 +64,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory SAA.AArch32 where
   type instance PtrType DMS.LLVMMemory SAA.AArch32 =  LCLM.LLVMPointerType (DMC.ArchAddrWidth SAA.AArch32)
   type instance MemType DMS.LLVMMemory SAA.AArch32 = LCLM.Mem
   type instance BVToPtrTy w DMS.LLVMMemory SAA.AArch32 = LCLM.LLVMPointerType w
-  type instance MemTable sym DMS.LLVMMemory SAA.AArch32 = AEM.MemPtrTable sym SAA.AArch32
+  type instance MemTable sym DMS.LLVMMemory SAA.AArch32 = DMSM.MemPtrTable sym 32
   type instance MemMap sym SAA.AArch32 = DMSMO.GlobalMap sym LCLM.Mem (DMC.ArchAddrWidth SAA.AArch32)
 
   type instance VerifierState sym DMS.LLVMMemory SAA.AArch32 = (SE.AmbientSimulatorState sym SAA.AArch32)
@@ -115,7 +115,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory SAA.AArch32 where
     (recordFn, _) <- liftIO SM.buildRecordLLVMAnnotation
     let ?recordLLVMAnnotation = recordFn
     let ?memOpts = LCLM.defaultMemOptions
-    (mem, memPtrTbl) <- AEM.newMemPtrTable (SMC.globalMemoryHooks mems mempty mempty) bak endian mems
+    (mem, memPtrTbl) <- DMSM.newMergedGlobalMemoryWith (SMC.globalMemoryHooks mems mempty mempty) (Proxy @SAA.AArch32) bak endian DMSM.ConcreteMutable mems
     stackSizeBV <- liftIO $ WI.bvLit sym WI.knownRepr (BVS.mkBV WI.knownRepr stackSize)
 
     (stackBasePtr, mem1) <- liftIO $ LCLM.doMalloc bak LCLM.StackAlloc LCLM.Mutable "stack_alloc" mem stackSizeBV LCLD.noAlignment
@@ -127,7 +127,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory SAA.AArch32 where
     (mem3, globals0) <- liftIO $ aarch32LinuxInitGlobals tlsvar (SC.Sym sym bak) mem2
     memVar <- liftIO $ LCLM.mkMemVar (DT.pack "stubs::memory") halloc
     let globals1 = LCSG.insertGlobal memVar mem3 globals0
-    let globalMap = AEM.mapRegionPointers memPtrTbl
+    let globalMap = DMSM.mapRegionPointers memPtrTbl
 
     return SM.InitialMemory{
       SM.imMemVar=memVar,

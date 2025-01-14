@@ -24,6 +24,7 @@ module Stubs.Memory.X86_64.Linux (
 
 import           Control.Lens ((^.))
 import qualified Data.BitVector.Sized as BVS
+import           Data.Proxy (Proxy(..))
 
 import qualified Data.Macaw.CFG as DMC
 import qualified Data.Macaw.Symbolic as DMS
@@ -47,7 +48,7 @@ import qualified Stubs.Panic as AP
 import qualified Stubs.Memory as SM
 import qualified Lang.Crucible.Types as LCT
 import qualified Stubs.Common as SC
-import qualified Data.Macaw.Symbolic.Memory as DMSM
+import qualified Data.Macaw.Symbolic.Memory.Lazy as DMSM
 import qualified Data.Macaw.X86 as DMA
 import qualified Data.Macaw.X86.Symbolic ()
 import Control.Monad.IO.Class (liftIO, MonadIO)
@@ -59,7 +60,6 @@ import qualified Lang.Crucible.LLVM.MemModel.Partial as LCLMP
 import qualified Stubs.Memory.Common as SMC
 import qualified Stubs.Logging as SL
 import qualified Stubs.Extensions as SE
-import qualified Stubs.Extensions.Memory as AEM
 import qualified Data.Macaw.Symbolic as DMSMO
 import qualified Stubs.Loader.BinaryConfig as SLB
 import qualified Data.Macaw.BinaryLoader as DMB
@@ -69,7 +69,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
   type instance PtrType DMS.LLVMMemory DMX.X86_64 =  LCLM.LLVMPointerType (DMC.ArchAddrWidth DMX.X86_64)
   type instance MemType DMS.LLVMMemory DMX.X86_64 = LCLM.Mem
   type instance BVToPtrTy w DMS.LLVMMemory DMX.X86_64 = LCLM.LLVMPointerType w
-  type instance MemTable sym DMS.LLVMMemory DMX.X86_64 = AEM.MemPtrTable sym DMX.X86_64
+  type instance MemTable sym DMS.LLVMMemory DMX.X86_64 = DMSM.MemPtrTable sym 64
   type instance MemMap sym DMX.X86_64 = DMSMO.GlobalMap sym LCLM.Mem (DMC.ArchAddrWidth DMX.X86_64)
   type instance VerifierState sym DMS.LLVMMemory DMX.X86_64 = (SE.AmbientSimulatorState sym DMX.X86_64)
 
@@ -92,35 +92,13 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
     (re, _) <- liftIO $ SM.buildRecordLLVMAnnotation @sym
     let ?recordLLVMAnnotation = re
     let mpt = SM.imMemTable initialMem
-    -- This MemModelConfig is very nearly the same as the memModelConfig that
-    -- Data.Macaw.Symbolic.Memory provides, but we have to duplicate some logic
-    -- here since `stubs` uses a different MemPtrTable data type than
-    -- `macaw-symbolic`. Note that some of these fields (e.g., the
-    -- `mkGlobalPointerValidityAssertion` field) will effectively go unused, as
-    -- `stubs-common`'s memory model overrides certain operations that would
-    -- otherwise use these fields.
-    --
-    -- In the future, it would be preferable to build on top of the
-    -- `macaw-symbolic` lazy memory model, whose functionality largely overlaps
-    -- with the `stubs-common` memory model. See
-    -- https://github.com/GaloisInc/stubs/issues/12.
     let mmConf =
-          DMS.MemModelConfig
-            { DMS.globalMemMap =
-                AEM.mapRegionPointers mpt
-            , DMS.lookupFunctionHandle =
+          (DMSM.memModelConfig bak mpt)
+            { DMS.lookupFunctionHandle =
                 SMC.symExLookupFunction SL.emptyLogger bak initialMem archVals binconf functionABI halloc archInfo Nothing
 
             , DMS.lookupSyscallHandle =
                 SMC.symExLookupSyscall bak syscallABI halloc
-            , DMS.mkGlobalPointerValidityAssertion =
-                AEM.mkGlobalPointerValidityPred mpt
-            , DMS.resolvePointer =
-                pure
-            , DMS.concreteImmutableGlobalRead =
-                \_ _ -> pure Nothing
-            , DMS.lazilyPopulateGlobalMem =
-                \_ _ -> pure
             }
     return $ SE.ambientExtensions @sym @DMX.X86_64 bak f initialMem mmConf mempty
 
@@ -178,7 +156,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
 
     let supportedRelocs = SLB.bcSupportedRelocations binConf
     let globs = SLB.bcDynamicGlobalVarAddrs binConf
-    (mem, memPtrTbl) <- AEM.newMemPtrTable (SMC.globalMemoryHooks mems globs supportedRelocs) bak endian mems
+    (mem, memPtrTbl) <- DMSM.newMergedGlobalMemoryWith (SMC.globalMemoryHooks mems globs supportedRelocs) (Proxy @DMX.X86_64) bak endian DMSM.ConcreteMutable mems
     (stackBasePtr, mem1) <- liftIO $ LCLM.doMalloc bak LCLM.StackAlloc LCLM.Mutable "stack_alloc" mem stackSizeBV LCLD.noAlignment
     fsvar <- liftIO $ freshFSBaseGlobalVar halloc
     gsvar <- liftIO $ freshGSBaseGlobalVar halloc
@@ -188,7 +166,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
     memVar <- liftIO $ LCLM.mkMemVar (DT.pack "stubs::memory") halloc
     let globals1 = LCSG.insertGlobal memVar mem3 globals0
 
-    let globalMap = AEM.mapRegionPointers memPtrTbl
+    let globalMap = DMSM.mapRegionPointers memPtrTbl
     return SM.InitialMemory{
       SM.imMemVar=memVar,
       SM.imGlobals=globals1,

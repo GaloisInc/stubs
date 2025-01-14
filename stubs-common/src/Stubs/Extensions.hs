@@ -1,13 +1,16 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
 {-# LANGUAGE ImplicitParams #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeOperators #-}
+{-# LANGUAGE UndecidableInstances #-}
 {-# LANGUAGE ViewPatterns #-}
 
 -- | Defines verifier-specific extensions for Macaw's simulation functionality.
@@ -29,39 +32,29 @@ module Stubs.Extensions
   , functionAddrOvHandles
   , syscallOvHandles
   , discoveredFunctionHandles
-  , populatedMemChunks
   , simulationStats
   , overrideLookupFunctionHandle
   , sharedMemoryState
+  , macawLazySimulatorState
   ) where
 
 import qualified Control.Exception as X
-import           Control.Lens ( Lens', (^.), lens, over, (&), (+~))
-import           Control.Monad ( when )
+import           Control.Lens ( Lens', (^.), lens, (&), (+~))
 import           Control.Monad.IO.Class ( MonadIO(liftIO) )
 import qualified Control.Monad.State as CMS
 import qualified Data.Aeson as DA
 import qualified Data.BitVector.Sized as BV
-import qualified Data.Foldable as F
-import qualified Data.Foldable.WithIndex as FWI
-import qualified Data.IntervalMap.Interval as IMI
-import qualified Data.IntervalMap.Strict as IM
-import qualified Data.IntervalSet as IS
-import qualified Data.List as L
 import qualified Data.Map.Strict as Map
 import           Data.Maybe ( isNothing )
-import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.Map as MapF
-import qualified Data.Sequence as Seq
-import qualified Data.Vector as DV
 import           Data.Word ( Word8 )
 import           GHC.Generics ( Generic )
 import qualified GHC.Stack as GHC
-import           Text.Printf ( printf )
 
 import qualified Data.Macaw.CFG as DMC
 import qualified Data.Macaw.Memory as DMM
 import qualified Data.Macaw.Symbolic as DMS
+import qualified Data.Macaw.Symbolic.Memory.Lazy as DMSM
 import qualified Data.Macaw.Symbolic.Backend as DMSB
 import qualified Data.Macaw.Symbolic.MemOps as DMSMO
 import Data.Macaw.Symbolic.MemOps ()
@@ -71,16 +64,12 @@ import qualified Lang.Crucible.LLVM.MemModel as LCLM
 import qualified Lang.Crucible.LLVM.MemModel.Pointer as LCLMP
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Lang.Crucible.Simulator.ExecutionTree as LCSE
-import qualified Lang.Crucible.Types as LCT
-import qualified What4.Expr.BoolMap as WEBM
-import qualified What4.Expr.Builder as WEB
 import qualified What4.Expr as WE
 import qualified What4.FunctionName as WF
 import qualified What4.Interface as WI
 import qualified What4.Protocol.Online as WPO
 
 import qualified Stubs.Exception as AE
-import qualified Stubs.Extensions.Memory as AEM
 import qualified Stubs.Memory.SharedMemory as AMS
 import qualified Stubs.Verifier.Concretize as AVC
 import qualified Stubs.Syscall as ASy
@@ -99,7 +88,7 @@ ambientExtensions ::
      , DMM.MemWidth w
      , SM.MemType DMS.LLVMMemory arch ~ LCLM.Mem, SM.IsStubsMemoryModel DMS.LLVMMemory arch
      , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w, SM.PtrType DMS.LLVMMemory arch ~ LCLMP.LLVMPointerType w
-     , SM.MemTable sym DMS.LLVMMemory arch ~ AEM.MemPtrTable sym arch
+     , SM.MemTable sym DMS.LLVMMemory arch ~ DMSM.MemPtrTable sym (DMC.ArchAddrWidth arch)
      ,?memOpts::LCLM.MemOptions
      ,?recordLLVMAnnotation::Lang.Crucible.LLVM.MemModel.CallStack.CallStack
                                            -> LCLMP.BoolAnn sym
@@ -180,8 +169,8 @@ resolveAndPopulate
   -> LCS.RegEntry sym (LCLM.LLVMPointerType w)
   -> LCS.SimState p sym ext rtp f args
   -> IO (LCLM.LLVMPtr sym w, LCS.SimState p sym ext rtp f args)
-resolveAndPopulate bak memImpl initialMem readSizeBV ptr st = do
-  (ptr', resolveEffect) <-
+resolveAndPopulate bak memImpl initialMem _readSizeBV ptr st = do
+  (ptr', _resolveEffect) <-
       resolvePointer bak memImpl (SM.imGlobalMap initialMem) ptr
   -- st' <- lazilyPopulateGlobalMemArr bak
   --                                   (AM.imMemPtrTable initialMem) -- will maybe be an issue
@@ -203,12 +192,14 @@ readMem :: forall sym scope st fs bak solver arch p w ext rtp f args ty.
      , ?memOpts :: LCLM.MemOptions
      , SM.IsStubsMemoryModel DMS.LLVMMemory arch ,
      SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w,
-     SM.MemTable sym DMS.LLVMMemory arch ~ AEM.MemPtrTable sym arch
+     SM.MemTable sym DMS.LLVMMemory arch ~ DMSM.MemPtrTable sym (DMC.ArchAddrWidth arch)
      )
   => bak
   -> LCLM.MemImpl sym
   -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
+  -> DMS.MemModelConfig (AmbientSimulatorState sym arch) sym arch LCLM.Mem
+  -- ^ Configuration options for the memory model
   -> Map.Map (DMM.MemWord w) String
   -- ^ Mapping from unsupported relocation addresses to the names of the
   -- unsupported relocation types.
@@ -220,22 +211,18 @@ readMem :: forall sym scope st fs bak solver arch p w ext rtp f args ty.
   -- ^ Pointer to read from
   -> IO ( LCS.RegValue sym (DMS.ToCrucibleType ty)
         , LCS.SimState p sym ext rtp f args )
-readMem bak memImpl initialMem unsupportedRelocs st addrWidth memRep ptr0 =
+readMem bak memImpl initialMem mmConf unsupportedRelocs st addrWidth memRep ptr0 =
   DMM.addrWidthClass addrWidth $ do
     let sym = LCB.backendGetSym bak
-    let mpt = SM.imMemTable initialMem
     (ptr1, resolveEffect) <-
         resolvePointer bak memImpl (SM.imGlobalMap initialMem) ptr0
     assertRelocSupported ptr1 unsupportedRelocs
-    case concreteImmutableGlobalRead memRep ptr1 mpt of
-      Just bytes -> do
-        readVal <- AEM.readBytesAsRegValue sym memRep bytes
+    mbReadVal <- DMS.concreteImmutableGlobalRead mmConf memRep ptr1
+    case mbReadVal of
+      Just readVal -> do
         let st' = incrementSimStat lensNumReads st
         pure (readVal, st')
       Nothing -> do
-        let w = DMM.memWidthNatRepr @w
-        memReprBytesBV <- WI.bvLit sym w $ BV.mkBV w $
-                          toInteger $ DMC.memReprBytes memRep
         let puse = DMS.PointerUse (st ^. LCSE.stateLocation) DMS.PointerRead
         mGlobalPtrValid <- (\_ _ _ _->return Nothing) sym puse Nothing ptr0
         case mGlobalPtrValid of
@@ -279,7 +266,6 @@ writeMem bak memImpl initialMem st addrWidth memRep ptr0 v =
     memReprBytesBV <- WI.bvLit sym w $ BV.mkBV w $
                       toInteger $ DMC.memReprBytes memRep
     (ptr1, st1) <- resolveAndPopulate bak memImpl initialMem memReprBytesBV ptr0 st
-    let puse = DMS.PointerUse (st1 ^. LCSE.stateLocation) DMS.PointerWrite
     mGlobalPtrValid <- return Nothing
     case mGlobalPtrValid of
       Just globalPtrValid -> LCB.addAssertion bak globalPtrValid
@@ -316,7 +302,7 @@ loadString
      , sym ~ WE.ExprBuilder scope st fs
      , bak ~ LCBO.OnlineBackend solver scope st fs
      , WPO.OnlineSolver solver, SM.IsStubsMemoryModel DMS.LLVMMemory arch
-     , SM.MemTable sym DMS.LLVMMemory arch ~ AEM.MemPtrTable sym arch
+     , SM.MemTable sym DMS.LLVMMemory arch ~ DMSM.MemPtrTable sym (DMC.ArchAddrWidth arch)
      , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w
      )
   => bak
@@ -324,6 +310,8 @@ loadString
   -- ^ memory to read from
   -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
+  -> DMS.MemModelConfig (AmbientSimulatorState sym arch) sym arch LCLM.Mem
+  -- ^ Configuration options for the memory model
   -> Map.Map (DMC.MemWord w) String
   -- ^ Mapping from unsupported relocation addresses to the names of the
   -- unsupported relocation types.
@@ -332,7 +320,7 @@ loadString
   -> Maybe Int
   -- ^ maximum characters to read
   -> m [WI.SymBV sym 8]
-loadString bak memImpl initialMem unsupportedRelocs = go id
+loadString bak memImpl initialMem mmConf unsupportedRelocs = go id
  where
   sym = LCB.backendGetSym bak
 
@@ -344,7 +332,7 @@ loadString bak memImpl initialMem unsupportedRelocs = go id
   go f p maxChars = do
      let readInfo = DMC.BVMemRepr (WI.knownNat @1) DMC.LittleEndian
      st <- CMS.get
-     (v, st') <- liftIO $ readMem bak memImpl initialMem unsupportedRelocs st (DMC.addrWidthRepr ?ptrWidth) readInfo p
+     (v, st') <- liftIO $ readMem bak memImpl initialMem mmConf unsupportedRelocs st (DMC.addrWidthRepr ?ptrWidth) readInfo p
      CMS.put st'
      x <- liftIO $ LCLM.projectLLVM_bv bak v
      if (BV.asUnsigned <$> WI.asBV x) == Just 0
@@ -370,7 +358,7 @@ loadConcreteString
      , sym ~ WE.ExprBuilder scope st fs
      , bak ~ LCBO.OnlineBackend solver scope st fs
      , WPO.OnlineSolver solver, SM.IsStubsMemoryModel DMS.LLVMMemory arch
-     , SM.MemTable sym DMS.LLVMMemory arch ~ AEM.MemPtrTable sym arch
+     , SM.MemTable sym DMS.LLVMMemory arch ~ DMSM.MemPtrTable sym (DMC.ArchAddrWidth arch)
      , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w
      )
   => bak
@@ -378,6 +366,8 @@ loadConcreteString
   -- ^ memory to read from
   -> SM.InitialMemory sym DMS.LLVMMemory arch
   -- ^ Initial memory state for symbolic execution
+  -> DMS.MemModelConfig (AmbientSimulatorState sym arch) sym arch LCLM.Mem
+  -- ^ Configuration options for the memory model
   -> Map.Map (DMC.MemWord w) String
   -- ^ Mapping from unsupported relocation addresses to the names of the
   -- unsupported relocation types.
@@ -386,8 +376,8 @@ loadConcreteString
   -> Maybe Int
   -- ^ maximum characters to read
   -> m [Word8]
-loadConcreteString bak memImpl initialMem unsupportedRelocs p maxChars = do
-  symBytes <- loadString bak memImpl initialMem unsupportedRelocs p maxChars
+loadConcreteString bak memImpl initialMem mmConf unsupportedRelocs p maxChars = do
+  symBytes <- loadString bak memImpl initialMem mmConf unsupportedRelocs p maxChars
   traverse concretizeByte symBytes
   where
     concretizeByte :: WI.SymBV sym 8 -> m Word8
@@ -568,7 +558,7 @@ execAmbientStmtExtension :: forall sym scope st fs bak solver arch p w.
      , SM.MemType DMS.LLVMMemory arch ~ LCLM.Mem
      ,SM.IsStubsMemoryModel DMS.LLVMMemory arch,
      SM.PtrType DMS.LLVMMemory arch ~ LCLM.LLVMPointerType (DMC.ArchAddrWidth arch)
-     , SM.MemTable sym DMS.LLVMMemory arch ~ AEM.MemPtrTable sym arch
+     , SM.MemTable sym DMS.LLVMMemory arch ~ DMSM.MemPtrTable sym (DMC.ArchAddrWidth arch)
      , SM.MemMap sym arch ~ DMSMO.GlobalMap sym LCLM.Mem w
      )
   => bak
@@ -590,22 +580,19 @@ execAmbientStmtExtension bak f initialMem mmConf unsupportedRelocs s0 st =
   case s0 of
     DMS.MacawReadMem addrWidth memRep ptr0 -> do
       memImpl <- DMSMO.getMem st mvar
-      readMem bak memImpl initialMem unsupportedRelocs st addrWidth memRep ptr0
+      readMem bak memImpl initialMem mmConf unsupportedRelocs st addrWidth memRep ptr0
     DMS.MacawCondReadMem addrWidth memRep cond ptr0 condFalseValue -> DMM.addrWidthClass addrWidth $ do
       memImpl <- DMSMO.getMem st mvar
       (ptr1, resolveEffect) <- resolvePointer bak memImpl globs ptr0
       assertRelocSupported ptr1 unsupportedRelocs
-      case concreteImmutableGlobalRead memRep ptr1 mpt of
-        Just bytes -> do
-          readVal <- AEM.readBytesAsRegValue sym memRep bytes
-          readVal' <- muxMemReprValue sym memRep (LCS.regValue cond) readVal (LCS.regValue condFalseValue)
+      mbReadVal <- DMS.concreteImmutableGlobalRead mmConf memRep ptr1
+      case mbReadVal of
+        Just readVal -> do
+          readVal' <- DMSMO.muxMemReprValue sym memRep (LCS.regValue cond) readVal (LCS.regValue condFalseValue)
           let st' = incrementSimStat lensNumReads st
           pure (readVal', st')
         Nothing -> do
-          let w = DMM.memWidthNatRepr
-          memReprBytesBV <- WI.bvLit sym w $ BV.mkBV w $
-                            toInteger $ DMC.memReprBytes memRep
-          st1 <- lazilyPopulateGlobalMemArr bak mpt memReprBytesBV ptr1 st
+          st1 <- DMS.lazilyPopulateGlobalMem mmConf memRep ptr1 st
           let puse = DMS.PointerUse (st1 ^. LCSE.stateLocation) DMS.PointerRead
           mGlobalPtrValid <- toMemPred sym puse (Just cond) ptr0
           case mGlobalPtrValid of
@@ -649,7 +636,6 @@ execAmbientStmtExtension bak f initialMem mmConf unsupportedRelocs s0 st =
   where
     sym = LCB.backendGetSym bak
     mvar = SM.imMemVar initialMem
-    mpt = SM.imMemTable initialMem
     globs = SM.imGlobalMap initialMem
 
     toMemPred :: DMS.MkGlobalPointerValidityAssertion sym w
@@ -720,54 +706,6 @@ updateBoundsRefined resolveEffect state =
     AVC.UnchangedBounds -> state
     AVC.RefinedBounds -> incrementSimStat lensNumBoundsRefined state
 
--- Return @Just bytes@ if we can be absolutely sure that this is a concrete
--- read from a contiguous region of immutable, global memory, where @bytes@
--- are the bytes backing the global memory. Return @Nothing@ otherwise.
--- See @Note [Lazy memory initialization]@ in Ambient.Extensions.Memory.
-concreteImmutableGlobalRead ::
-  (LCB.IsSymInterface sym, DMM.MemWidth w, DMM.MemWidth (DMC.RegAddrWidth (DMC.ArchReg arch))) =>
-  DMC.MemRepr ty ->
-  LCLM.LLVMPtr sym w ->
-  AEM.MemPtrTable sym arch ->
-  Maybe [WI.SymBV sym 8]
-concreteImmutableGlobalRead memRep ptr mpt
-  | -- First, check that the pointer being read from is concrete.
-    Just ptrBlkNat <- WI.asNat ptrBlk
-  , Just addrBV    <- WI.asBV ptrOff
-
-    -- Next, check that the pointer block is the same as the block of the
-    -- pointer backing global memory.
-  , Just memPtrBlkNat <- WI.asNat memPtrBlk
-  , ptrBlkNat == memPtrBlkNat
-
-    -- Next, check that we are attempting to read from a contiguous region
-    -- of memory.
-  , let addr = fromInteger $ BV.asUnsigned addrBV
-  , Just (addrBaseInterval, smc) <-
-      combineChunksIfContiguous $ IM.toAscList $
-      AEM.memPtrTable mpt `IM.intersecting`
-        IMI.ClosedInterval addr (addr + fromIntegral numBytes)
-
-    -- Next, check that the memory is immutable.
-  , AEM.smcMutability smc == LCLM.Immutable
-
-    -- Finally, check that the region of memory is large enough to cover
-    -- the number of bytes we are attempting to read.
-  , let addrOffset = fromIntegral $ addr - IMI.lowerBound addrBaseInterval
-  , numBytes <= (length (AEM.smcBytes smc) - addrOffset)
-  = let bytes = Seq.take numBytes $
-                Seq.drop addrOffset $
-                AEM.smcBytes smc in
-    Just $ F.toList bytes
-
-  | otherwise
-  = Nothing
-  where
-    numBytes = fromIntegral $ DMC.memReprBytes memRep
-    (ptrBlk, ptrOff) = LCLM.llvmPointerView ptr
-    memPtrBlk = LCLMP.llvmPointerBlock (AEM.memPtr mpt)
-
-
 -- | Check whether a pointer points to a relocation address, and if so,
 -- assert that the underlying relocation type is supported.  If not, throw
 -- an UnsupportedRelocation exception.  This is a best effort attempt: if
@@ -791,268 +729,6 @@ assertRelocSupported (LCLM.LLVMPointer _base offset) unsupportedRelocs =
         Just relTypeName ->
           X.throwIO $ AE.UnsupportedRelocation relTypeName
         Nothing -> return ()
-
--- | Given a Boolean condition and two symbolic values associated with
--- a Macaw type, return a value denoting the first value if condition
--- is true and second value otherwise.
---
---     arg1 : Symbolic interface
---     arg2 : Description of memory layout of value
---     arg3 : Condition
---     arg4 : Value if condition is true
---     arg5 : Value if condition is false.
-
--- NB: This taken from a non-exported function in macaw-symbolic:
--- https://github.com/GaloisInc/macaw/blob/a43151963da70e4d4c3d69f9605e82e44ff30731/symbolic/src/Data/Macaw/Symbolic/MemOps.hs#L961-L988
--- Should we upstream the lazy memory initialization work to macaw-symbolic
--- (see Note [Lazy memory initialization] in Ambient.Extensions.Memory), we
--- will no longer have a need to redefine this function here.
-muxMemReprValue ::
-  LCB.IsSymInterface sym =>
-  sym ->
-  DMC.MemRepr ty ->
-  LCS.RegValue sym LCT.BoolType ->
-  LCS.RegValue sym (DMS.ToCrucibleType ty) ->
-  LCS.RegValue sym (DMS.ToCrucibleType ty) ->
-  IO (LCS.RegValue sym (DMS.ToCrucibleType ty))
-muxMemReprValue sym memRep cond x y =
-  case memRep of
-    DMC.BVMemRepr bytes _endian ->
-      case WI.leqMulPos (WI.knownNat @8) bytes of
-        WI.LeqProof -> LCLMP.muxLLVMPtr sym cond x y
-    DMC.FloatMemRepr _floatRep _endian ->
-      WI.baseTypeIte sym cond x y
-    DMC.PackedVecMemRepr _ eltMemRepr -> do
-      when (DV.length x /= DV.length y) $ do
-        X.throwIO $ userError $ "Expected vectors to have same length"
-      DV.zipWithM (muxMemReprValue sym eltMemRepr cond) x y
-
--- | If this is a global read, initialize the region of memory in the SMT array
--- that backs global memory. See @Note [Lazy memory initialization]@ in
--- "Ambient.Extensions.Memory".
-lazilyPopulateGlobalMemArr ::
-  forall sym bak arch w t st fs p ext rtp f args.
-  ( LCB.IsSymBackend sym bak
-  , sym ~ WEB.ExprBuilder t st fs
-  , w ~ DMC.ArchAddrWidth arch
-  , p ~ AmbientSimulatorState sym arch
-  , DMM.MemWidth w
-  ) =>
-  bak ->
-  AEM.MemPtrTable sym arch ->
-  -- ^ The global memory
-  WI.SymBV sym w ->
-  -- ^ The amount of memory to read
-  LCLM.LLVMPtr sym w ->
-  -- ^ The pointer being read from
-  LCS.SimState p sym ext rtp f args ->
-  -- ^ State to update if this is a global read
-  IO (LCS.SimState p sym ext rtp f args)
-lazilyPopulateGlobalMemArr bak mpt readSizeBV ptr state
-  | -- We only wish to populate the array backing global memory if we know for
-    -- sure that we are reading from the global pointer. If we're reading from a
-    -- different pointer, there's no need to bother populating the array.
-    WI.asNat (LCLMP.llvmPointerBlock (AEM.memPtr mpt)) ==
-    WI.asNat (LCLMP.llvmPointerBlock ptr)
-  = do pleatM state tbl $ \st (addr, smc) ->
-         if addr `IS.notMember` (st^.chunksL)
-           then do assumeMemArr bak (AEM.memPtrArray mpt)
-                                (IMI.lowerBound addr) (AEM.smcBytes smc)
-                   pure $ over chunksL (IS.insert addr) st
-           else pure st
-
-  | otherwise
-  = pure state
-  where
-    sym = LCB.backendGetSym bak
-
-    -- The regions of global memory that would need to be accessed as a result
-    -- of reading from the pointer.  We build an interval [ptr, ptr+read_size]
-    -- and load all of the chunks in global memory that overlap with the
-    -- interval.
-    tbl = IM.toAscList $ AEM.memPtrTable mpt `IM.intersecting`
-                           (ptrInterval `extendUpperBound` maxReadSize)
-
-    -- ptrInterval is an interval representing the possible values that ptr
-    -- could be, and maxReadSize is the largest possible value that readSizeBV
-    -- could be.  From these we can build an interval (ptrInterval
-    -- `extendUpperBound` maxReadSize) that contains all possible global memory
-    -- addresses that the read could encompass.
-    ptrInterval = symBVInterval sym (LCLMP.llvmPointerOffset ptr)
-    maxReadSize = IMI.upperBound (symBVInterval sym readSizeBV)
-
-    chunksL :: Lens' (LCS.SimState p sym ext rtp f args)
-                     (IS.IntervalSet (IMI.Interval (DMM.MemWord w)))
-    chunksL = LCS.stateContext . LCS.cruciblePersonality . populatedMemChunks
-
--- | Given a list of memory regions and the symbolic bytes backing them,
--- attempt to combine them into a single region. Return 'Just' if the memory
--- can be combined into a single, contiguous region with no overlap and the
--- backing memory has the same 'LCLM.Mutability. Return 'Nothing' otherwise.
-combineChunksIfContiguous ::
-  forall a sym.
-  (Eq a, Integral a) =>
-  [(IMI.Interval a, AEM.SymbolicMemChunk sym)] ->
-  Maybe (IMI.Interval a, AEM.SymbolicMemChunk sym)
-combineChunksIfContiguous ichunks =
-  case L.uncons ichunks of
-    Nothing -> Nothing
-    Just (ichunkHead, ichunkTail) -> F.foldl' f (Just ichunkHead) ichunkTail
-  where
-    f ::
-      Maybe (IMI.Interval a, AEM.SymbolicMemChunk sym) ->
-      (IMI.Interval a, AEM.SymbolicMemChunk sym) ->
-      Maybe (IMI.Interval a, AEM.SymbolicMemChunk sym)
-    f acc (i2, chunk2) = do
-      (i1, chunk1) <- acc
-      combinedI <- combineIfContiguous i1 i2
-      combinedChunk <- AEM.combineSymbolicMemChunks chunk1 chunk2
-      pure (combinedI, combinedChunk)
-
--- | @'combineIfContiguous' i1 i2@ returns 'Just' an interval with the lower
--- bound of @i1@ and the upper bound of @i2@ when one of the following criteria
--- are met:
---
--- * If @i1@ has an open upper bound, then @i2@ has a closed lower bound of the
---   same integral value.
---
--- * If @i1@ has a closed upper bound and @i2@ has an open lower bound, then
---   these bounds have the same integral value.
---
--- * If @i1@ has a closed upper bound and @i2@ has a closed lower bound, then
---   @i2@'s lower bound is equal to the integral value of @i1@'s upper bound
---   plus one.
---
--- * It is not the case that both @i1@'s upper bound and @i2@'s lower bound are
---   open.
---
--- Otherwise, this returns 'Nothing'.
---
--- Less formally, this captures the notion of combining two non-overlapping
--- 'IMI.Interval's that when would form a single, contiguous range when
--- overlaid. (Contrast this with 'IMI.combine', which only returns 'Just' if
--- the two 'IMI.Interval's are overlapping.)
-combineIfContiguous :: (Eq a, Integral a) => IMI.Interval a -> IMI.Interval a -> Maybe (IMI.Interval a)
-combineIfContiguous i1 i2 =
-  case (i1, i2) of
-    (IMI.IntervalOC lo1 hi1, IMI.IntervalOC lo2 hi2)
-      | hi1 == lo2 -> Just $ IMI.IntervalOC lo1 hi2
-      | otherwise  -> Nothing
-    (IMI.IntervalOC lo1 hi1, IMI.OpenInterval lo2 hi2)
-      | hi1 == lo2 -> Just $ IMI.OpenInterval lo1 hi2
-      | otherwise  -> Nothing
-    (IMI.OpenInterval lo1 hi1, IMI.IntervalCO lo2 hi2)
-      | hi1 == lo2 -> Just $ IMI.OpenInterval lo1 hi2
-      | otherwise  -> Nothing
-    (IMI.OpenInterval lo1 hi1, IMI.ClosedInterval lo2 hi2)
-      | hi1 == lo2 -> Just $ IMI.IntervalOC lo1 hi2
-      | otherwise  -> Nothing
-    (IMI.IntervalCO lo1 hi1, IMI.IntervalCO lo2 hi2)
-      | hi1 == lo2 -> Just $ IMI.IntervalCO lo1 hi2
-      | otherwise  -> Nothing
-    (IMI.IntervalCO lo1 hi1, IMI.ClosedInterval lo2 hi2)
-      | hi1 == lo2 -> Just $ IMI.ClosedInterval lo1 hi2
-      | otherwise  -> Nothing
-    (IMI.ClosedInterval lo1 hi1, IMI.IntervalOC lo2 hi2)
-      | hi1 == lo2 -> Just $ IMI.ClosedInterval lo1 hi2
-      | otherwise  -> Nothing
-    (IMI.ClosedInterval lo1 hi1, IMI.OpenInterval lo2 hi2)
-      | hi1 == lo2 -> Just $ IMI.IntervalCO lo1 hi2
-      | otherwise  -> Nothing
-
-    (IMI.IntervalOC lo1 hi1, IMI.IntervalCO lo2 hi2)
-      | hi1 + 1 == lo2 -> Just $ IMI.OpenInterval lo1 hi2
-      | otherwise      -> Nothing
-    (IMI.IntervalOC lo1 hi1, IMI.ClosedInterval lo2 hi2)
-      | hi1 + 1 == lo2 -> Just $ IMI.IntervalOC lo1 hi2
-      | otherwise      -> Nothing
-    (IMI.ClosedInterval lo1 hi1, IMI.IntervalCO lo2 hi2)
-      | hi1 + 1 == lo2 -> Just $ IMI.IntervalCO lo1 hi2
-      | otherwise      -> Nothing
-    (IMI.ClosedInterval lo1 hi1, IMI.ClosedInterval lo2 hi2)
-      | hi1 + 1 == lo2 -> Just $ IMI.ClosedInterval lo1 hi2
-      | otherwise      -> Nothing
-
-    (IMI.IntervalCO{}, IMI.IntervalOC{})
-      -> Nothing
-    (IMI.IntervalCO{}, IMI.OpenInterval{})
-      -> Nothing
-    (IMI.OpenInterval{}, IMI.IntervalOC{})
-      -> Nothing
-    (IMI.OpenInterval{}, IMI.OpenInterval{})
-      -> Nothing
-
--- | Extend the upper bound of an 'IMI.Interval' by the given amount.
-extendUpperBound :: Num a => IMI.Interval a -> a -> IMI.Interval a
-extendUpperBound i extendBy =
-  case i of
-    IMI.IntervalCO     lo hi -> IMI.IntervalCO     lo (hi + extendBy)
-    IMI.IntervalOC     lo hi -> IMI.IntervalOC     lo (hi + extendBy)
-    IMI.OpenInterval   lo hi -> IMI.OpenInterval   lo (hi + extendBy)
-    IMI.ClosedInterval lo hi -> IMI.ClosedInterval lo (hi + extendBy)
-
--- -- | Initialize the memory backing global memory by assuming that the elements
--- -- of the array are equal to the appropriate bytes.
--- -- See @Note [Lazy memory initialization]@ in "Ambient.Extensions.Memory".
-
--- NB: This is the same code as in this part of macaw-symbolic:
--- https://github.com/GaloisInc/macaw/blob/ef0ece6a726217fe6231b9ddf523868e491e6ef0/symbolic/src/Data/Macaw/Symbolic/Memory.hs#L474-L496
-assumeMemArr ::
-  forall sym bak w t st fs.
-  ( LCB.IsSymBackend sym bak
-  , sym ~ WEB.ExprBuilder t st fs
-  , DMM.MemWidth w
-  ) =>
-  bak ->
-  WI.SymArray sym (Ctx.SingleCtx (WI.BaseBVType w)) (WI.BaseBVType 8) ->
-  DMM.MemWord w ->
-  Seq.Seq (WI.SymBV sym 8) ->
-  IO ()
-assumeMemArr bak symArray absAddr bytes = do
-  initVals <- ipleatM [] bytes $ \idx bmvals byte -> do
-    let absByteAddr = fromIntegral idx + absAddr
-    index_bv <- liftIO $ WI.bvLit sym w (BV.mkBV w (toInteger absByteAddr))
-    eq_pred <- liftIO $ WI.bvEq sym byte =<< WI.arrayLookup sym symArray (Ctx.singleton index_bv)
-    return (eq_pred : bmvals)
-  let desc = printf "Bytes@[addr=%s,nbytes=%s]" (show absAddr) (show bytes)
-  prog_loc <- liftIO $ WI.getCurrentProgramLoc sym
-  byteEqualityAssertion <- liftIO $ WEB.sbMakeExpr sym (WE.ConjPred (WEBM.fromVars [(e, WEBM.Positive) | e <- initVals]))
-  liftIO $ LCB.addAssumption bak (LCB.GenericAssumption prog_loc desc byteEqualityAssertion)
-  where
-    sym = LCB.backendGetSym bak
-    w = DMM.memWidthNatRepr @w
-
--- | Return an 'IMI.Interval' representing the possible range of addresses that
--- a 'WI.SymBV' can lie between. If this is a concrete bitvector, the interval
--- will consist of a single point, but if this is a symbolic bitvector, then
--- the range can span multiple addresses.
-symBVInterval ::
-  (WI.IsExprBuilder sym, DMM.MemWidth w) =>
-  sym ->
-  WI.SymBV sym w ->
-  IMI.Interval (DMM.MemWord w)
-symBVInterval _ bv =
-  case WI.unsignedBVBounds bv of
-    Just (lo, hi) -> IMI.ClosedInterval (fromInteger lo) (fromInteger hi)
-    Nothing       -> IMI.ClosedInterval minBound maxBound
-
--- | The 'pleatM' function is 'F.foldM' with the arguments switched so
--- that the function is last.
-pleatM :: (Monad m, F.Foldable t)
-       => b
-       -> t a
-       -> (b -> a -> m b)
-       -> m b
-pleatM s l f = F.foldlM f s l
-
--- | The 'ipleatM' function is 'FWI.ifoldM' with the arguments switched so
--- that the function is last.
-ipleatM :: (Monad m, FWI.FoldableWithIndex i t)
-        => b
-        -> t a
-        -> (i -> b -> a -> m b)
-        -> m b
-ipleatM s l f = FWI.ifoldlM f s l
 
 -- | Statistics gathered during simulation
 data AmbientSimulationStats = AmbientSimulationStats
@@ -1128,13 +804,6 @@ data AmbientSimulatorState sym arch = AmbientSimulatorState
     -- those sorts of layouts, we would run the risk of addresses from
     -- different address spaces being mapped to the same 'DMC.ArchSegmentOff',
     -- which will make a 'Map.Map' insufficient means of storage. See #86.
-  , _populatedMemChunks :: IS.IntervalSet (IMI.Interval (DMM.MemWord (DMC.ArchAddrWidth arch)))
-    -- ^ The regions of memory which we have populated with symbolic bytes in
-    -- the 'AEM.MemPtrTable' backing global memory.
-    -- See @Note [Lazy memory initialization@ in "Ambient.Extensions.Memory".
-    -- ^ A map from registered socket file descriptors to their corresponding
-    -- metadata. See @Note [The networking story]@ in
-    -- "Ambient.Syscall.Overrides.Networking".
   , _simulationStats :: AmbientSimulationStats
     -- ^ Metrics from the Ambient simulator
   , _overrideLookupFunctionHandle :: Maybe (DMSMO.LookupFunctionHandle (AmbientSimulatorState sym arch) sym arch)
@@ -1147,6 +816,9 @@ data AmbientSimulatorState sym arch = AmbientSimulatorState
     -- unbalance the stack (which prevents Macaw from detecting them properly).
   , _sharedMemoryState :: AMS.AmbientSharedMemoryState sym (DMC.ArchAddrWidth arch)
   -- ^ Manages shared memory allocated during simulation.
+  , _macawLazySimulatorState :: DMS.MacawLazySimulatorState sym (DMC.ArchAddrWidth arch)
+    -- ^ The state used in the lazy @macaw-symbolic@ memory model, on top of
+    -- which @grease@ is built.
   }
 
 -- | An initial value for 'AmbientSimulatorState'.
@@ -1156,11 +828,16 @@ emptyAmbientSimulatorState = AmbientSimulatorState
   , _functionAddrOvHandles = Map.empty
   , _syscallOvHandles = MapF.empty
   , _discoveredFunctionHandles = Map.empty
-  , _populatedMemChunks = IS.empty
   , _simulationStats = emptyAmbientSimulationStats
   , _overrideLookupFunctionHandle = Nothing
   , _sharedMemoryState = AMS.emptyAmbientSharedMemoryState
+  , _macawLazySimulatorState = DMS.emptyMacawLazySimulatorState
   }
+
+instance (DMC.ArchAddrWidth arch ~ w) =>
+         DMS.HasMacawLazySimulatorState
+           (AmbientSimulatorState sym arch) sym w where
+  macawLazySimulatorState = macawLazySimulatorState
 
 functionOvHandles :: Lens' (AmbientSimulatorState sym arch)
                            (Map.Map WF.FunctionName (AF.FunctionOverrideHandle arch))
@@ -1183,11 +860,6 @@ discoveredFunctionHandles :: Lens' (AmbientSimulatorState sym arch)
 discoveredFunctionHandles = lens _discoveredFunctionHandles
                                  (\s v -> s { _discoveredFunctionHandles = v })
 
-populatedMemChunks :: Lens' (AmbientSimulatorState sym arch)
-                            (IS.IntervalSet (IMI.Interval (DMM.MemWord (DMC.ArchAddrWidth arch))))
-populatedMemChunks = lens _populatedMemChunks
-                          (\s v -> s { _populatedMemChunks = v })
-
 -- serverSocketFDs :: Lens' (AmbientSimulatorState sym arch)
 --                        (Map.Map Integer (Some ASONT.ServerSocketInfo))
 -- serverSocketFDs = lens _serverSocketFDs
@@ -1195,6 +867,10 @@ populatedMemChunks = lens _populatedMemChunks
 
 simulationStats :: Lens' (AmbientSimulatorState sym arch) AmbientSimulationStats
 simulationStats = lens _simulationStats (\s v -> s { _simulationStats = v })
+
+macawLazySimulatorState :: Lens' (AmbientSimulatorState sym arch)
+                                 (DMS.MacawLazySimulatorState sym (DMC.ArchAddrWidth arch))
+macawLazySimulatorState = lens _macawLazySimulatorState (\s v -> s { _macawLazySimulatorState = v })
 
 overrideLookupFunctionHandle
   :: Lens' (AmbientSimulatorState sym arch)

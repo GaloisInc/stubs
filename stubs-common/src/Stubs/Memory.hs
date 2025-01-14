@@ -36,6 +36,7 @@ import qualified Text.Megaparsec as TM
 import qualified Text.Megaparsec.Char as TMC
 
 import qualified Data.Macaw.Symbolic as DMS
+import qualified Data.Macaw.Symbolic.Memory.Lazy as DMSM
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Lang.Crucible.Simulator.GlobalState as LCSG
 
@@ -129,7 +130,7 @@ data (IsStubsMemoryModel mem arch) => InitialMemory sym mem arch =
                -- ^ Initial global variables
                 , imStackBasePtr :: LCS.RegValue sym (PtrType mem arch)
                -- ^ Stack memory base pointer
-                , imMemTable :: MemTable sym mem arch
+                , imMemTable :: DMSM.MemPtrTable sym (DMC.ArchAddrWidth arch)
                 , imGlobalMap :: MemMap sym arch
                 }
 

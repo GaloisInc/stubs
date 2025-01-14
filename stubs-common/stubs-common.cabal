@@ -53,7 +53,6 @@ library
                       Stubs.EnvVar,
                       Stubs.Exception,
                       Stubs.Extensions,
-                      Stubs.Extensions.Memory,
                       Stubs.FunctionOverride,
                       Stubs.FunctionOverride.ArgumentMapping,
                       Stubs.FunctionOverride.Common,
