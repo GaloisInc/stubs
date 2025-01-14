@@ -8,16 +8,17 @@ version:            0.1.0.0
 -- A longer description of the package.
 -- description:
 
--- A URL where users can report bugs.
--- bug-reports:
+bug-reports: https://github.com/GaloisInc/stubs/issues
+license: BSD-3-Clause
+author: Christian Fontenot
+maintainer: dmatichuk@galois.com, langston@galois.com, rscott@galois.com
+copyright: (c) Galois, Inc 2023-2025
 
--- The license under which the package is released.
--- license:
-author:             Christian Fontenot
-maintainer:         cfontenot@galois.com
+source-repository head
+  type: git
+  location: https://github.com/GaloisInc/stubs
+  subdir: stubs-loader
 
--- A copyright notice.
--- copyright:
 -- category:
 extra-source-files: CHANGELOG.md
 
