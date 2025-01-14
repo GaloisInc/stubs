@@ -19,6 +19,7 @@
 module Stubs.Memory.PPC.Linux (ppcLinuxStmtExtensionOverride) where
 
 import qualified Data.BitVector.Sized as BVS
+import           Data.Proxy (Proxy(..))
 import qualified Data.Text as DT
 
 import qualified Data.Macaw.Symbolic as DMS
@@ -32,7 +33,7 @@ import qualified Stubs.Memory as AM
 import qualified Stubs.Common as SC
 import qualified Lang.Crucible.FunctionHandle as LCF
 import qualified Lang.Crucible.Types as LCT
-import qualified Data.Macaw.Symbolic.Memory as DMSM
+import qualified Data.Macaw.Symbolic.Memory.Lazy as DMSM
 import qualified Data.Macaw.Architecture.Info as DMA
 import qualified Data.Parameterized.NatRepr as PN
 import qualified Stubs.Memory as SM
@@ -42,7 +43,6 @@ import qualified Data.Macaw.PPC as DMP
 import Data.Macaw.PPC.Symbolic ()
 import qualified Stubs.Extensions as SE
 import qualified Data.Macaw.Symbolic.MemOps as DMSMO
-import qualified Stubs.Extensions.Memory as AEM
 import qualified Data.Macaw.BinaryLoader as DMB
 import qualified Stubs.Loader.BinaryConfig as SLB
 import qualified Stubs.Memory.Common as SMC
@@ -52,7 +52,7 @@ instance (DMS.SymArchConstraints (DMP.AnyPPC v), 16 WI.<= SAP.AddrWidth v) =>
   type instance PtrType DMS.LLVMMemory (DMP.AnyPPC v) = LCLM.LLVMPointerType (SAP.AddrWidth v)
   type instance MemType DMS.LLVMMemory (DMP.AnyPPC v) = LCLM.Mem
   type instance BVToPtrTy w DMS.LLVMMemory (DMP.AnyPPC v) = LCLM.LLVMPointerType w
-  type instance MemTable sym DMS.LLVMMemory (DMP.AnyPPC v) = AEM.MemPtrTable sym (DMP.AnyPPC v)
+  type instance MemTable sym DMS.LLVMMemory (DMP.AnyPPC v) = DMSM.MemPtrTable sym (SAP.AddrWidth v)
   type instance MemMap sym (DMP.AnyPPC v) = DMSMO.GlobalMap sym LCLM.Mem (SAP.AddrWidth v)
 
   type instance VerifierState sym DMS.LLVMMemory (DMP.AnyPPC v) = SE.AmbientSimulatorState sym (DMP.AnyPPC v)
@@ -103,7 +103,7 @@ instance (DMS.SymArchConstraints (DMP.AnyPPC v), 16 WI.<= SAP.AddrWidth v) =>
     (recordFn, _) <- liftIO SM.buildRecordLLVMAnnotation
     let ?recordLLVMAnnotation = recordFn
     let ?memOpts = LCLM.defaultMemOptions
-    (mem, memPtrTbl) <- AEM.newMemPtrTable (SMC.globalMemoryHooks mems mempty mempty) bak endian mems
+    (mem, memPtrTbl) <- DMSM.newMergedGlobalMemoryWith (SMC.globalMemoryHooks mems mempty mempty) (Proxy @(DMP.AnyPPC v)) bak endian DMSM.ConcreteMutable mems
     stackSizeBV <- liftIO $ WI.bvLit sym WI.knownRepr (BVS.mkBV WI.knownRepr stackSize)
 
     (stackBasePtr, mem1) <- liftIO $ LCLM.doMalloc bak LCLM.StackAlloc LCLM.Mutable "stack_alloc" mem stackSizeBV LCLD.noAlignment
@@ -113,7 +113,7 @@ instance (DMS.SymArchConstraints (DMP.AnyPPC v), 16 WI.<= SAP.AddrWidth v) =>
 
     memVar <- liftIO $ LCLM.mkMemVar (DT.pack "stubs::memory") halloc
     let globals = LCSG.insertGlobal memVar mem2 LCSG.emptyGlobals
-    let globalMap = AEM.mapRegionPointers memPtrTbl
+    let globalMap = DMSM.mapRegionPointers memPtrTbl
 
     return SM.InitialMemory{
       SM.imMemVar=memVar,
