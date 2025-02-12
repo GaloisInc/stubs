@@ -1,3 +1,6 @@
+-- TODO: https://github.com/travitch/itanium-abi/pull/15
+allow-newer: itanium-abi:text
+
 packages: .
           ./stubs-parser
           ./stubs-common
@@ -29,6 +32,7 @@ packages: .
           submodules/macaw/x86
           submodules/macaw/x86_symbolic
           submodules/macaw/symbolic
+          submodules/macaw/macaw-dump
           submodules/macaw/macaw-semmc
           submodules/macaw/macaw-ppc
           submodules/macaw/macaw-ppc-symbolic
