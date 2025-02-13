@@ -19,6 +19,7 @@ import Test.Tasty
 import qualified Pipeline as STP
 import qualified Lang.Crucible.CFG.SSAConversion as LCSSA
 import qualified Data.List as List
+import qualified Data.Maybe as Maybe
 import qualified Data.Parameterized.Context as Ctx
 import qualified Lang.Crucible.CFG.Reg as LCCR
 import Test.Tasty.HUnit
@@ -38,7 +39,7 @@ genTestCaseIO iprog check tag = testCase tag $ do
     hAlloc <- LCF.newHandleAllocator
     sprog <- iprog
     cprog <- ST.translateProgram @DMX.X86_64 ng hAlloc [] sprog
-    let prog = head cprog
+    let prog = Maybe.fromMaybe (error "Translation didn't output any Crucible programs?") (Maybe.listToMaybe cprog)
     case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
         Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
         Just (LCCR.AnyCFG icfg) -> do
@@ -57,7 +58,7 @@ genTestCase sprog check tag = testCase tag $ do
     Some ng <- PN.newIONonceGenerator
     hAlloc <- LCF.newHandleAllocator
     cprog <- ST.translateProgram @DMX.X86_64 ng hAlloc [] sprog
-    let prog = head cprog
+    let prog = Maybe.fromMaybe (error "Translation didn't output any Crucible programs?") (Maybe.listToMaybe cprog)
     case lookupEntry (ST.crEntry prog) (ST.crCFGs prog) of
         Nothing -> assertFailure "Translate produced invalid program: no cfg for entry point"
         Just (LCCR.AnyCFG icfg) -> do
