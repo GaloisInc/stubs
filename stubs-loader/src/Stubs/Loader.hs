@@ -75,7 +75,6 @@ import Stubs.Arch.PPC32 ()
 import Stubs.Arch.PPC64 ()
 import qualified Data.Macaw.ARM.ARMReg as ARMReg
 import qualified Dismantle.PPC as DP
-import qualified Language.ASL.Globals as ASL
 import qualified Stubs.Translate.Core as STC
 import qualified Stubs.Memory as SM
 import qualified Stubs.Translate.Intrinsic as STI
@@ -214,7 +213,7 @@ withBinary name bytes mbSharedObjectDir hdlAlloc _sym k = do
                                             AFAL.aarch32LinuxTypes)
                 (elfBinarySizeTotal bins)
                 binConf
-                (Just (FunABIExt (ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R0"))))
+                (Just (FunABIExt ARMReg.r0))
                 ovs
             Nothing -> CMC.throwM (AE.UnsupportedELFArchitecture name DE.EM_ARM DE.ELFCLASS32)
         (DE.EM_PPC, DE.ELFCLASS32) -> do

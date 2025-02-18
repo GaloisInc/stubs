@@ -25,7 +25,6 @@ import qualified Data.Macaw.ARM as DMA
 import qualified Data.Macaw.ARM.ARMReg as ARMReg
 import qualified Data.Macaw.CFG as DMC
 import qualified Data.Macaw.Types as DMT
-import qualified Language.ASL.Globals as ASL
 import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.LLVM.MemModel as LCLM
 import qualified Lang.Crucible.Simulator as LCS
@@ -76,18 +75,16 @@ aarch32LinuxGetReg
 aarch32LinuxGetReg tps regs reg
   | Just PC.Refl <- PC.testEquality tps syscallABIRepr =
       case LCS.regValue regs of
-        Ctx.Empty Ctx.:> r0 Ctx.:> r1 Ctx.:> r2 Ctx.:> r3 Ctx.:> r4 Ctx.:> r5 Ctx.:> r6 Ctx.:> r7 ->
-          case reg of
-            ARMReg.ARMGlobalBV ref
-              | Just PC.Refl <- PC.testEquality ref (ASL.knownGlobalRef @"_R0") -> r0
-              | Just PC.Refl <- PC.testEquality ref (ASL.knownGlobalRef @"_R1") -> r1
-              | Just PC.Refl <- PC.testEquality ref (ASL.knownGlobalRef @"_R2") -> r2
-              | Just PC.Refl <- PC.testEquality ref (ASL.knownGlobalRef @"_R3") -> r3
-              | Just PC.Refl <- PC.testEquality ref (ASL.knownGlobalRef @"_R4") -> r4
-              | Just PC.Refl <- PC.testEquality ref (ASL.knownGlobalRef @"_R5") -> r5
-              | Just PC.Refl <- PC.testEquality ref (ASL.knownGlobalRef @"_R6") -> r6
-              | Just PC.Refl <- PC.testEquality ref (ASL.knownGlobalRef @"_R7") -> r7
-            _ -> AP.panic AP.Syscall "aarch32LinuxGetReg" ["Unexpected syscall register: " ++ show reg]
+        Ctx.Empty Ctx.:> r0 Ctx.:> r1 Ctx.:> r2 Ctx.:> r3 Ctx.:> r4 Ctx.:> r5 Ctx.:> r6 Ctx.:> r7
+          | Just PC.Refl <- PC.testEquality reg ARMReg.r0 -> r0
+          | Just PC.Refl <- PC.testEquality reg ARMReg.r1 -> r1
+          | Just PC.Refl <- PC.testEquality reg ARMReg.r2 -> r2
+          | Just PC.Refl <- PC.testEquality reg ARMReg.r3 -> r3
+          | Just PC.Refl <- PC.testEquality reg ARMReg.r4 -> r4
+          | Just PC.Refl <- PC.testEquality reg ARMReg.r5 -> r5
+          | Just PC.Refl <- PC.testEquality reg ARMReg.r6 -> r6
+          | Just PC.Refl <- PC.testEquality reg ARMReg.r7 -> r7
+        _ -> AP.panic AP.Syscall "aarch32LinuxGetReg" ["Unexpected syscall register: " ++ show reg]
   | otherwise = AP.panic AP.Syscall "aarch32LinuxGetReg" [ "Unexpected syscall args shape"
                                                          , " Expected: " ++ show syscallABIRepr
                                                          , " But got: " ++ show tps
@@ -105,12 +102,10 @@ aarch32LinuxSyscallNumberRegister
   -> LCS.RegEntry sym (LCT.StructType atps)
   -> IO (LCS.RegEntry sym (LCT.BVType w))
 aarch32LinuxSyscallNumberRegister bak repr regs = do
-  bv <- LCLM.projectLLVM_bv bak (LCS.unRV (aarch32LinuxGetReg repr regs r7))
+  bv <- LCLM.projectLLVM_bv bak (LCS.unRV (aarch32LinuxGetReg repr regs ARMReg.r7))
   return LCS.RegEntry { LCS.regType = LCT.BVRepr PN.knownNat
                       , LCS.regValue = bv
                       }
-  where
-    r7 = ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R7")
 
 -- | Syscall arguments are passed in (in order): r0, r1, r2, r3, r4, r5, r6
 --
@@ -158,13 +153,13 @@ aarch32LinuxSyscallReturnRegisters ovTy ovSim argsRepr args retRepr
       case ovTy of
         LCT.UnitRepr -> do
           ovSim
-          let r0Val = aarch32LinuxGetReg argsRepr args r0
-          let r1Val = aarch32LinuxGetReg argsRepr args r1
+          let r0Val = aarch32LinuxGetReg argsRepr args ARMReg.r0
+          let r1Val = aarch32LinuxGetReg argsRepr args ARMReg.r1
           return (Ctx.Empty Ctx.:> r0Val Ctx.:> r1Val)
         LCLM.LLVMPointerRepr w
           | Just PC.Refl <- PC.testEquality w ptrWidth -> do
               result <- ovSim
-              let r1Val = aarch32LinuxGetReg argsRepr args r1
+              let r1Val = aarch32LinuxGetReg argsRepr args ARMReg.r1
               return (Ctx.Empty Ctx.:> LCS.RV result Ctx.:> r1Val)
         _ -> AP.panic AP.Syscall "aarch32LinuxSyscallReturnRegisters" [ "Unexpected override return type: " ++ show ovTy ]
   | otherwise = AP.panic AP.Syscall "aarch32LinuxSyscallReturnRegisters" [ "Unexpected return shape"
@@ -173,8 +168,6 @@ aarch32LinuxSyscallReturnRegisters ovTy ovSim argsRepr args retRepr
                                                                          ]
   where
     ptrWidth = PN.knownNat @32
-    r0 = ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R0")
-    r1 = ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R1")
 
 aarch32LinuxSyscallABI :: SM.BuildSyscallABI DMA.ARM sym (AE.AmbientSimulatorState sym DMA.ARM) mem
 aarch32LinuxSyscallABI = SM.BuildSyscallABI $ \ initialMem unsupportedRelocs ->
