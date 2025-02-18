@@ -35,7 +35,6 @@ import qualified Data.Macaw.ARM.ARMReg as ARMReg
 import qualified Data.Macaw.Memory as DMM
 import qualified Data.Macaw.Symbolic as DMS
 import qualified Data.Macaw.Types as DMT
-import qualified Language.ASL.Globals as ASL
 import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Lang.Crucible.CFG.Common as LCCC
@@ -97,10 +96,10 @@ aarch32LinuxIntegerArguments bak archVals argTypes regFile mem = do
 
 aarch32LinuxIntegerArgumentRegisters :: [ARMReg.ARMReg (DMT.BVType 32)]
 aarch32LinuxIntegerArgumentRegisters =
-  [ ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R0")
-  , ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R1")
-  , ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R2")
-  , ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R3")
+  [ ARMReg.r0
+  , ARMReg.r1
+  , ARMReg.r2
+  , ARMReg.r3
   ]
 
 -- | Inject override return values back into the register state
@@ -125,16 +124,14 @@ aarch32LinuxIntegerReturnRegisters bak _archVals ovTy result initRegs =
     -- though we are computing two return values, one in R0 and the other in R1.
     LCT.StructRepr (Ctx.Empty Ctx.:> fstTpr Ctx.:> sndTpr) -> do
       Ctx.Empty Ctx.:> LCS.RV fstVal Ctx.:> LCS.RV sndVal <- pure (AF.result result)
-      regs0 <- injectIntoReg fstTpr fstVal r0 initRegs
-      regs1 <- injectIntoReg sndTpr sndVal r1 regs0
+      regs0 <- injectIntoReg fstTpr fstVal ARMReg.r0 initRegs
+      regs1 <- injectIntoReg sndTpr sndVal ARMReg.r1 regs0
       pure $ updateRegs regs1 (AF.regUpdates result)
     _ -> do
-      regs' <- injectIntoReg ovTy (AF.result result) r0 initRegs
+      regs' <- injectIntoReg ovTy (AF.result result) ARMReg.r0 initRegs
       pure $ updateRegs regs' (AF.regUpdates result)
   where
     sym = LCB.backendGetSym bak
-    r0 = ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R0")
-    r1 = ARMReg.ARMGlobalBV (ASL.knownGlobalRef @"_R1")
 
     -- Inject a return value of the given TypeRepr into the supplied ARMReg.
     -- Depending on the type of the value, this may require zero extension.
@@ -196,7 +193,7 @@ aarch32LinuxReturnAddr ::
   -> IO (Maybe (DMM.MemWord 32))
 aarch32LinuxReturnAddr bak archVals regs _mem = do
   let addrSymBV = LCLMP.llvmPointerOffset $ LCS.regValue
-                                          $ DMS.lookupReg archVals regsEntry ARMReg.arm_LR
+                                          $ DMS.lookupReg archVals regsEntry ARMReg.lr
   res <- AVC.resolveSymBVAs bak WT.knownNat addrSymBV
   case res of
     Left AVC.UnsatInitialAssumptions -> do
