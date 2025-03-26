@@ -19,7 +19,6 @@ import qualified Data.Kind as Kind
 import qualified Data.Parameterized.Classes as PC
 import qualified Data.Parameterized.Context as Ctx
 
-import           Data.Macaw.X86.Symbolic ()
 import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Lang.Crucible.FunctionHandle as LCF

@@ -57,7 +57,6 @@ import qualified Data.Macaw.Symbolic as DMS
 import qualified Data.Macaw.Symbolic.Memory.Lazy as DMSM
 import qualified Data.Macaw.Symbolic.Backend as DMSB
 import qualified Data.Macaw.Symbolic.MemOps as DMSMO
-import Data.Macaw.Symbolic.MemOps ()
 import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Lang.Crucible.LLVM.MemModel as LCLM
