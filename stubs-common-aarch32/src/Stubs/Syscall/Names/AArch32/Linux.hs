@@ -20,7 +20,8 @@ syscallMap = IM.fromList armSyscalls_
 
 -- | The raw table of arm syscalls and their associated numbers.
 -- See syscall_arm.tbl for more information. This data is
--- generated automatically from the generate_table.py script. See the
+-- generated automatically from the
+-- @stubs-common/src/Stubs/Syscall/Names/generate_table.py@ script. See the
 -- @stubs-common/src/Stubs/Syscall/Names/README@ file for more information.
 armSyscalls_ :: [(Int, DT.Text)]
 armSyscalls_ = [

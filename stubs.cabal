@@ -73,6 +73,7 @@ test-suite stubs-tests
                  stubs-parser,
                  stubs-loader,
                  stubs-translator,
+                 stubs-translator-x86,
                  crucible,
                  macaw-base,
                  macaw-symbolic,

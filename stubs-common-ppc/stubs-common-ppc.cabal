@@ -1,0 +1,55 @@
+cabal-version:      2.4
+name:               stubs-common-ppc
+version:            0.1.0.0
+
+-- A short (one-line) description of the package.
+-- synopsis:
+
+-- A longer description of the package.
+-- description:
+
+bug-reports: https://github.com/GaloisInc/stubs/issues
+license: BSD-3-Clause
+author: Christian Fontenot
+maintainer: dmatichuk@galois.com, langston@galois.com, rscott@galois.com
+copyright: (c) Galois, Inc 2023-2025
+
+source-repository head
+  type: git
+  location: https://github.com/GaloisInc/stubs
+  subdir: stubs-common-ppc
+
+-- category:
+extra-source-files: CHANGELOG.md
+
+library
+    exposed-modules:
+      Stubs.FunctionOverride.PPC.Linux
+      Stubs.Memory.PPC.Linux
+      Stubs.Syscall.PPC.Linux
+      Stubs.Syscall.Names.PPC32.Linux
+      Stubs.Syscall.Names.PPC64.Linux
+    build-depends:
+      base >= 4.10 && < 5,
+      bv-sized,
+      containers,
+      lens >= 4 && < 6,
+      prettyprinter >= 1.7 && < 1.8,
+      text,
+
+      crucible,
+      crucible-llvm,
+      dismantle-ppc,
+      macaw-base,
+      macaw-ppc,
+      macaw-ppc-symbolic,
+      macaw-symbolic,
+      macaw-loader,
+      parameterized-utils,
+      semmc-ppc,
+      what4,
+
+      stubs-common
+    hs-source-dirs: src
+    default-language: Haskell2010
+    ghc-options: -Wextra -Wcompat

@@ -22,29 +22,19 @@ source-repository head
 -- category:
 extra-source-files: CHANGELOG.md
 
-
-common shared
-    build-depends:
-        base >= 4.10 && < 5,
-        parameterized-utils >= 2 && < 3
-
 library
-    import: shared
     exposed-modules: Stubs.AST,
-                     Stubs.Arch.X86,
-                     Stubs.Arch.AArch32,
-                     Stubs.Arch.PPC32,
-                     Stubs.Arch.PPC64,
                      Stubs.Translate,
                      Stubs.Translate.Core,
                      Stubs.Translate.Intrinsic,
                      Stubs.Preamble,
+                     Stubs.Preamble.Common,
                      Stubs.Opaque
-    other-modules:  Stubs.Preamble.Common
     hs-source-dirs: src
     default-language: Haskell2010
     ghc-options: -Wextra -Wcompat
-    build-depends: containers,
+    build-depends: base >= 4.10 && < 5,
+                   containers,
                    exceptions,
                    mtl >= 2 && < 3,
                    text,
@@ -54,27 +44,6 @@ library
                    crucible,
                    crucible-syntax,
                    macaw-base,
-                   parameterized-utils,
+                   parameterized-utils >= 2 && < 3,
                    crucible-llvm,
-                   macaw-symbolic,
-                   macaw-x86-symbolic,
-                   macaw-x86,
-                   macaw-aarch32-symbolic,
-                   semmc-aarch32,
-                   macaw-ppc,
-                   macaw-ppc-symbolic
-
-test-suite translator-tests
-  import: shared
-  type: exitcode-stdio-1.0
-  main-is: Main.hs
-  hs-source-dirs: tests
-  build-depends: stubs-translator,
-                 crucible,
-                 macaw-base,
-                 tasty,
-                 tasty-hunit,
-                 macaw-x86,
-                 macaw-x86-symbolic
-  ghc-options: -Wextra -Wcompat
-  default-language: Haskell2010
+                   macaw-symbolic

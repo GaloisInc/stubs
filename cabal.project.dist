@@ -4,9 +4,15 @@ allow-newer: itanium-abi:text
 packages: .
           ./stubs-parser
           ./stubs-common
+          ./stubs-common-aarch32
+          ./stubs-common-ppc
+          ./stubs-common-x86
           ./stubs-wrapper
           ./stubs-loader
           ./stubs-translator
+          ./stubs-translator-aarch32
+          ./stubs-translator-ppc
+          ./stubs-translator-x86
           submodules/llvm-pretty
           submodules/parameterized-utils
           submodules/what4/what4

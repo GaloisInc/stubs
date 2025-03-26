@@ -1,0 +1,64 @@
+cabal-version:      2.4
+name:               stubs-translator-x86
+version:            0.1.0.0
+
+-- A short (one-line) description of the package.
+synopsis: Stubs Language and Crucible Translation for x86-64
+
+-- A longer description of the package.
+description: AST and translation into Crucible for the Stubs language for x86-64
+
+bug-reports: https://github.com/GaloisInc/stubs/issues
+license: BSD-3-Clause
+author: Christian Fontenot
+maintainer: dmatichuk@galois.com, langston@galois.com, rscott@galois.com
+copyright: (c) Galois, Inc 2023-2025
+
+source-repository head
+  type: git
+  location: https://github.com/GaloisInc/stubs
+  subdir: stubs-translator-x86
+
+-- category:
+extra-source-files: CHANGELOG.md
+
+common shared
+    build-depends:
+        base >= 4.10 && < 5
+
+library
+    import: shared
+    exposed-modules: Stubs.Arch.X86
+    hs-source-dirs: src
+    default-language: Haskell2010
+    ghc-options: -Wextra -Wcompat
+    build-depends:
+      crucible,
+      crucible-llvm,
+      macaw-x86,
+      macaw-x86-symbolic,
+      parameterized-utils >= 2 && < 3,
+      what4,
+
+      stubs-common,
+      stubs-translator
+
+test-suite translator-x86-tests
+  import: shared
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs: tests
+  build-depends:
+    tasty,
+    tasty-hunit,
+
+    crucible,
+    macaw-base,
+    macaw-x86,
+    macaw-x86-symbolic,
+    parameterized-utils,
+
+    stubs-translator,
+    stubs-translator-x86
+  ghc-options: -Wextra -Wcompat
+  default-language: Haskell2010

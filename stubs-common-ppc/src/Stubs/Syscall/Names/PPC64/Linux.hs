@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 -- Provides name to number mappings for
--- syscalls on 32-bit PowerPC. Note, this
+-- syscalls on 64-bit PowerPC. Note, this
 -- module does not carry any type information
 -- about the signatures of syscalls, only
 -- the information that's contained within
 -- syscalls_powerpc.tbl.
-module Stubs.Syscall.Names.PPC32.Linux
+module Stubs.Syscall.Names.PPC64.Linux
     ( syscallMap
     ) where
 
@@ -16,14 +16,15 @@ import qualified Data.Text as DT
 -- | A map from integer syscall codes to their associated
 -- syscall names
 syscallMap :: IM.IntMap DT.Text
-syscallMap = IM.fromList ppc32Syscalls_
+syscallMap = IM.fromList ppc64Syscalls_
 
--- | The raw table of PPC32 syscalls and their associated numbers.
+-- | The raw table of PPC64 syscalls and their associated numbers.
 -- See syscall_powerpc.tbl for more information. This data is
--- generated automatically from the generate_table.py script. See the
+-- generated automatically from the
+-- @stubs-common/src/Stubs/Syscall/Names/generate_table.py@ script. See the
 -- @stubs-common/src/Stubs/Syscall/Names/README@ file for more information.
-ppc32Syscalls_ :: [(Int, DT.Text)]
-ppc32Syscalls_ = [
+ppc64Syscalls_ :: [(Int, DT.Text)]
+ppc64Syscalls_ = [
     (0, "restart_syscall"),
     (1, "exit"),
     (2, "fork"),
@@ -216,19 +217,12 @@ ppc32Syscalls_ = [
     (189, "vfork"),
     (190, "ugetrlimit"),
     (191, "readahead"),
-    (192, "mmap2"),
-    (193, "truncate64"),
-    (194, "ftruncate64"),
-    (195, "stat64"),
-    (196, "lstat64"),
-    (197, "fstat64"),
     (198, "pciconfig_read"),
     (199, "pciconfig_write"),
     (200, "pciconfig_iobase"),
     (201, "multiplexer"),
     (202, "getdents64"),
     (203, "pivot_root"),
-    (204, "fcntl64"),
     (205, "madvise"),
     (206, "mincore"),
     (207, "gettid"),
@@ -249,7 +243,6 @@ ppc32Syscalls_ = [
     (222, "sched_setaffinity"),
     (223, "sched_getaffinity"),
     (225, "tuxcall"),
-    (226, "sendfile64"),
     (227, "io_setup"),
     (228, "io_destroy"),
     (229, "io_getevents"),
@@ -277,7 +270,6 @@ ppc32Syscalls_ = [
     (251, "utimes"),
     (252, "statfs64"),
     (253, "fstatfs64"),
-    (254, "fadvise64_64"),
     (255, "rtas"),
     (256, "sys_debug_setcontext"),
     (258, "migrate_pages"),
@@ -313,7 +305,7 @@ ppc32Syscalls_ = [
     (288, "mknodat"),
     (289, "fchownat"),
     (290, "futimesat"),
-    (291, "fstatat64"),
+    (291, "newfstatat"),
     (292, "unlinkat"),
     (293, "renameat"),
     (294, "linkat"),
@@ -399,6 +391,7 @@ ppc32Syscalls_ = [
     (386, "pkey_mprotect"),
     (387, "rseq"),
     (388, "io_pgetevents"),
+    (392, "semtimedop"),
     (393, "semget"),
     (394, "semctl"),
     (395, "shmget"),
@@ -409,26 +402,6 @@ ppc32Syscalls_ = [
     (400, "msgsnd"),
     (401, "msgrcv"),
     (402, "msgctl"),
-    (403, "clock_gettime64"),
-    (404, "clock_settime64"),
-    (405, "clock_adjtime64"),
-    (406, "clock_getres_time64"),
-    (407, "clock_nanosleep_time64"),
-    (408, "timer_gettime64"),
-    (409, "timer_settime64"),
-    (410, "timerfd_gettime64"),
-    (411, "timerfd_settime64"),
-    (412, "utimensat_time64"),
-    (413, "pselect6_time64"),
-    (414, "ppoll_time64"),
-    (416, "io_pgetevents_time64"),
-    (417, "recvmmsg_time64"),
-    (418, "mq_timedsend_time64"),
-    (419, "mq_timedreceive_time64"),
-    (420, "semtimedop_time64"),
-    (421, "rt_sigtimedwait_time64"),
-    (422, "futex_time64"),
-    (423, "sched_rr_get_interval_time64"),
     (424, "pidfd_send_signal"),
     (425, "io_uring_setup"),
     (426, "io_uring_enter"),
