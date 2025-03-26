@@ -27,25 +27,7 @@ extra-source-files: CHANGELOG.md
 
 common shared
     build-depends:
-        async >= 2 && < 3,
-        base >= 4.10 && < 5,
-        bytestring,
-        bv-sized,
-        containers,
-        exceptions,
-        filepath,
-        Glob,
-        lens >= 4 && < 6,
-        lumberjack >= 1 && < 1.1,
-        megaparsec >= 7 && < 10,
-        mtl >= 2 && < 3,
-        panic >= 0.4 && < 0.5,
-        parameterized-utils >= 2 && < 3,
-        parser-combinators >= 1.2 && < 1.4,
-        prettyprinter >= 1.7 && < 1.8,
-        prettyprinter-ansi-terminal,
-        yaml >= 0.11 && < 0.12,
-        text
+        base >= 4.10 && < 5
 
 library
     build-depends: stubs-common,
@@ -68,10 +50,7 @@ executable stubs
 
     -- LANGUAGE extensions used by modules in this package.
     -- other-extensions:
-    build-depends:
-        gitrev,
-        optparse-applicative,
-        stubs
+    -- build-depends:
 
     hs-source-dirs:   tools/stubs
     default-language: Haskell2010
@@ -94,10 +73,6 @@ test-suite stubs-tests
                  stubs-parser,
                  stubs-loader,
                  stubs-translator,
-                 binary-symbols,
-                 vector,
-                 nonempty-vector,
-                 crucible-symio,
                  crucible,
                  macaw-base,
                  macaw-symbolic,
@@ -105,14 +80,20 @@ test-suite stubs-tests
                  macaw-loader,
                  macaw-loader-x86,
                  macaw-x86-symbolic,
-                 crucible-syntax,
                  crucible-llvm,
                  what4,
-                 directory,
+                 parameterized-utils >= 2 && < 3,
+
+                 bytestring,
+                 bv-sized,
+                 containers,
+                 exceptions,
+                 lens >= 4 && < 6,
+                 lumberjack >= 1 && < 1.1,
+                 mtl >= 2 && < 3,
                  tasty,
-                 tasty-ant-xml,
-                 tasty-expected-failure,
                  tasty-hunit,
-                 yaml >= 0.11 && < 0.12
+                 text,
+                 vector
   ghc-options: -Wextra -Wcompat
   default-language: Haskell2010
