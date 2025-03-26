@@ -24,26 +24,12 @@ extra-source-files: CHANGELOG.md
 
 common shared
     build-depends:
-        async >= 2 && < 3,
         base >= 4.10 && < 5,
-        bytestring,
-        bv-sized,
         containers,
         exceptions,
         filepath,
-        Glob,
-        lens >= 4 && < 6,
-        lumberjack >= 1 && < 1.1,
-        megaparsec >= 7 && < 10,
-        mtl >= 2 && < 3,
-        panic >= 0.4 && < 0.5,
         parameterized-utils >= 2 && < 3,
-        parser-combinators >= 1.2 && < 1.4,
-        prettyprinter >= 1.7 && < 1.8,
-        prettyprinter-ansi-terminal,
-        yaml >= 0.11 && < 0.12,
-        text,
-        template-haskell
+        text
 
 library
     import: shared
@@ -58,16 +44,5 @@ library
                    crucible,
                    crucible-syntax,
                    macaw-base,
-                   binary-symbols,
-                   macaw-loader,
-                   nonempty-vector,
                    parameterized-utils,
-                   crucible-llvm,
-                   split,
-                   macaw-symbolic,
-                   IntervalMap,
-                   macaw-x86-symbolic,
-                   macaw-x86,
-                   macaw-aarch32,
-                   macaw-aarch32-symbolic,
-                   semmc-aarch32
+                   macaw-symbolic

@@ -63,7 +63,6 @@ import qualified Stubs.Extensions as SE
 import qualified Data.Macaw.Symbolic as DMSMO
 import qualified Stubs.Loader.BinaryConfig as SLB
 import qualified Data.Macaw.BinaryLoader as DMB
-import Data.Macaw.BinaryLoader.X86 ()
 
 instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
   type instance PtrType DMS.LLVMMemory DMX.X86_64 =  LCLM.LLVMPointerType (DMC.ArchAddrWidth DMX.X86_64)

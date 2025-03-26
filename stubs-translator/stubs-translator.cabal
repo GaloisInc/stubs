@@ -25,21 +25,8 @@ extra-source-files: CHANGELOG.md
 
 common shared
     build-depends:
-        async >= 2 && < 3,
         base >= 4.10 && < 5,
-        bytestring,
-        bv-sized,
-        containers,
-        exceptions,
-        filepath,
-        Glob,
-        lens >= 4 && < 6,
-        mtl >= 2 && < 3,
-        panic >= 0.4 && < 0.5,
-        parameterized-utils >= 2 && < 3,
-        prettyprinter >= 1.7 && < 1.8,
-        prettyprinter-ansi-terminal,
-        text
+        parameterized-utils >= 2 && < 3
 
 library
     import: shared
@@ -57,22 +44,21 @@ library
     hs-source-dirs: src
     default-language: Haskell2010
     ghc-options: -Wextra -Wcompat
-    build-depends: stubs-common,
+    build-depends: containers,
+                   exceptions,
+                   mtl >= 2 && < 3,
+                   text,
+
+                   stubs-common,
                    what4,
                    crucible,
                    crucible-syntax,
                    macaw-base,
-                   binary-symbols,
-                   macaw-loader,
-                   nonempty-vector,
                    parameterized-utils,
                    crucible-llvm,
-                   split,
                    macaw-symbolic,
-                   IntervalMap,
                    macaw-x86-symbolic,
                    macaw-x86,
-                   macaw-aarch32,
                    macaw-aarch32-symbolic,
                    semmc-aarch32,
                    macaw-ppc,
@@ -83,20 +69,11 @@ test-suite translator-tests
   type: exitcode-stdio-1.0
   main-is: Main.hs
   hs-source-dirs: tests
-  build-depends: stubs-common,
-                 stubs-translator,
+  build-depends: stubs-translator,
                  crucible,
-                 crucible-syntax,
                  macaw-base,
-                 macaw-symbolic,
-                 crucible-llvm,
-                 what4,
-                 directory,
                  tasty,
-                 tasty-ant-xml,
-                 tasty-expected-failure,
                  tasty-hunit,
-                 yaml >= 0.11 && < 0.12,
                  macaw-x86,
                  macaw-x86-symbolic
   ghc-options: -Wextra -Wcompat

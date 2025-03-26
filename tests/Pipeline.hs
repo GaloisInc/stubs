@@ -10,7 +10,7 @@
 {-# HLINT ignore "Use if" #-}
 {-# LANGUAGE TypeOperators #-}
 
-module Pipeline where 
+module Pipeline where
 import qualified Stubs.AST as SA
 import qualified Data.ByteString as B
 import qualified Lang.Crucible.FunctionHandle as LCF
@@ -44,8 +44,6 @@ import Control.Lens (view)
 import qualified Stubs.Translate.Core as STC
 import Stubs.Memory
 import qualified Stubs.Common as SC
-import Stubs.Memory.X86_64.Linux()
-import Stubs.Memory.AArch32.Linux()
 import qualified Stubs.Logging as SLg
 import qualified Lang.Crucible.Simulator.CallFrame as LCSCF
 import qualified Stubs.Parser as SP
@@ -53,13 +51,13 @@ import Control.Monad.Except
 
 
 parserCorePipeline :: FilePath -> [FilePath] -> [String]  -> IO (Maybe Integer)
-parserCorePipeline path progs entries = do 
+parserCorePipeline path progs entries = do
     i <- runExceptT (SP.parseStubsOverrides progs entries)
-    case i of 
+    case i of
         Left err -> fail (show err)
-        Right stubProg -> do 
+        Right stubProg -> do
             corePipeline path [stubProg]
-            
+
 corePipeline :: FilePath -> [SA.StubsProgram] -> IO (Maybe Integer)
 corePipeline path stubProgs = do
     contents <- B.readFile path
@@ -96,7 +94,7 @@ corePipeline path stubProgs = do
                 SVS.abiBuildFunctionABI = buildFunctionABI,
                 SVS.abiBuildSyscallABI=buildSyscallABI
             }
-            crucProgs <- fmap concat (mapM (ST.translateProgram ng hAlloc ovs) stubProgs) 
+            crucProgs <- fmap concat (mapM (ST.translateProgram ng hAlloc ovs) stubProgs)
             envVarMap <- AEnv.mkEnvVarMap bak (piConcreteEnvVars pinst) (piConcreteEnvVarsFromBytes pinst) (piSymbolicEnvVars pinst)
 
             -- execute symbolically
@@ -115,19 +113,19 @@ corePipeline path stubProgs = do
                                                 Just cv -> return $ Just (BV.asUnsigned $ fromConcreteBV cv)
                                         _ -> return Nothing
                                 -- Failed, so try to dump some useful information
-                                LCSE.AbortedResult _ r -> do 
-                                    putStrLn "Execution aborted" 
-                                    case r of 
-                                        LCSE.AbortedExec re st -> do 
-                                            print re 
-                                            let tau = view gpValue st 
-                                            case tau of 
+                                LCSE.AbortedResult _ r -> do
+                                    putStrLn "Execution aborted"
+                                    case r of
+                                        LCSE.AbortedExec re st -> do
+                                            print re
+                                            let tau = view gpValue st
+                                            case tau of
                                                 LCSCF.OF _ -> print "in override"
-                                                LCSCF.MF _ -> print "in crucible code" 
+                                                LCSCF.MF _ -> print "in crucible code"
                                                 _ -> print "while returning"
                                             return Nothing
                                         _ -> putStrLn "Cause unexpected: either exit() or multiple branches failed" >> return Nothing
-                                _ -> return Nothing 
+                                _ -> return Nothing
 
 smallPipeline :: forall arch args ret ext p. (DMS.SymArchConstraints arch, ext ~ DMS.MacawExt arch, p ~ (), SPR.Preamble arch, STC.StubsArch arch) =>
                                         ST.CrucibleProgram arch ->

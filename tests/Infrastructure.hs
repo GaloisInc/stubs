@@ -30,8 +30,6 @@ import qualified Stubs.Memory as AM
 import qualified Stubs.Solver as AS
 import qualified Data.Macaw.Symbolic as DMS
 
-import           Data.Macaw.BinaryLoader.X86 ()
-import           Data.Macaw.X86.Symbolic ()
 import qualified Lang.Crucible.FunctionHandle as LCF
 
 import qualified What4.Interface as WI
