@@ -87,8 +87,6 @@ import qualified Stubs.Translate.Core as STC
 import qualified Stubs.Preamble as SPR
 import qualified Stubs.Common as SC
 import qualified Stubs.Memory as SM
-import qualified Stubs.Memory.X86_64.Linux ()
-import qualified Stubs.Memory.AArch32.Linux ()
 import qualified Lang.Crucible.LLVM.Errors as LCLE
 import qualified Lang.Crucible.LLVM.MemModel.Partial as LCLMP
 import qualified Lang.Crucible.LLVM.MemModel.CallStack as LCLMC
@@ -502,7 +500,7 @@ simulateFunction logAction bak execFeatures halloc archInfo archVals seConf init
   initCOvs <- liftIO $ mapM (SW.genInitOvHooks tsym) crProgs
   let SM.BuildSyscallABI buildSyscallABI = abiBuildSyscallABI fnConf
   let syscallABI = buildSyscallABI initialMem (ALB.bcUnsuportedRelocations binConf)
-  let SM.BuildFunctionABI buildFunctionABI = abiBuildFunctionABI fnConf 
+  let SM.BuildFunctionABI buildFunctionABI = abiBuildFunctionABI fnConf
   let functionABI = buildFunctionABI AF.TestContext initialMem archVals
                                      (ALB.bcUnsuportedRelocations binConf)
                                      mempty
