@@ -97,7 +97,6 @@ library
                       macaw-base,
                       macaw-symbolic,
                       macaw-loader,
-                      macaw-loader-x86,
                       semmc-aarch32,
                       macaw-x86,
                       macaw-x86-symbolic,
