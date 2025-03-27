@@ -19,8 +19,7 @@ source-repository head
   location: https://github.com/GaloisInc/stubs
   subdir: stubs-common
 
--- category:
-extra-source-files: CHANGELOG.md
+extra-doc-files: CHANGELOG.md
 
 common shared
     build-depends:
@@ -57,10 +56,6 @@ library
                       Stubs.FunctionOverride.Extension.Types,
                       Stubs.FunctionOverride.ForwardDeclarations,
                       Stubs.FunctionOverride.StackArguments,
-                      Stubs.FunctionOverride.AArch32.Linux,
-                      Stubs.FunctionOverride.X86_64.Linux,
-                      Stubs.FunctionOverride.X86_64.Linux.Specialized,
-                      Stubs.FunctionOverride.PPC.Linux,
                       Stubs.Lift,
                       Stubs.Loader.BinaryConfig,
                       Stubs.Loader.LoadOptions,
@@ -70,21 +65,11 @@ library
                       Stubs.Memory,
                       Stubs.Memory.Common,
                       Stubs.Memory.SharedMemory,
-                      Stubs.Memory.AArch32.Linux,
-                      Stubs.Memory.X86_64.Linux,
-                      Stubs.Memory.PPC.Linux,
                       Stubs.MonadState,
                       Stubs.Override,
                       Stubs.Panic,
                       Stubs.Style,
                       Stubs.Syscall,
-                      Stubs.Syscall.AArch32.Linux,
-                      Stubs.Syscall.X86_64.Linux,
-                      Stubs.Syscall.PPC.Linux,
-                      Stubs.Syscall.Names.X86_64.Linux,
-                      Stubs.Syscall.Names.AArch32.Linux,
-                      Stubs.Syscall.Names.PPC32.Linux,
-                      Stubs.Syscall.Names.PPC64.Linux,
                       Stubs.Verifier.Concretize
 
     -- Modules included in this library but not exported.
@@ -97,15 +82,6 @@ library
                       macaw-base,
                       macaw-symbolic,
                       macaw-loader,
-                      semmc-aarch32,
-                      macaw-x86,
-                      macaw-x86-symbolic,
-                      macaw-aarch32,
-                      macaw-aarch32-symbolic,
-                      dismantle-ppc,
-                      semmc-ppc,
-                      macaw-ppc,
-                      macaw-ppc-symbolic,
                       crucible,
                       crucible-llvm,
                       crucible-syntax,

@@ -112,8 +112,8 @@ jobs:
       - name: Run parser tests
         run: cabal test parser-tests
 
-      - name: Run translator tests
-        run: cabal test translator-tests
+      - name: Run translator-x86 tests
+        run: cabal test translator-x86-tests
 
       - name: Run stubs tests
         run: cabal test stubs-tests

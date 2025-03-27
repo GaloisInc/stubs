@@ -20,7 +20,8 @@ syscallMap = IM.fromList x86_64Syscalls_
 
 -- | The raw table of x86 64-bit syscalls and their associated numbers.
 -- See syscall_x86_64.tbl for more information. This data is
--- generated automatically from the generate_table.py script. See the
+-- generated automatically from the
+-- @stubs-common/src/Stubs/Syscall/Names/generate_table.py@ script. See the
 -- @stubs-common/src/Stubs/Syscall/Names/README@ file for more information.
 x86_64Syscalls_ :: [(Int, DT.Text)]
 x86_64Syscalls_ = [
