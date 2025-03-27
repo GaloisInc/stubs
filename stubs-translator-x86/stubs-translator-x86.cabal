@@ -19,8 +19,7 @@ source-repository head
   location: https://github.com/GaloisInc/stubs
   subdir: stubs-translator-x86
 
--- category:
-extra-source-files: CHANGELOG.md
+extra-doc-files: CHANGELOG.md
 
 common shared
     build-depends:

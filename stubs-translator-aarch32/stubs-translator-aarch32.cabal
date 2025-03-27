@@ -19,8 +19,7 @@ source-repository head
   location: https://github.com/GaloisInc/stubs
   subdir: stubs-translator-aarch32
 
--- category:
-extra-source-files: CHANGELOG.md
+extra-doc-files: CHANGELOG.md
 
 library
     exposed-modules: Stubs.Arch.AArch32
