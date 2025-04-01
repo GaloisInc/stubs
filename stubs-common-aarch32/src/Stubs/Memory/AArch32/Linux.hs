@@ -124,7 +124,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory SAA.AArch32 where
     stackArrayStorage <- liftIO $ WI.freshConstant sym (WSym.safeSymbol "stack_array") WI.knownRepr
     mem2 <- liftIO $ LCLM.doArrayStore bak mem1 stackBasePtr LCLD.noAlignment stackArrayStorage stackSizeBV
 
-    (mem3, globals0) <- liftIO $ aarch32LinuxInitGlobals tlsvar (SC.Sym sym bak) mem2
+    (mem3, globals0) <- liftIO $ aarch32LinuxInitGlobals tlsvar (SC.Sym sym bak) mem2 LCSG.emptyGlobals
     memVar <- liftIO $ LCLM.mkMemVar (DT.pack "stubs::memory") halloc
     let globals1 = LCSG.insertGlobal memVar mem3 globals0
     let globalMap = DMSM.mapRegionPointers memPtrTbl
@@ -188,10 +188,13 @@ aarch32LinuxInitGlobals ::
      )
   => LCCC.GlobalVar (LCLM.LLVMPointerType (DMC.ArchAddrWidth DMA.ARM))
      -- ^ Global variable for TLS
-  -> (SC.Sym sym -> LCLM.MemImpl sym-> IO (LCLM.MemImpl sym,LCSG.SymGlobalState sym ))
-aarch32LinuxInitGlobals tlsGlob = \(SC.Sym _ bak) mem0 -> do
+  -> SC.Sym sym
+  -> LCLM.MemImpl sym
+  -> LCSG.SymGlobalState sym
+  -> IO (LCLM.MemImpl sym, LCSG.SymGlobalState sym)
+aarch32LinuxInitGlobals tlsGlob = \(SC.Sym _ bak) mem0 globals -> do
     (tlsPtr, mem1) <- initTLSMemory bak mem0
-    return (mem1, LCSG.insertGlobal tlsGlob tlsPtr LCSG.emptyGlobals)
+    return (mem1, LCSG.insertGlobal tlsGlob tlsPtr globals)
 
 -- | There are currently no overrides for macaw-aarch32-symbolic
 aarch32LinuxStmtExtensionOverride :: DMS.MacawArchStmtExtensionOverride DMA.ARM
