@@ -161,7 +161,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
     gsvar <- liftIO $ freshGSBaseGlobalVar halloc
     stackArrayStorage <- liftIO $ WI.freshConstant sym (WSym.safeSymbol "stack_array") WI.knownRepr
     mem2 <- liftIO $ LCLM.doArrayStore bak mem1 stackBasePtr LCLD.noAlignment stackArrayStorage stackSizeBV
-    (mem3, globals0) <- liftIO $ x86_64LinuxInitGlobals fsvar gsvar (SC.Sym sym bak) mem2
+    (mem3, globals0) <- liftIO $ x86_64LinuxInitGlobals fsvar gsvar (SC.Sym sym bak) mem2 LCSG.emptyGlobals
     memVar <- liftIO $ LCLM.mkMemVar (DT.pack "stubs::memory") halloc
     let globals1 = LCSG.insertGlobal memVar mem3 globals0
 
@@ -255,12 +255,15 @@ x86_64LinuxInitGlobals
   -- ^ Global variable for FSBASE pointer
   -> LCCC.GlobalVar (LCLM.LLVMPointerType (DMC.ArchAddrWidth DMX.X86_64))
   -- ^ Global variable for GSBASE pointer
-  -> (SC.Sym sym -> LCLM.MemImpl sym-> IO (LCLM.MemImpl sym,LCSG.SymGlobalState sym ))
-x86_64LinuxInitGlobals fsbaseGlob gsbaseGlob = \(SC.Sym _ bak) mem0 -> do
+  -> SC.Sym sym
+  -> LCLM.MemImpl sym
+  -> LCSG.SymGlobalState sym
+  -> IO (LCLM.MemImpl sym, LCSG.SymGlobalState sym)
+x86_64LinuxInitGlobals fsbaseGlob gsbaseGlob = \(SC.Sym _ bak) mem0 globals0 -> do
     (fsbasePtr, mem1) <- initSegmentMemory bak mem0 "fs_array"
     (gsbasePtr, mem2) <- initSegmentMemory bak mem1 "gs_array"
-    let globals0 = LCSG.insertGlobal fsbaseGlob fsbasePtr LCSG.emptyGlobals
-    return (mem2, LCSG.insertGlobal gsbaseGlob gsbasePtr globals0)
+    let globals1 = LCSG.insertGlobal fsbaseGlob fsbasePtr globals0
+    return (mem2, LCSG.insertGlobal gsbaseGlob gsbasePtr globals1)
 
 -- | Return the value in a global variable.  This function panics if the
 -- variable doesn't exist.
