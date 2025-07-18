@@ -91,7 +91,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
     let ?memOpts = LCLM.defaultMemOptions
     (re, _) <- liftIO $ SM.buildRecordLLVMAnnotation @sym
     let ?recordLLVMAnnotation = re
-    let ?processMacawAssert = DMSMO.ignoreMacawAssertions
+    let ?processMacawAssert = DMSMO.defaultProcessMacawAssertion
     let mpt = SM.imMemTable initialMem
     let mmConf =
           (DMSM.memModelConfig bak mpt)
@@ -153,7 +153,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
     let ?ptrWidth = SM.memPtrSize @DMS.LLVMMemory @DMX.X86_64
     (recordFn, _) <- liftIO SM.buildRecordLLVMAnnotation
     let ?recordLLVMAnnotation = recordFn
-    let ?processMacawAssert = DMSMO.ignoreMacawAssertions
+    let ?processMacawAssert = DMSMO.defaultProcessMacawAssertion
     let ?memOpts = LCLM.defaultMemOptions
 
     let supportedRelocs = SLB.bcSupportedRelocations binConf
