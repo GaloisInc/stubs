@@ -61,6 +61,7 @@ import qualified Stubs.Memory.Common as SMC
 import qualified Stubs.Logging as SL
 import qualified Stubs.Extensions as SE
 import qualified Data.Macaw.Symbolic as DMSMO
+import qualified Data.Macaw.Symbolic.Memory as DMSMO
 import qualified Stubs.Loader.BinaryConfig as SLB
 import qualified Data.Macaw.BinaryLoader as DMB
 
@@ -90,6 +91,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
     let ?memOpts = LCLM.defaultMemOptions
     (re, _) <- liftIO $ SM.buildRecordLLVMAnnotation @sym
     let ?recordLLVMAnnotation = re
+    let ?processMacawAssert = DMSMO.ignoreMacawAssertions
     let mpt = SM.imMemTable initialMem
     let mmConf =
           (DMSM.memModelConfig bak mpt)
@@ -151,6 +153,7 @@ instance SM.IsStubsMemoryModel DMS.LLVMMemory DMX.X86_64 where
     let ?ptrWidth = SM.memPtrSize @DMS.LLVMMemory @DMX.X86_64
     (recordFn, _) <- liftIO SM.buildRecordLLVMAnnotation
     let ?recordLLVMAnnotation = recordFn
+    let ?processMacawAssert = DMSMO.ignoreMacawAssertions
     let ?memOpts = LCLM.defaultMemOptions
 
     let supportedRelocs = SLB.bcSupportedRelocations binConf
@@ -186,6 +189,7 @@ segmentBaseOffset = segmentSize `div` 2
 -- See @Note [x86_64 and TLS]@.
 initSegmentMemory :: ( LCB.IsSymBackend sym bak
                      , LCLM.HasLLVMAnn sym
+                     , DMSMO.MacawProcessAssertion sym
                      , ?memOpts :: LCLM.MemOptions
                      )
                   => bak
@@ -249,7 +253,8 @@ freshGSBaseGlobalVar hdlAlloc =
 -- and inserts them into the global variable state.
 x86_64LinuxInitGlobals
   :: ( ?memOpts :: LCLM.MemOptions,
-       ?recordLLVMAnnotation::Lang.Crucible.LLVM.MemModel.CallStack.CallStack -> LCLMP.BoolAnn sym -> LCLE.BadBehavior sym -> IO ()
+       ?recordLLVMAnnotation::Lang.Crucible.LLVM.MemModel.CallStack.CallStack -> LCLMP.BoolAnn sym -> LCLE.BadBehavior sym -> IO (),
+       DMSMO.MacawProcessAssertion sym
      )
   => LCCC.GlobalVar (LCLM.LLVMPointerType (DMC.ArchAddrWidth DMX.X86_64))
   -- ^ Global variable for FSBASE pointer
