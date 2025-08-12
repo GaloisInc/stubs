@@ -361,12 +361,10 @@ elfResolveStaticSymbolVersions ::
   forall w.
   DE.ElfHeaderInfo w ->
   Maybe (DV.Vector (VersionedSymtabEntry BS.ByteString (DE.ElfWordType w)))
-elfResolveStaticSymbolVersions elfHeaderInfo = do
-  res <- DE.decodeHeaderSymtab elfHeaderInfo
-  entries <- case res of
-    Left symtabError -> error $ show symtabError
-    Right entries    -> return entries
-  pure $ DV.map resolve $ DE.symtabEntries entries
+elfResolveStaticSymbolVersions elfHeaderInfo =
+  case DE.decodeHeaderSymtab elfHeaderInfo of
+    Left symtabError -> error (show symtabError)
+    Right entries -> Just (DV.map resolve $ DE.symtabEntries entries)
   where
     -- This code was taken from macaw-base
     -- (https://github.com/GaloisInc/macaw/blob/e4b198ab2dd882e34690ed33056d5231b2d776bf/base/src/Data/Macaw/Memory/ElfLoader.hs#L407-L421),
