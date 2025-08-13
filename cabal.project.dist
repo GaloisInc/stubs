@@ -1,5 +1,9 @@
 -- TODO: https://github.com/travitch/itanium-abi/pull/15
 allow-newer: itanium-abi:text
+-- See https://github.com/Happstack/boomerang/issues/12
+allow-newer: boomerang:template-haskell
+-- See https://github.com/travitch/haggle/issues/29
+allow-newer: haggle:primitive
 
 packages: .
           ./stubs-parser
