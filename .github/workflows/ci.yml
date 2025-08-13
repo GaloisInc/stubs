@@ -24,7 +24,7 @@ jobs:
       with:
         access_token: ${{ github.token }}
 
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Setup mdBook
       uses: peaceiris/actions-mdbook@v1
@@ -67,9 +67,8 @@ jobs:
     name: GHC ${{ matrix.ghc }}
     steps:
 
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
         with:
-          fetch-depth: 0
           submodules: true
 
       - name: Setup Haskell
