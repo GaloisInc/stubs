@@ -95,7 +95,7 @@ jobs:
           restore-keys: ${{ env.key }}-
 
       - name: Configure
-        run: cabal configure -j2 --enable-tests
+        run: cabal configure -j2 --enable-tests --semaphore
 
       - name: Build
         run: cabal build
