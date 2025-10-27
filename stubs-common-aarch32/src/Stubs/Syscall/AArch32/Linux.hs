@@ -36,7 +36,14 @@ import qualified Stubs.Panic as AP
 import qualified Stubs.Syscall.Names.AArch32.Linux as SN
 import qualified Stubs.Memory as SM
 
-type SyscallRegsType = Ctx.EmptyCtx Ctx.::> LCLM.LLVMPointerType 32
+type SyscallRegsType = Ctx.EmptyCtx Ctx.::> LCLM.LLVMPointerType 32 -- r0 
+                                    Ctx.::> LCLM.LLVMPointerType 32 -- r1 
+                                    Ctx.::> LCLM.LLVMPointerType 32 -- r2 
+                                    Ctx.::> LCLM.LLVMPointerType 32 -- r3 
+                                    Ctx.::> LCLM.LLVMPointerType 32 -- r4 
+                                    Ctx.::> LCLM.LLVMPointerType 32 -- r5
+                                    Ctx.::> LCLM.LLVMPointerType 32 -- r6 
+                                    Ctx.::> LCLM.LLVMPointerType 32 -- r7
                                     Ctx.::> LCLM.LLVMPointerType 32
                                     Ctx.::> LCLM.LLVMPointerType 32
                                     Ctx.::> LCLM.LLVMPointerType 32
@@ -58,14 +65,21 @@ type SyscallRegsType = Ctx.EmptyCtx Ctx.::> LCLM.LLVMPointerType 32
 -- from macaw into crucible, which fixes the shape of arguments passed to system
 -- call handlers.
 syscallABIRepr :: Ctx.Assignment LCT.TypeRepr SyscallRegsType
-syscallABIRepr = Ctx.Empty Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32)
-                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32)
-                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32)
-                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32)
-                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32)
-                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32)
-                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32)
-                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32)
+syscallABIRepr = Ctx.Empty Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r0 
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r1
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r2
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r3
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r4
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r5
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r6
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r7
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r8
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r9
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r10
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r11
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r12
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r13
+                           Ctx.:> LCLM.LLVMPointerRepr (PN.knownNat @32) -- r14
 
 aarch32LinuxGetReg
   :: Ctx.Assignment LCT.TypeRepr atps
@@ -75,7 +89,8 @@ aarch32LinuxGetReg
 aarch32LinuxGetReg tps regs reg
   | Just PC.Refl <- PC.testEquality tps syscallABIRepr =
       case LCS.regValue regs of
-        Ctx.Empty Ctx.:> r0 Ctx.:> r1 Ctx.:> r2 Ctx.:> r3 Ctx.:> r4 Ctx.:> r5 Ctx.:> r6 Ctx.:> r7
+        Ctx.Empty Ctx.:> r0 Ctx.:> r1 Ctx.:> r2 Ctx.:> r3 Ctx.:> r4 Ctx.:> r5 Ctx.:> r6 Ctx.:> r7 Ctx.:>
+         _r8 Ctx.:> _r9 Ctx.:> _r10 Ctx.:> _r11 Ctx.:> _r12 Ctx.:> _r13 Ctx.:> _r14
           | Just PC.Refl <- PC.testEquality reg ARMReg.r0 -> r0
           | Just PC.Refl <- PC.testEquality reg ARMReg.r1 -> r1
           | Just PC.Refl <- PC.testEquality reg ARMReg.r2 -> r2
@@ -120,7 +135,8 @@ aarch32LinuxSyscallArgumentRegisters
 aarch32LinuxSyscallArgumentRegisters bak regTypes regs syscallTypes
   | Just PC.Refl <- PC.testEquality regTypes syscallABIRepr =
       case LCS.regValue regs of
-        Ctx.Empty Ctx.:> r0 Ctx.:> r1 Ctx.:> r2 Ctx.:> r3 Ctx.:> r4 Ctx.:> r5 Ctx.:> r6 Ctx.:> _ -> do
+        Ctx.Empty Ctx.:> r0 Ctx.:> r1 Ctx.:> r2 Ctx.:> r3 Ctx.:> r4 Ctx.:> r5 Ctx.:> r6 Ctx.:> _r7 Ctx.:>
+         _r8 Ctx.:> _r9 Ctx.:> _r10 Ctx.:> _r11 Ctx.:> _r12 Ctx.:> _r13 Ctx.:> _r14 -> do
           let regEntries = map (pure . toRegEntry) [r0, r1, r2, r3, r4, r5, r6]
           -- No syscalls make use of variadic arguments (see Note [Varargs] in
           -- Ambient.FunctionOverride), so we do not make use of the GetVarArg
