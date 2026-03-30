@@ -216,7 +216,7 @@ readMem bak memImpl initialMem mmConf unsupportedRelocs st addrWidth memRep ptr0
     (ptr1, resolveEffect) <-
         resolvePointer bak memImpl (SM.imGlobalMap initialMem) ptr0
     assertRelocSupported ptr1 unsupportedRelocs
-    mbReadVal <- DMS.concreteImmutableGlobalRead mmConf memRep ptr1
+    mbReadVal <- DMS.concreteUnmutatedGlobalRead mmConf (st ^. LCSE.stateContext . LCS.cruciblePersonality) memRep ptr1
     case mbReadVal of
       Just readVal -> do
         let st' = incrementSimStat lensNumReads st
@@ -584,7 +584,7 @@ execAmbientStmtExtension bak f initialMem mmConf unsupportedRelocs s0 st =
       memImpl <- DMSMO.getMem st mvar
       (ptr1, resolveEffect) <- resolvePointer bak memImpl globs ptr0
       assertRelocSupported ptr1 unsupportedRelocs
-      mbReadVal <- DMS.concreteImmutableGlobalRead mmConf memRep ptr1
+      mbReadVal <- DMS.concreteUnmutatedGlobalRead mmConf (st ^. LCSE.stateContext . LCS.cruciblePersonality) memRep ptr1
       case mbReadVal of
         Just readVal -> do
           readVal' <- DMSMO.muxMemReprValue sym memRep (LCS.regValue cond) readVal (LCS.regValue condFalseValue)
