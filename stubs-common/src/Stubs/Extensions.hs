@@ -591,7 +591,7 @@ execAmbientStmtExtension bak f initialMem mmConf unsupportedRelocs s0 st =
           let st' = incrementSimStat lensNumReads st
           pure (readVal', st')
         Nothing -> do
-          st1 <- DMS.lazilyPopulateGlobalMem mmConf memRep ptr1 st
+          st1 <- DMS.lazilyPopulateGlobalMem mmConf DMS.PointerRead memRep ptr1 st
           let puse = DMS.PointerUse (st1 ^. LCSE.stateLocation) DMS.PointerRead
           mGlobalPtrValid <- toMemPred sym puse (Just cond) ptr0
           case mGlobalPtrValid of
