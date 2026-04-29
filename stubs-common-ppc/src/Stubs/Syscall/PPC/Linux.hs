@@ -22,7 +22,7 @@ import qualified Data.Parameterized.NatRepr as PN
 
 import qualified Data.Macaw.PPC as DMP
 import qualified Data.Macaw.Types as DMT
-import qualified Dismantle.PPC as D
+import qualified Dismantle.PPC.Operands as D
 import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.LLVM.MemModel as LCLM
 import qualified Lang.Crucible.Simulator as LCS

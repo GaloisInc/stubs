@@ -1,4 +1,4 @@
-cabal-version:      2.4
+cabal-version:      3.0
 name:               stubs-common-ppc
 version:            0.1.0.0
 
@@ -38,7 +38,7 @@ library
 
       crucible,
       crucible-llvm,
-      dismantle-ppc,
+      dismantle-ppc:opcodes,
       macaw-base,
       macaw-ppc,
       macaw-ppc-symbolic,

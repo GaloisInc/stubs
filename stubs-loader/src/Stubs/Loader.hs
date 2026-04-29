@@ -74,7 +74,7 @@ import Stubs.Arch.AArch32 ()
 import Stubs.Arch.PPC32 ()
 import Stubs.Arch.PPC64 ()
 import qualified Data.Macaw.ARM.ARMReg as ARMReg
-import qualified Dismantle.PPC as DP
+import qualified Dismantle.PPC.Operands as DP
 import qualified Stubs.Translate.Core as STC
 import qualified Stubs.Memory as SM
 import qualified Stubs.Translate.Intrinsic as STI

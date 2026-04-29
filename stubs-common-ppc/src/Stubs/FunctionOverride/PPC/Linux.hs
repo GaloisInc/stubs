@@ -31,7 +31,7 @@ import qualified Data.Macaw.PPC as DMP
 import qualified Data.Macaw.Memory as DMM
 import qualified Data.Macaw.Symbolic as DMS
 import qualified Data.Macaw.Types as DMT
-import qualified Dismantle.PPC as DP
+import qualified Dismantle.PPC.Operands as DP
 import qualified Lang.Crucible.Backend as LCB
 import qualified Lang.Crucible.Backend.Online as LCBO
 import qualified Lang.Crucible.LLVM.MemModel as LCLM
