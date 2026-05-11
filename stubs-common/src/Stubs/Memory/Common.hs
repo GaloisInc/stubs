@@ -40,7 +40,7 @@ import qualified Data.Macaw.Memory as DMM
 import qualified Stubs.Discovery as SDi
 import Data.Parameterized (Some(..))
 import qualified Stubs.Lift as SLi
-import Control.Lens (Lens', (^.), over, (.~), (&), set)
+import Lens.Micro (Lens', (^.), over, (.~), (&), set)
 import qualified Data.Map as Map
 import qualified Data.List.NonEmpty as NEL
 import qualified Data.Vector.NonEmpty as NEV

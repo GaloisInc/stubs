@@ -11,8 +11,6 @@ module Stubs.Diagnostic (
   ) where
 
 import qualified Control.Exception as X
-import           Control.Lens ( (^.) )
-import qualified Control.Lens as Lens
 import qualified Data.Aeson as DA
 import qualified Data.Aeson.Key as DAK
 import qualified Data.ByteString.Char8 as BSC
@@ -20,6 +18,8 @@ import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Data.ByteString.Lazy.Char8 as DBSL
 import qualified Data.Time.Clock as DTC
+import           Lens.Micro ( (^.) )
+import qualified Lens.Micro as Lens
 import           Numeric ( showHex )
 import qualified Prettyprinter as PP
 import qualified What4.Expr as WE

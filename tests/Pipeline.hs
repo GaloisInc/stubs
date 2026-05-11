@@ -40,7 +40,7 @@ import What4.Concrete (fromConcreteBV)
 import Lang.Crucible.Simulator
 import Data.Macaw.Symbolic (lookupReg)
 import What4.Interface (asConcrete)
-import Control.Lens (view)
+import Lens.Micro.Extras (view)
 import qualified Stubs.Translate.Core as STC
 import Stubs.Memory
 import qualified Stubs.Common as SC

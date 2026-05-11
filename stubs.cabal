@@ -89,7 +89,7 @@ test-suite stubs-tests
                  bv-sized,
                  containers,
                  exceptions,
-                 lens >= 4 && < 6,
+                 microlens,
                  lumberjack >= 1 && < 1.1,
                  mtl >= 2 && < 3,
                  tasty,

@@ -28,7 +28,7 @@ import qualified Data.BitVector.Sized as BV
 import Lang.Crucible.Simulator
 import What4.Interface
 import What4.Concrete (fromConcreteBV)
-import Control.Lens (view)
+import Lens.Micro.Extras (view)
 import qualified Stubs.Arch.X86 ()
 
 

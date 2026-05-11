@@ -39,7 +39,6 @@ module Stubs.Extensions
   ) where
 
 import qualified Control.Exception as X
-import           Control.Lens ( Lens', (^.), lens, (&), (+~))
 import           Control.Monad.IO.Class ( MonadIO(liftIO) )
 import qualified Control.Monad.State as CMS
 import qualified Data.Aeson as DA
@@ -50,6 +49,7 @@ import qualified Data.Parameterized.Map as MapF
 import           Data.Word ( Word8 )
 import           GHC.Generics ( Generic )
 import qualified GHC.Stack as GHC
+import           Lens.Micro ( Lens', (^.), lens, (&), (+~))
 
 import qualified Data.Macaw.CFG as DMC
 import qualified Data.Macaw.Memory as DMM
