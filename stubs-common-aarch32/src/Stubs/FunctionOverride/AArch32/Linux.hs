@@ -17,7 +17,6 @@ module Stubs.FunctionOverride.AArch32.Linux (
   , aarch32LinuxTypes
   ) where
 
-import           Control.Lens ( use )
 import           Control.Monad.IO.Class ( liftIO )
 import qualified Data.BitVector.Sized as BVS
 import           Data.Foldable ( foldl' )
@@ -27,6 +26,7 @@ import qualified Data.Parameterized.Classes as PC
 import qualified Data.Parameterized.Context as Ctx
 import qualified Data.Parameterized.NatRepr as PN
 import           Data.Parameterized.Some ( Some(..) )
+import           Lens.Micro.Mtl ( use )
 import qualified Prettyprinter as PP
 
 import qualified Data.Macaw.AArch32.Symbolic as DMAS

@@ -32,7 +32,6 @@ library
       base >= 4.10 && < 5,
       bv-sized,
       containers,
-      lens >= 4 && < 6,
       prettyprinter >= 1.7 && < 1.8,
       text,
 

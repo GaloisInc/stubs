@@ -22,7 +22,6 @@ module Stubs.Memory.X86_64.Linux (
   , freshGSBaseGlobalVar
   ) where
 
-import           Control.Lens ((^.))
 import qualified Data.BitVector.Sized as BVS
 import           Data.Proxy (Proxy(..))
 
@@ -40,6 +39,7 @@ import qualified Lang.Crucible.LLVM.MemType as LCLMT
 import qualified Lang.Crucible.Simulator as LCS
 import qualified Lang.Crucible.Simulator.ExecutionTree as LCSE
 import qualified Lang.Crucible.Simulator.GlobalState as LCSG
+import           Lens.Micro ((^.))
 import qualified What4.Interface as WI
 import qualified What4.Symbol as WSym
 

@@ -10,9 +10,9 @@ module Stubs.Discovery (
     discoverFunction
   ) where
 
-import           Control.Lens ( (&), (.~) )
 import           Control.Monad.IO.Class ( MonadIO, liftIO )
 import qualified Data.Parameterized.Some as Some
+import           Lens.Micro ( (&), (.~) )
 import qualified Lumberjack as LJ
 
 import qualified Data.Macaw.Architecture.Info as DMA

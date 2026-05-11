@@ -93,7 +93,7 @@ import qualified Lang.Crucible.LLVM.MemModel.CallStack as LCLMC
 import Stubs.Memory.Common
 import qualified Stubs.Extensions as SE
 import Data.Data (Typeable)
-import Control.Lens ((^.), set)
+import Lens.Micro ((^.), set)
 
 data SymbolicExecutionConfig arch sym = SymbolicExecutionConfig
   { secSolver :: AS.Solver

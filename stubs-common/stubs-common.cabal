@@ -29,7 +29,7 @@ common shared
         containers,
         exceptions,
         filepath,
-        lens >= 4 && < 6,
+        microlens,
         lumberjack >= 1 && < 1.1,
         megaparsec >= 7 && < 10,
         mtl >= 2 && < 3,
